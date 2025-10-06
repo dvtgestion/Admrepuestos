@@ -12,11 +12,21 @@
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif; color:var(--text); background:var(--bg);}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      -webkit-text-size-adjust:100%;
+      text-size-adjust:100%;
+    }
+
+    /* Layout geral */
     .app{display:grid; grid-template-columns:260px 1fr; min-height:100vh;}
-    .app.no-sidebar{ grid-template-columns:1fr; }
+    .app.no-sidebar{ grid-template-columns:1fr; min-height:100dvh; }
     .sidebar{border-right:1px solid var(--border); background:#fafafa; padding:16px; display:flex; flex-direction:column; gap:16px;}
     .hidden{display:none !important}
+
     .brand{display:flex; align-items:center; gap:12px; padding:8px 6px}
     .brand .logo{font-size:28px}
     .nav{display:flex; flex-direction:column; gap:6px}
@@ -24,40 +34,89 @@
     .nav-btn:hover{border-color:#d1d5db}
     .sidebar-foot{ margin-top:auto; display:flex; flex-direction:column; gap:8px; }
     .user-label{font-size:12px; color:var(--muted)}
+
     .view{padding:24px; max-width:1200px; width:100%}
-    .center{display:grid; place-items:center; min-height:100vh}
-    .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:16px;}
-    .card-max{width:100%; max-width:460px}
+
+    /* ===== Login centralizado e mobile ===== */
+    .center{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      min-height:100dvh; /* considera barras móveis / iOS */
+      padding:clamp(16px, 5vw, 48px);
+      padding-top:calc(env(safe-area-inset-top,0px) + clamp(16px, 5vw, 48px));
+      padding-bottom:calc(env(safe-area-inset-bottom,0px) + clamp(16px, 5vw, 48px));
+    }
+    .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px;}
+    .card-max{width:min(100%, 420px)}
     .title{margin:0 0 8px}
     .muted{color:var(--muted)}
     .xs{font-size:12px}
-    .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
-    .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
-    .kpis .card strong{font-size:20px}
+
+    /* Form padrão (mobile-first) */
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
-    .input, .field input, .field select{ border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#fff; }
-    .input:focus, .field input:focus, .field select:focus{outline:2px solid rgba(31,111,235,.25)}
-    .btn{ border:1px solid var(--border); background:#fff; border-radius:10px; padding:10px 14px; cursor:pointer; }
+    .field input, .field select, .input{
+      border:1px solid var(--border);
+      border-radius:10px;
+      padding:10px 12px;
+      background:#fff;
+      width:100%;
+      height:44px;      /* alvo de toque confortável */
+      font-size:16px;   /* evita zoom no iOS */
+    }
+    .field input:focus, .field select:focus, .input:focus{outline:2px solid rgba(31,111,235,.25)}
+
+    .btn{
+      border:1px solid var(--border);
+      background:#fff;
+      border-radius:10px;
+      padding:10px 14px;
+      cursor:pointer;
+      height:44px;      /* alvo de toque */
+      font-size:16px;
+    }
     .btn-primary{background:var(--primary); color:#fff; border-color:transparent}
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
+
+    /* No login: botão principal ocupa largura total em telas pequenas */
+    .form .btn-primary{ width:100%; }
+
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
+
     .table-wrap{width:100%; overflow:auto}
     .table{width:100%; border-collapse:separate; border-spacing:0}
     .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
     .table th{font-weight:600; text-align:left; white-space:nowrap}
     .table td.num,.table th.num{text-align:right}
+
     .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border);}
     .badge.low{background:#fff5f5; color:#b91c1c; border-color:#fecaca}
+
     .row-actions{display:flex; gap:8px; align-items:center}
+
     .grid{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
     .grid .field{min-width:0}
+
+    /* ===== Responsivo ===== */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
-    @media (max-width:900px){ .app{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:10} .grid{grid-template-columns:repeat(2, minmax(0,1fr))} }
-    @media (max-width:600px){ .grid{grid-template-columns:1fr} .kpis{grid-template-columns:1fr;} }
+    @media (max-width:900px){
+      .app{grid-template-columns:1fr}
+      .sidebar{position:sticky; top:0; z-index:10}
+      .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
+    }
+    @media (max-width:600px){
+      .view{padding:16px}
+      .grid{grid-template-columns:1fr}
+      .kpis{grid-template-columns:1fr;}
+      /* botões lado a lado quebram bem */
+      .toolbar .right{gap:6px}
+    }
+
+    /* vídeo do escáner escondido */
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
   </style>
 </head>
@@ -89,8 +148,8 @@
   <template id="tpl-login">
     <section class="center">
       <div class="card card-max" role="dialog" aria-labelledby="loginTitle">
-        <h1 id="loginTitle" class="title">Iniciar sesión</h1>
-        <p class="muted">Acceso interno — Gestión de inventario de autopartes.</p>
+        <h1 id="loginTitle" class="title" style="text-align:center">Iniciar sesión</h1>
+        <p class="muted" style="text-align:center">Acceso interno — Gestión de inventario de autopartes.</p>
         <form id="loginForm" class="form">
           <label class="field"><span>Correo</span>
             <input type="email" name="email" placeholder="admin@empresa.com" required autocomplete="username" />
@@ -99,7 +158,7 @@
             <input type="password" name="password" placeholder="123456" required autocomplete="current-password" />
           </label>
           <button class="btn btn-primary" type="submit">Entrar</button>
-          <p class="muted xs">Demo: <code>admin@empresa.com</code> / <code>123456</code></p>
+          <p class="muted xs" style="text-align:center">Demo: <code>admin@empresa.com</code> / <code>123456</code></p>
           <button id="hardResetBtn" type="button" class="btn" title="Use si la app no carga o el usuario no aparece">Reparar datos (reset demo)</button>
         </form>
       </div>
@@ -270,7 +329,6 @@
       const rid = () => 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
 
       function seedIfEmpty(){
-        // Si no hay seed, sembrar demo completa
         if(!localStorage.getItem(KEYS.SEEDED)){
           const users = [{email:'admin@empresa.com', name:'Admin', password:'123456'}];
           const parts = [
@@ -284,13 +342,11 @@
           safeWrite(KEYS.PRICEH, []);
           localStorage.setItem(KEYS.SEEDED, '1');
         }else{
-          // Asegurar que exista el usuario demo aunque haya seed viejo
           const users = safeRead(KEYS.USERS, []);
           if(!users.find(u => (u.email||'').toLowerCase() === 'admin@empresa.com')){
             users.push({email:'admin@empresa.com', name:'Admin', password:'123456'});
             safeWrite(KEYS.USERS, users);
           }
-          // Asegurar arrays válidos
           if(!Array.isArray(safeRead(KEYS.PARTS, []))) safeWrite(KEYS.PARTS, []);
           if(!Array.isArray(safeRead(KEYS.MOVES, []))) safeWrite(KEYS.MOVES, []);
           if(!Array.isArray(safeRead(KEYS.PRICEH, []))) safeWrite(KEYS.PRICEH, []);
