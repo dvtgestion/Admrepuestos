@@ -39,9 +39,7 @@
 
     /* ===== Login centralizado e mobile ===== */
     .center{
-      display:flex;
-      align-items:center;
-      justify-content:center;
+      display:flex; align-items:center; justify-content:center;
       min-height:100dvh;
       padding:clamp(16px, 5vw, 48px);
       padding-top:calc(env(safe-area-inset-top,0px) + clamp(16px, 5vw, 48px));
@@ -53,6 +51,7 @@
     .muted{color:var(--muted)}
     .xs{font-size:12px}
 
+    /* Form padrão (mobile-first) */
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
     .field input, .field select, .input{
@@ -79,8 +78,6 @@
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
 
-    .form .btn-primary{ width:100%; }
-
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
@@ -98,6 +95,10 @@
 
     .grid{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
     .grid .field{min-width:0}
+
+    .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+    .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
+    .kpis .card strong{font-size:20px}
 
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
@@ -121,7 +122,7 @@
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
       <div class="brand">
         <div class="logo" aria-hidden="true">🔧</div>
-        <div><strong>Autopartes</strong><small>Inventario</small></div>
+        <div><strong>Autopartes</strong><small> Inventario</small></div>
       </div>
       <nav class="nav" aria-label="Navegación principal">
         <button class="nav-btn" data-route="dashboard">Dashboard</button>
@@ -153,8 +154,8 @@
             <input type="password" name="password" placeholder="123456" required autocomplete="current-password" />
           </label>
           <button class="btn btn-primary" type="submit">Entrar</button>
-          <p class="muted xs" style="text-align:center">Demo: <code>admin@empresa.com</code> / <code>123456</code></p>
-          <button id="hardResetBtn" type="button" class="btn" title="Si algo falla, cierre sesión">Cerrar sesión (forzar)</button>
+          <p class="muted xs" style="text-align:center">Cree usuarios en Supabase → Auth → Users</p>
+          <button id="clearCacheBtn" type="button" class="btn" title="Limpia empresa seleccionada y cierra sesión">Limpiar caché local</button>
         </form>
       </div>
     </section>
@@ -269,86 +270,136 @@
   <template id="tpl-ajustes">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Ajustes</h2><p class="muted">Backup y restauración.</p></div>
+        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, backup y restauración.</p></div>
         <div class="right">
           <button id="backupBtn" class="btn">Backup JSON</button>
           <label class="btn" for="restoreFile">Restaurar JSON</label>
           <input id="restoreFile" type="file" accept="application/json" style="display:none"/>
-          <button id="resetBtn" class="btn btn-danger">Cerrar sesión (forzar)</button>
+          <button id="resetBtn" class="btn btn-danger">Vaciar datos (empresa actual)</button>
         </div>
       </header>
-      <div class="card"><p class="muted">Usuario único con acceso total.</p></div>
-    </section>
-  </template>
 
-  <template id="tpl-historial">
-    <section class="stack">
-      <header class="toolbar">
-        <div class="left"><h2>Historial de precios</h2><p class="muted">Cambios de costo y precio por pieza.</p></div>
-        <div class="right"></div>
-      </header>
-      <div class="card">
-        <div class="table-wrap">
-          <table class="table" id="histTable">
-            <thead><tr>
-              <th>Fecha</th><th>Código</th><th>Nombre</th>
-              <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th><th>Usuario</th>
-            </tr></thead>
-            <tbody id="histTbody"></tbody>
-          </table>
-        </div>
+      <!-- Selector/Creador de empresa -->
+      <div class="card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+        <strong>Empresa actual:</strong>
+        <span id="orgName">—</span>
+        <select id="orgSelect" class="input"></select>
+        <button id="orgNewBtn" class="btn">Nueva empresa</button>
       </div>
     </section>
   </template>
 
-  <!-- Supabase SDK -->
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
-    /* ====== CONFIG DO SUPABASE (SUAS CHAVES) ====== */
-    const SUPABASE_URL = "https://zbqshivafjhbghksuhkz.supabase.co";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE";
+    /* =======================
+       CONFIG SUPABASE
+    ======================= */
+    const SUPABASE_URL = 'https://zbqshivafjhbghksuhkz.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    /* ===== Utilidades ===== */
+    /* ===== Helpers gerais ===== */
     function fmtMoney(n){ n = Number(n||0); return n.toLocaleString('es-BO', {style:'currency', currency:'BOB'}); }
     function fmtDate(d){ return new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
     function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function csvCell(v){ const needsQuote = /[",\n]/.test(v); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; }
-    function parseCSVLine(s){ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue;} if(c===',' && !q){ out.push(cur); cur=''; continue;} cur+=c;} out.push(cur); return out; }
+    function parseCSVLine(s){ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; }
+
+    /* ===== Autenticación (wrapper) ===== */
+    const Auth = (() => {
+      let cache = null; // {id,email}
+      function set(user){
+        cache = user ? { id:user.id, email:user.email } : null;
+        if(cache) localStorage.setItem('authedUser', JSON.stringify(cache));
+        else localStorage.removeItem('authedUser');
+      }
+      async function init(){
+        const { data:{ user } } = await sb.auth.getUser();
+        set(user || null);
+        sb.auth.onAuthStateChange((_event, session)=>{
+          set(session?.user || null);
+          route(); // re-render
+        });
+      }
+      const isAuthed = () => !!cache;
+      const currentUser = () => cache;
+      async function login(email, password){
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if(error) return { ok:false, error: error.message };
+        return { ok:true };
+      }
+      async function logout(){ await sb.auth.signOut(); }
+      return { init, isAuthed, currentUser, login, logout };
+    })();
+
+    /* ===== Gestor de Empresa (Org) ===== */
+    const Org = (() => {
+      let currentId = localStorage.getItem('currentOrgId') || null;
+      let currentName = localStorage.getItem('currentOrgName') || null;
+
+      const get = () => ({ id: currentId, nombre: currentName });
+      const set = (org) => {
+        currentId = org?.id || null;
+        currentName = org?.nombre || null;
+        if (currentId) localStorage.setItem('currentOrgId', currentId); else localStorage.removeItem('currentOrgId');
+        if (currentName) localStorage.setItem('currentOrgName', currentName); else localStorage.removeItem('currentOrgName');
+      };
+
+      async function myOrgs() {
+        const { data:{ user } } = await sb.auth.getUser();
+        const uid = user?.id;
+        if(!uid) return [];
+        const { data: mems, error } = await sb.from('org_members').select('org_id').eq('user_id', uid);
+        if(error) throw error;
+        if(!mems?.length) return [];
+        const ids = mems.map(m=>m.org_id);
+        const { data: orgs, error: e2 } = await sb.from('orgs').select('id, nombre').in('id', ids).order('nombre');
+        if(e2) throw e2;
+        return orgs;
+      }
+
+      async function ensureCurrent() {
+        const orgs = await myOrgs();
+        if (!orgs.length) {
+          const nombre = prompt('Nombre de la empresa (crearemos una nueva ahora):');
+          if(!nombre) throw new Error('Necesita crear/seleccionar una empresa para continuar.');
+          const { data:{ user } } = await sb.auth.getUser();
+          const { data: created, error } = await sb.from('orgs').insert({ nombre, created_by: user?.id }).select().maybeSingle();
+          if (error) throw error;
+          const { error: e2 } = await sb.from('org_members').insert({ org_id: created.id, user_id: user?.id });
+          if (e2) throw e2;
+          set(created);
+          return created;
+        }
+        const found = orgs.find(o => o.id === currentId) || orgs[0];
+        set(found);
+        return found;
+      }
+
+      return { get, set, myOrgs, ensureCurrent };
+    })();
 
     /* ===== DB (Supabase) ===== */
     const DB = (() => {
-      function mapFromRow(r){
-        return {
-          id: r.id, codigo: r.codigo, nombre: r.nombre,
-          categoria: r.categoria, ubicacion: r.ubicacion,
-          almacen: r.almacen, proveedor: r.proveedor,
-          leadTimeDias: Number(r.lead_time_dias||0),
-          consumoDiario: Number(r.consumo_diario||0),
-          stock: Number(r.stock||0),
-          stockMin: Number(r.stock_min||0),
-          costo: Number(r.costo||0),
-          precio: Number(r.precio||0)
-        };
-      }
-      async function me(){ const { data } = await sb.auth.getUser(); return data.user || null; }
+      function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // PARTS
       async function listParts(){
-        const { data, error } = await sb.from('parts').select('*').order('nombre',{ascending:true});
+        const { data, error } = await sb.from('parts').select('*').eq('org_id', orgId()).order('nombre',{ascending:true});
         if(error) throw error;
-        return data.map(mapFromRow);
+        return (data||[]).map(r => ({
+          id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria, ubicacion:r.ubicacion,
+          almacen:r.almacen, proveedor:r.proveedor,
+          leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
+          stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
+          costo:Number(r.costo||0), precio:Number(r.precio||0)
+        }));
       }
-      async function getPart(id){
-        const { data, error } = await sb.from('parts').select('*').eq('id', id).maybeSingle();
-        if(error) throw error;
-        return data ? mapFromRow(data) : null;
-      }
+
       async function upsertPart(part){
-        const user = await me();
         const row = {
-          id: part.id || undefined,
+          org_id: orgId(),
           codigo: part.codigo, nombre: part.nombre,
           categoria: part.categoria || null, ubicacion: part.ubicacion || null,
           almacen: part.almacen || null, proveedor: part.proveedor || null,
@@ -356,68 +407,74 @@
           consumo_diario: Number(part.consumoDiario||0),
           stock: Number(part.stock||0),
           stock_min: Number(part.stockMin||0),
-          costo: Number(part.costo||0),
-          precio: Number(part.precio||0),
-          owner: user?.id
+          costo: Number(part.costo||0), precio: Number(part.precio||0)
         };
         if(part.id){
-          const { data, error } = await sb.from('parts').update(row).eq('id', part.id).select().maybeSingle();
+          const { error } = await sb.from('parts').update(row).eq('id', part.id).eq('org_id', orgId());
           if(error) throw error;
-          return mapFromRow(data);
         }else{
-          const { data, error } = await sb.from('parts').insert(row).select().maybeSingle();
+          const { error } = await sb.from('parts').insert(row);
           if(error) throw error;
-          return mapFromRow(data);
         }
       }
+
       async function deletePart(id){
-        const { error } = await sb.from('parts').delete().eq('id', id);
+        const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
         if(error) throw error;
       }
 
-      // MOVEMENTS
-      async function listMoves(limit=500){
-        const { data, error } = await sb.from('movements').select('*').order('fecha',{ascending:false}).limit(limit);
+      async function getPartById(id){
+        const { data, error } = await sb.from('parts').select('*').eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
-        return data || [];
+        return data;
       }
+
+      async function listMoves(limit=500){
+        const { data, error } = await sb.from('movements').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(limit);
+        if(error) throw error; return data||[];
+      }
+
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail}){
-        const user = await me();
-        const part = await getPart(piezaId);
-        if(!part) throw new Error('Pieza no encontrada');
+        const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
+        if(e1) throw e1;
+        if(!p) throw new Error('Pieza no encontrada');
         cantidad = Number(cantidad||0);
         if(!(cantidad>0)) throw new Error('Cantidad inválida');
-        if(tipo === 'salida' && part.stock < cantidad) throw new Error('Stock insuficiente para la salida');
-        const newStock = (tipo === 'salida') ? part.stock - cantidad : part.stock + cantidad;
+        if(tipo === 'salida' && Number(p.stock) < cantidad) throw new Error('Stock insuficiente para la salida');
 
-        const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', piezaId);
+        const newStock = (tipo === 'salida') ? Number(p.stock) - cantidad : Number(p.stock) + cantidad;
+        const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', piezaId).eq('org_id', orgId());
         if(upErr) throw upErr;
 
-        const mov = {
-          pieza_id: piezaId, codigo: part.codigo, nombre: part.nombre,
-          almacen: part.almacen || '', tipo, cantidad, referencia: referencia || '',
-          usuario: usuarioEmail || '', owner: user?.id
-        };
-        const { error: insErr } = await sb.from('movements').insert(mov);
+        const { error: insErr } = await sb.from('movements').insert({
+          org_id: orgId(),
+          pieza_id: piezaId, codigo: p.codigo, nombre: p.nombre,
+          almacen: p.almacen || '', tipo, cantidad,
+          referencia: referencia || '', usuario: usuarioEmail || ''
+        });
         if(insErr) throw insErr;
       }
+
       async function undoLastMovement(){
-        const { data: last, error } = await sb.from('movements').select('*').order('fecha',{ascending:false}).limit(1).maybeSingle();
+        const { data: last, error } = await sb.from('movements').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(1).maybeSingle();
         if(error) throw error;
         if(!last) throw new Error('Sin movimientos');
-        const p = await getPart(last.pieza_id);
+
+        const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', last.pieza_id).eq('org_id', orgId()).maybeSingle();
+        if(e1) throw e1;
+
         if(p){
-          const newStock = last.tipo === 'entrada' ? Math.max(0, p.stock - last.cantidad) : p.stock + last.cantidad;
-          const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', p.id);
+          const newStock = last.tipo === 'entrada' ? Math.max(0, Number(p.stock) - Number(last.cantidad))
+                                                  : Number(p.stock) + Number(last.cantidad);
+          const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
         }
-        const { error: delErr } = await sb.from('movements').delete().eq('id', last.id);
+        const { error: delErr } = await sb.from('movements').delete().eq('id', last.id).eq('org_id', orgId());
         if(delErr) throw delErr;
       }
 
-      // PRICE HISTORY
       async function listPriceHistory(limit=500){
-        const { data, error } = await sb.from('price_history').select('*').order('fecha',{ascending:false}).limit(limit);
+        const { data, error } = await sb.from('price_history').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(limit);
         if(error) throw error;
         return (data||[]).map(h=>({
           fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
@@ -426,45 +483,44 @@
           usuario:h.usuario
         }));
       }
+
       async function addPriceHistory(entry){
-        const user = await me();
         const row = {
-          pieza_id: entry.piezaId, codigo: entry.codigo, nombre: entry.nombre,
+          org_id: orgId(),
+          pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
           costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
           precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
-          usuario: entry.usuario || '', owner: user?.id
+          usuario: entry.usuario || ''
         };
         const { error } = await sb.from('price_history').insert(row);
         if(error) throw error;
       }
 
-      return { listParts, getPart, upsertPart, deletePart, listMoves, applyMovement, undoLastMovement, listPriceHistory, addPriceHistory };
+      async function backupAll(){
+        const [parts, moves, hist] = await Promise.all([listParts(), listMoves(10000), listPriceHistory(10000)]);
+        return { parts, moves, priceHistory: hist };
+      }
+
+      async function restoreAll(jsonDump){
+        // Insere apenas partes (mov/hist não restaurados para evitar inconsistência simples)
+        if(Array.isArray(jsonDump.parts)){
+          for(const p of jsonDump.parts){
+            await upsertPart(p);
+          }
+        }
+      }
+
+      async function wipeCurrentOrg(){
+        const oid = orgId();
+        await sb.from('price_history').delete().eq('org_id', oid);
+        await sb.from('movements').delete().eq('org_id', oid);
+        await sb.from('parts').delete().eq('org_id', oid);
+      }
+
+      return { listParts, upsertPart, deletePart, getPartById, listMoves, applyMovement, undoLastMovement, listPriceHistory, addPriceHistory, backupAll, restoreAll, wipeCurrentOrg };
     })();
 
-    /* ===== Auth (Supabase) ===== */
-    const Auth = (() => {
-      const state = { user:null };
-      const isAuthed = () => !!state.user;
-      const currentUser = () => state.user;
-
-      async function loadSession(){
-        const { data } = await sb.auth.getSession();
-        state.user = data.session?.user || null;
-      }
-      async function login(email, password){
-        const { data, error } = await sb.auth.signInWithPassword({ email, password });
-        if(error) return { ok:false, error: error.message || 'No se pudo iniciar sesión' };
-        state.user = data.user;
-        return { ok:true };
-      }
-      async function logout(){ await sb.auth.signOut(); state.user = null; }
-      function watchAuth(cb){
-        sb.auth.onAuthStateChange((_event, session) => { state.user = session?.user || null; cb?.(state.user); });
-      }
-      return { isAuthed, currentUser, loadSession, login, logout, watchAuth };
-    })();
-
-    /* ===== App / Router ===== */
+    /* ===== App / Roteamento ===== */
     const app = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -472,17 +528,14 @@
     const logoutBtn = document.getElementById('logoutBtn');
     const PUBLIC_ROUTES = ['login'];
 
-    init();
-
     async function init(){
-      await Auth.loadSession();
-      Auth.watchAuth(()=> route());
+      await Auth.init();
       if(logoutBtn){
-        logoutBtn.addEventListener('click', async () => { await Auth.logout(); location.hash = '#/login'; route(); });
+        logoutBtn.addEventListener('click', async () => { await Auth.logout(); location.hash = '#/login'; await route(); });
       }
       if(!Auth.isAuthed()) location.hash = '#/login';
-      route();
       window.addEventListener('hashchange', route);
+      await route();
     }
 
     function setNavActive(path){
@@ -492,28 +545,21 @@
       });
     }
 
-    function ensureAuth(path){
-      const authed = Auth.isAuthed();
-      if(!authed && !PUBLIC_ROUTES.includes(path)){
-        if(location.hash !== '#/login') location.hash = '#/login';
-        return false;
-      }
-      return true;
-    }
-
     async function route(){
       const hash = location.hash || '#/login';
       const path = (hash.startsWith('#/')) ? hash.slice(2) : 'login';
       const authed = Auth.isAuthed();
 
       if(authed){
+        try { await Org.ensureCurrent(); } catch(e){ /* mostra login se falhar selecionar org */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); app.classList.remove('no-sidebar');
-        const u = Auth.currentUser(); userLabel.textContent = u ? `Conectado como: ${u.email}` : '';
+        const u = Auth.currentUser(); const org = Org.get();
+        userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
       }else{
         sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); app.classList.add('no-sidebar');
       }
 
-      if(!ensureAuth(path)){ await renderLogin(); return; }
+      if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
 
       switch(path){
         case 'login': await renderLogin(); break;
@@ -523,18 +569,20 @@
         case 'sugerencias': await renderSugerencias(); break;
         case 'ajustes': await renderAjustes(); break;
         case 'historial': await renderHistorial(); break;
-        default: location.hash = authed ? '#/dashboard' : '#/login'; return;
+        default:
+          location.hash = authed ? '#/dashboard' : '#/login';
+          return;
       }
       if(authed) setNavActive(path);
     }
 
-    /* ===== Vistas ===== */
+    /* --------- Vistas --------- */
     async function renderLogin(){
       const tpl = document.getElementById('tpl-login').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
       const form = document.getElementById('loginForm');
-      const hardBtn = document.getElementById('hardResetBtn');
+      const clearBtn = document.getElementById('clearCacheBtn');
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
@@ -542,13 +590,15 @@
         const email = fd.get('email'); const password = fd.get('password');
         const res = await Auth.login(email, password);
         if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
-        location.hash = '#/dashboard'; route();
+        location.hash = '#/dashboard'; await route();
       });
 
-      hardBtn.addEventListener('click', async ()=>{
+      clearBtn.addEventListener('click', async ()=>{
+        localStorage.removeItem('currentOrgId');
+        localStorage.removeItem('currentOrgName');
         await Auth.logout();
-        alert('Sesión cerrada. Inicie nuevamente.');
-        location.hash = '#/login'; route();
+        alert('Caché local limpiada. Inicie sesión nuevamente.');
+        location.hash = '#/login'; await route();
       });
     }
 
@@ -557,8 +607,8 @@
       const moves = await DB.listMoves();
       const valor = parts.reduce((s,p)=> s + Number(p.costo||0)*Number(p.stock||0), 0);
       const bajos = parts.filter(p => Number(p.stock)<Number(p.stockMin)).length;
-      const today = new Date().toDateString();
-      const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===today).length;
+      const hoy = new Date().toDateString();
+      const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoy).length;
 
       view.innerHTML = `
         <section class="stack">
@@ -603,9 +653,9 @@
         return passQ && passA;
       }
 
-      function paint(list){
+      async function paint(){
         tbody.innerHTML = '';
-        list.filter(matchesFilters).forEach(p=>{
+        parts.filter(matchesFilters).forEach(p=>{
           const low = Number(p.stock) < Number(p.stockMin);
           const tr = document.createElement('tr');
           tr.innerHTML = `
@@ -625,14 +675,12 @@
           tbody.appendChild(tr);
         });
       }
+      await paint();
 
-      function resetForm(){ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false; }
-
-      paint(parts);
-      search.addEventListener('input', ()=> paint(parts));
-      filterAlm.addEventListener('change', ()=> paint(parts));
-      addBtn.addEventListener('click', ()=>{ resetForm(); formWrap.open = true; });
-      cancelBtn.addEventListener('click', resetForm);
+      search.addEventListener('input', paint);
+      filterAlm.addEventListener('change', paint);
+      addBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = true; });
+      cancelBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false; });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
       form.addEventListener('submit', async (e)=>{
@@ -656,26 +704,28 @@
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
         let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id); }
-        const saved = await DB.upsertPart(part);
-
-        if(prev && (Number(prev.costo)!==Number(saved.costo) || Number(prev.precio)!==Number(saved.precio))){
-          const u = Auth.currentUser();
-          await DB.addPriceHistory({
-            piezaId: saved.id, codigo: prev.codigo, nombre: prev.nombre,
-            costoAntes: Number(prev.costo)||0, costoDespues: Number(saved.costo)||0,
-            precioAntes: Number(prev.precio)||0, precioDespues: Number(saved.precio)||0,
-            usuario: u ? u.email : ''
-          });
-        }
-
-        parts = await DB.listParts(); buildAlmacenOptions(); paint(parts); resetForm();
+        try{
+          await DB.upsertPart(part);
+          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
+            const u = Auth.currentUser();
+            await DB.addPriceHistory({
+              piezaId: part.id,
+              codigo: prev.codigo, nombre: prev.nombre,
+              costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
+              precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
+              usuario: u ? u.email : ''
+            });
+          }
+          parts = await DB.listParts(); buildAlmacenOptions(); await paint();
+          form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
+        }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
         if(act === 'edit'){
-          const p = parts.find(x => x.id === id); if(!p) return;
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
@@ -692,38 +742,37 @@
           form.querySelector('input[name="precio"]').value = p.precio;
         }
         if(act === 'del'){
-          if(confirm('¿Eliminar esta pieza? Esta acción no se puede deshacer.')){
-            await DB.deletePart(id); parts = await DB.listParts(); paint(parts);
-          }
+          if(!confirm('¿Eliminar esta pieza? Esta acción no se puede deshacer.')) return;
+          try{ await DB.deletePart(id); parts = await DB.listParts(); await paint(); }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
 
-      importCSV.addEventListener('change', async ()=>{
+      importCSV.addEventListener('change', ()=>{
         const f = importCSV.files[0]; if(!f) return;
-        const text = await f.text();
-        const lines = String(text||'').split(/\r?\n/).filter(Boolean);
-        if(!lines.length){ alert('CSV vacío'); return; }
-        const head = lines.shift().split(',').map(h=>h.trim());
-        const rows = [];
-        for(const line of lines){
-          const cells = parseCSVLine(line);
-          const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
-          rows.push({
-            codigo: obj.codigo, nombre: obj.nombre,
-            categoria: obj.categoria || null, ubicacion: obj.ubicacion || null,
-            almacen: obj.almacen || null, proveedor: obj.proveedor || null,
-            lead_time_dias: Number(obj.leadTimeDias||0),
-            consumo_diario: Number(obj.consumoDiario||0),
-            stock: Number(obj.stock||0), stock_min: Number(obj.stockMin||0),
-            costo: Number(obj.costo_Bs||obj.costo||0), precio: Number(obj.precio_Bs||obj.precio||0)
-          });
-        }
-        const { data: sess } = await sb.auth.getUser();
-        rows.forEach(r=> r.owner = sess.user?.id);
-        const { error } = await sb.from('parts').insert(rows);
-        if(error){ alert('Error al importar CSV: '+error.message); return; }
-        parts = await DB.listParts(); buildAlmacenOptions(); paint(parts);
-        alert('Importación completa'); importCSV.value = '';
+        const reader = new FileReader();
+        reader.onload = async ()=>{
+          try{
+            const lines = String(reader.result||'').split(/\r?\n/).filter(Boolean);
+            if(!lines.length){ alert('CSV vacío'); return; }
+            const head = lines.shift().split(',').map(h=>h.trim());
+            for(const line of lines){
+              const cells = parseCSVLine(line);
+              const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
+              const part = {
+                codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
+                ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
+                leadTimeDias: Number(obj.leadTimeDias||0), consumoDiario: Number(obj.consumoDiario||0),
+                stock: Number(obj.stock||0), stockMin: Number(obj.stockMin||0),
+                costo: Number(obj.costo_Bs||obj.costo||0), precio: Number(obj.precio_Bs||obj.precio||0)
+              };
+              await DB.upsertPart(part);
+            }
+            parts = await DB.listParts(); buildAlmacenOptions(); await paint();
+            alert('Importación completa');
+          }catch(e){ alert(e.message || 'Error al importar'); }
+          importCSV.value = '';
+        };
+        reader.readAsText(f);
       });
     }
 
@@ -756,7 +805,7 @@
       }
       fillPartOptions();
 
-      function paint(){
+      function paintMoves(){
         tbody.innerHTML = '';
         moves.forEach(m=>{
           const tr = document.createElement('tr');
@@ -772,7 +821,7 @@
           tbody.appendChild(tr);
         });
       }
-      paint();
+      paintMoves();
 
       almFilter.addEventListener('change', fillPartOptions);
 
@@ -784,15 +833,17 @@
         try{
           const u = Auth.currentUser();
           await DB.applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail: u?u.email:''});
-          parts = await DB.listParts(); moves = await DB.listMoves(); paint(); alert('Movimiento registrado'); moveForm.reset();
+          parts = await DB.listParts(); moves = await DB.listMoves(); paintMoves();
+          alert('Movimiento registrado'); moveForm.reset(); fillPartOptions();
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
       exportBtn.addEventListener('click', async ()=>{
+        // Exporta partes (estado atual)
+        const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
-        const partsNow = await DB.listParts();
-        const rows = partsNow.map(p=>{
-          const row = { id:p.id, codigo:p.codigo, nombre:p.nombre, categoria:p.categoria, almacen:p.almacen, proveedor:p.proveedor, leadTimeDias:p.leadTimeDias, consumoDiario:p.consumoDiario, ubicacion:p.ubicacion, stock:p.stock, stockMin:p.stockMin, costo_Bs:p.costo, precio_Bs:p.precio };
+        const rows = p.map(pt=>{
+          const row = { id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio };
           return head.map(k=>csvCell(row[k] ?? '')).join(',');
         });
         const csv = head.join(',') + '\n' + rows.join('\n');
@@ -805,10 +856,8 @@
       });
 
       undoBtn.addEventListener('click', async ()=>{
-        try{
-          await DB.undoLastMovement();
-          moves = await DB.listMoves(); paint(); alert('Movimiento deshecho');
-        }catch(e){ alert(e.message || 'No se pudo deshacer'); }
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(); paintMoves(); alert('Movimiento deshecho'); }
+        catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
     }
 
@@ -870,59 +919,61 @@
       const restoreFile = document.getElementById('restoreFile');
       const resetBtn = document.getElementById('resetBtn');
 
+      const orgName = document.getElementById('orgName');
+      const orgSelect = document.getElementById('orgSelect');
+      const orgNewBtn = document.getElementById('orgNewBtn');
+
+      // Carrega empresas do usuário
+      (async ()=>{
+        const orgs = await Org.myOrgs();
+        const cur = Org.get();
+        orgName.textContent = cur?.nombre || '—';
+        orgSelect.innerHTML = orgs.map(o => `<option value="${o.id}" ${o.id===cur.id?'selected':''}>${escapeHtml(o.nombre)}</option>`).join('');
+      })();
+
+      orgSelect.addEventListener('change', async ()=>{
+        const id = orgSelect.value;
+        const { data, error } = await sb.from('orgs').select('id,nombre').eq('id', id).maybeSingle();
+        if(error || !data){ alert('No se pudo cambiar de empresa'); return; }
+        Org.set(data);
+        alert('Empresa cambiada a: ' + data.nombre);
+        location.hash = '#/dashboard'; await route();
+      });
+
+      orgNewBtn.addEventListener('click', async ()=>{
+        const nombre = prompt('Nombre de la nueva empresa:'); if(!nombre) return;
+        const { data:{ user } } = await sb.auth.getUser();
+        const { data: org, error: e1 } = await sb.from('orgs').insert({ nombre, created_by: user?.id }).select().maybeSingle();
+        if(e1){ alert(e1.message); return; }
+        const { error: e2 } = await sb.from('org_members').insert({ org_id: org.id, user_id: user?.id });
+        if(e2){ alert(e2.message); return; }
+        Org.set(org);
+        alert('Empresa creada y seleccionada: ' + org.nombre);
+        location.hash = '#/dashboard'; await route();
+      });
+
       backupBtn.addEventListener('click', async ()=>{
-        const [parts, moves, hist] = await Promise.all([DB.listParts(), DB.listMoves(), DB.listPriceHistory()]);
-        const dump = { parts, moves, priceHistory: hist };
-        const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
+        try{
+          const dump = await DB.backupAll();
+          const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
+          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
+        }catch(e){ alert(e.message || 'No se pudo hacer backup'); }
       });
 
       restoreFile.addEventListener('change', async ()=>{
         const f = restoreFile.files[0]; if(!f) return;
         try{
           const data = JSON.parse(await f.text());
-          // Upsert parts
-          const partsRows = (data.parts||[]).map(p=>({
-            id: p.id, codigo:p.codigo, nombre:p.nombre, categoria:p.categoria||null, ubicacion:p.ubicacion||null,
-            almacen:p.almacen||null, proveedor:p.proveedor||null,
-            lead_time_dias:Number(p.leadTimeDias||0), consumo_diario:Number(p.consumoDiario||0),
-            stock:Number(p.stock||0), stock_min:Number(p.stockMin||0),
-            costo:Number(p.costo||0), precio:Number(p.precio||0)
-          }));
-          if(partsRows.length){
-            const { error: e1 } = await sb.from('parts').upsert(partsRows, { onConflict: 'id' });
-            if(e1) throw e1;
-          }
-          // Insert moves
-          const moveRows = (data.moves||[]).map(m=>({
-            fecha:m.fecha, pieza_id:m.piezaId||m.pieza_id, codigo:m.codigo, nombre:m.nombre, almacen:m.almacen,
-            tipo:m.tipo, cantidad:Number(m.cantidad||0), referencia:m.referencia||'', usuario:m.usuario||''
-          }));
-          if(moveRows.length){
-            const { error: e2 } = await sb.from('movements').insert(moveRows);
-            if(e2) throw e2;
-          }
-          // Insert price history
-          const histRows = (data.priceHistory||[]).map(h=>({
-            fecha:h.fecha, pieza_id:h.piezaId||h.pieza_id, codigo:h.codigo, nombre:h.nombre,
-            costo_antes:Number(h.costoAntes||0), costo_despues:Number(h.costoDespues||0),
-            precio_antes:Number(h.precioAntes||0), precio_despues:Number(h.precioDespues||0),
-            usuario:h.usuario||''
-          }));
-          if(histRows.length){
-            const { error: e3 } = await sb.from('price_history').insert(histRows);
-            if(e3) throw e3;
-          }
-          alert('Restauración completa');
-          location.hash = '#/dashboard'; route();
-        }catch(e){ alert('Archivo inválido o error al restaurar: ' + (e.message||e)); }
+          await DB.restoreAll(data);
+          alert('Restauración completa'); location.hash = '#/dashboard'; await route();
+        }catch(e){ alert('Archivo inválido / restauración falló'); }
         finally{ restoreFile.value = ''; }
       });
 
       resetBtn.addEventListener('click', async ()=>{
-        await sb.auth.signOut();
-        alert('Sesión cerrada.');
-        location.hash = '#/login'; route();
+        if(!confirm('Esto borrará TODAS las piezas, movimientos e historial de la EMPRESA ACTUAL. ¿Continuar?')) return;
+        try{ await DB.wipeCurrentOrg(); alert('Datos borrados de la empresa actual'); location.hash = '#/dashboard'; await route(); }
+        catch(e){ alert(e.message || 'No se pudo borrar'); }
       });
     }
 
@@ -967,6 +1018,9 @@
         tick();
       }catch(err){ alert('No se pudo abrir la cámara'); }
     }
+
+    // Boot
+    init();
   </script>
 </body>
 </html>
