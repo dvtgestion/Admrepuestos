@@ -187,7 +187,13 @@
           <label class="field"><span>Nombre</span><input name="nombre" required placeholder="Filtro de aceite" /></label>
           <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
-          <label class="field"><span>Almacén</span><input name="almacen" placeholder="Central, Sucursal 1…" /></label>
+
+          <!-- Almacén com autocomplete de existentes + livre -->
+          <label class="field"><span>Almacén</span>
+            <input name="almacen" placeholder="Central, Sucursal 1…" list="almacenesList" />
+            <datalist id="almacenesList"></datalist>
+          </label>
+
           <label class="field"><span>Proveedor</span><input name="proveedor" placeholder="Proveedor principal" /></label>
           <label class="field"><span>Lead time (días)</span><input name="leadTimeDias" type="number" min="0" step="1" value="0" /></label>
           <label class="field"><span>Consumo diario</span><input name="consumoDiario" type="number" min="0" step="1" value="0" /></label>
@@ -426,7 +432,13 @@
       async function getPartById(id){
         const { data, error } = await sb.from('parts').select('*').eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
-        return data;
+        return data ? {
+          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria, ubicacion:data.ubicacion,
+          almacen:data.almacen, proveedor:data.proveedor,
+          leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
+          stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
+          costo:Number(data.costo||0), precio:Number(data.precio||0)
+        } : null;
       }
 
       async function listMoves(limit=500){
@@ -502,7 +514,6 @@
       }
 
       async function restoreAll(jsonDump){
-        // Insere apenas partes (mov/hist não restaurados para evitar inconsistência simples)
         if(Array.isArray(jsonDump.parts)){
           for(const p of jsonDump.parts){
             await upsertPart(p);
@@ -642,7 +653,19 @@
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
         filterAlm.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
+
+      // NOVO: Preenche o datalist dos almacenes existentes para o formulário
+      function buildAlmacenDatalist(){
+        const dl = form.querySelector('#almacenesList');
+        if(!dl) return;
+        const set = new Set();
+        parts.forEach(p=>{ const a=(p.almacen||'').trim(); if(a) set.add(a); });
+        const opts = Array.from(set).sort((a,b)=>a.localeCompare(b)).map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
+        dl.innerHTML = opts;
+      }
+
       buildAlmacenOptions();
+      buildAlmacenDatalist();
 
       function matchesFilters(p){
         const q = (search.value||'').toLowerCase().trim();
@@ -716,7 +739,10 @@
               usuario: u ? u.email : ''
             });
           }
-          parts = await DB.listParts(); buildAlmacenOptions(); await paint();
+          parts = await DB.listParts();
+          buildAlmacenOptions();
+          buildAlmacenDatalist();   // atualiza sugestões
+          await paint();
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
@@ -743,7 +769,13 @@
         }
         if(act === 'del'){
           if(!confirm('¿Eliminar esta pieza? Esta acción no se puede deshacer.')) return;
-          try{ await DB.deletePart(id); parts = await DB.listParts(); await paint(); }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts();
+            buildAlmacenOptions();
+            buildAlmacenDatalist();  // atualiza sugestões após deletar
+            await paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
 
@@ -767,7 +799,10 @@
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts(); buildAlmacenOptions(); await paint();
+            parts = await DB.listParts();
+            buildAlmacenOptions();
+            buildAlmacenDatalist();  // atualiza após importação
+            await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           importCSV.value = '';
@@ -839,7 +874,6 @@
       });
 
       exportBtn.addEventListener('click', async ()=>{
-        // Exporta partes (estado atual)
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
         const rows = p.map(pt=>{
@@ -923,7 +957,6 @@
       const orgSelect = document.getElementById('orgSelect');
       const orgNewBtn = document.getElementById('orgNewBtn');
 
-      // Carrega empresas do usuário
       (async ()=>{
         const orgs = await Org.myOrgs();
         const cur = Org.get();
