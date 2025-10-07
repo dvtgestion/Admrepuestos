@@ -21,7 +21,6 @@
       text-size-adjust:100%;
     }
 
-    /* Layout geral */
     .app{display:grid; grid-template-columns:260px 1fr; min-height:100vh;}
     .app.no-sidebar{ grid-template-columns:1fr; min-height:100dvh; }
     .sidebar{border-right:1px solid var(--border); background:#fafafa; padding:16px; display:flex; flex-direction:column; gap:16px;}
@@ -37,7 +36,6 @@
 
     .view{padding:24px; max-width:1200px; width:100%}
 
-    /* ===== Login centralizado e mobile ===== */
     .center{
       display:flex; align-items:center; justify-content:center;
       min-height:100dvh;
@@ -51,7 +49,6 @@
     .muted{color:var(--muted)}
     .xs{font-size:12px}
 
-    /* Form padrão (mobile-first) */
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
     .field input, .field select, .input{
@@ -118,7 +115,6 @@
 </head>
 <body>
   <div id="app" class="app no-sidebar">
-    <!-- Sidebar (aparece solo tras login) -->
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
       <div class="brand">
         <div class="logo" aria-hidden="true">🔧</div>
@@ -188,20 +184,40 @@
           <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
-          <!-- Almacén com autocomplete de existentes + livre -->
+          <!-- Almacén com autocomplete -->
           <label class="field"><span>Almacén</span>
             <input name="almacen" placeholder="Central, Sucursal 1…" list="almacenesList" />
             <datalist id="almacenesList"></datalist>
           </label>
 
-          <label class="field"><span>Proveedor</span><input name="proveedor" placeholder="Proveedor principal" /></label>
-          <label class="field"><span>Lead time (días)</span><input name="leadTimeDias" type="number" min="0" step="1" value="0" /></label>
-          <label class="field"><span>Consumo diario</span><input name="consumoDiario" type="number" min="0" step="1" value="0" /></label>
+          <!-- Proveedor com autocomplete -->
+          <label class="field"><span>Proveedor</span>
+            <input name="proveedor" placeholder="Proveedor principal" list="proveedoresList" />
+            <datalist id="proveedoresList"></datalist>
+          </label>
+
+          <label class="field"><span>Lead time (días)</span>
+            <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
+          </label>
+
+          <!-- Automáticos (somente leitura) -->
+          <label class="field"><span>Consumo diario</span>
+            <input name="consumoDiario" type="number" step="0.01" disabled placeholder="Automático por movimientos (últimos 30 días)" />
+            <small class="muted xs">Se recalcula tras cada movimiento.</small>
+          </label>
+          <label class="field"><span>Stock mínimo</span>
+            <input name="stockMin" type="number" step="1" disabled placeholder="Automático (buffer + variabilidad)" />
+            <small class="muted xs">Usado junto al Lead time para el punto de pedido.</small>
+          </label>
+
           <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
-          <label class="field"><span>Stock mínimo</span><input name="stockMin" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
-          <div class="row-actions"><button class="btn btn-primary" type="submit">Guardar</button><button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button></div>
+
+          <div class="row-actions">
+            <button class="btn btn-primary" type="submit">Guardar</button>
+            <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
+          </div>
         </form>
       </details>
       <div class="card">
@@ -255,7 +271,7 @@
   <template id="tpl-sugerencias">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Sugerencias de compra</h2><p class="muted">Basado en consumo, lead time y stock mínimo.</p></div>
+        <div class="left"><h2>Sugerencias de compra</h2><p class="muted">Basado en consumo, lead time y stock mínimo (automáticos).</p></div>
         <div class="right"><select id="sugAlmacenFilter" class="input" title="Filtrar por almacén"></select></div>
       </header>
       <div class="card">
@@ -285,7 +301,6 @@
         </div>
       </header>
 
-      <!-- Selector/Creador de empresa -->
       <div class="card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         <strong>Empresa actual:</strong>
         <span id="orgName">—</span>
@@ -309,11 +324,12 @@
     /* ===== Helpers gerais ===== */
     function fmtMoney(n){ n = Number(n||0); return n.toLocaleString('es-BO', {style:'currency', currency:'BOB'}); }
     function fmtDate(d){ return new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
+    function fmtNum(n){ return Number(n||0).toLocaleString(undefined, {maximumFractionDigits:2}); }
     function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function csvCell(v){ const needsQuote = /[",\n]/.test(v); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; }
     function parseCSVLine(s){ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; }
 
-    /* ===== Autenticación (wrapper) ===== */
+    /* ===== Autenticación ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
       function set(user){
@@ -326,7 +342,7 @@
         set(user || null);
         sb.auth.onAuthStateChange((_event, session)=>{
           set(session?.user || null);
-          route(); // re-render
+          route();
         });
       }
       const isAuthed = () => !!cache;
@@ -389,7 +405,20 @@
 
     /* ===== DB (Supabase) ===== */
     const DB = (() => {
+      const CONFIG = {
+        DEMAND_WINDOW_DAYS: 30,
+        SAFETY_DAYS_FLOOR: 2,
+        SERVICE_Z: 1.28 // ~90%
+      };
+
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
+      const ymd = d => new Date(d).toISOString().slice(0,10);
+      function stddev(arr){
+        const n = arr.length; if(!n) return 0;
+        const mean = arr.reduce((a,b)=>a+b,0)/n;
+        const v = arr.reduce((s,x)=>s+(x-mean)*(x-mean),0)/n;
+        return Math.sqrt(v);
+      }
 
       async function listParts(){
         const { data, error } = await sb.from('parts').select('*').eq('org_id', orgId()).order('nombre',{ascending:true});
@@ -410,9 +439,9 @@
           categoria: part.categoria || null, ubicacion: part.ubicacion || null,
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: Number(part.leadTimeDias||0),
-          consumo_diario: Number(part.consumoDiario||0),
+          // consumo_diario / stock_min são mantidos pelo recompute
           stock: Number(part.stock||0),
-          stock_min: Number(part.stockMin||0),
+          stock_min: null, consumo_diario: null,
           costo: Number(part.costo||0), precio: Number(part.precio||0)
         };
         if(part.id){
@@ -465,6 +494,9 @@
           referencia: referencia || '', usuario: usuarioEmail || ''
         });
         if(insErr) throw insErr;
+
+        // Recalcula métricas automáticas
+        await recomputeMetricsForPart(piezaId);
       }
 
       async function undoLastMovement(){
@@ -483,6 +515,9 @@
         }
         const { error: delErr } = await sb.from('movements').delete().eq('id', last.id).eq('org_id', orgId());
         if(delErr) throw delErr;
+
+        // Recalcula métricas após desfazer
+        await recomputeMetricsForPart(last.pieza_id);
       }
 
       async function listPriceHistory(limit=500){
@@ -515,9 +550,7 @@
 
       async function restoreAll(jsonDump){
         if(Array.isArray(jsonDump.parts)){
-          for(const p of jsonDump.parts){
-            await upsertPart(p);
-          }
+          for(const p of jsonDump.parts){ await upsertPart(p); }
         }
       }
 
@@ -528,7 +561,58 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      return { listParts, upsertPart, deletePart, getPartById, listMoves, applyMovement, undoLastMovement, listPriceHistory, addPriceHistory, backupAll, restoreAll, wipeCurrentOrg };
+      // ====== Recalcula Consumo Diario + Stock Mínimo (automático) ======
+      async function recomputeMetricsForPart(piezaId){
+        const since = new Date();
+        since.setDate(since.getDate() - CONFIG.DEMAND_WINDOW_DAYS);
+
+        // salidas nos últimos N dias
+        const { data: movs, error: mErr } = await sb
+          .from('movements')
+          .select('fecha,tipo,cantidad')
+          .eq('org_id', orgId())
+          .eq('pieza_id', piezaId)
+          .gte('fecha', since.toISOString());
+        if(mErr) throw mErr;
+
+        // vetor com demanda diária (incluindo zeros)
+        const days = {};
+        for(let i=0;i<CONFIG.DEMAND_WINDOW_DAYS;i++){
+          const d = new Date(); d.setDate(d.getDate()-i);
+          days[ymd(d)] = 0;
+        }
+        (movs||[]).forEach(m=>{
+          if(m.tipo === 'salida'){
+            const key = ymd(m.fecha);
+            days[key] = (days[key]||0) + Number(m.cantidad||0);
+          }
+        });
+        const daily = Object.values(days);
+        const total = daily.reduce((a,b)=>a+b,0);
+        const mean = total / CONFIG.DEMAND_WINDOW_DAYS;
+        const sd = stddev(daily);
+
+        const { data: part } = await sb.from('parts').select('lead_time_dias').eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
+        const lt = Number(part?.lead_time_dias||0);
+
+        const safetySD = CONFIG.SERVICE_Z * sd * Math.sqrt(Math.max(1, lt||1));
+        const safetyDays = mean * CONFIG.SAFETY_DAYS_FLOOR;
+        const stockMin = Math.ceil(Math.max(safetySD, safetyDays));
+
+        await sb.from('parts').update({
+          consumo_diario: mean,
+          stock_min: stockMin
+        }).eq('id', piezaId).eq('org_id', orgId());
+      }
+
+      // expõe API
+      return {
+        listParts, upsertPart, deletePart, getPartById,
+        listMoves, applyMovement, undoLastMovement,
+        listPriceHistory, addPriceHistory,
+        backupAll, restoreAll, wipeCurrentOrg,
+        recomputeMetricsForPart
+      };
     })();
 
     /* ===== App / Roteamento ===== */
@@ -562,7 +646,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* mostra login se falhar selecionar org */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); app.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -653,19 +737,24 @@
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
         filterAlm.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
-
-      // NOVO: Preenche o datalist dos almacenes existentes para o formulário
       function buildAlmacenDatalist(){
         const dl = form.querySelector('#almacenesList');
         if(!dl) return;
         const set = new Set();
         parts.forEach(p=>{ const a=(p.almacen||'').trim(); if(a) set.add(a); });
-        const opts = Array.from(set).sort((a,b)=>a.localeCompare(b)).map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
-        dl.innerHTML = opts;
+        dl.innerHTML = Array.from(set).sort((a,b)=>a.localeCompare(b)).map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
+      }
+      function buildProveedorDatalist(){
+        const dl = form.querySelector('#proveedoresList');
+        if(!dl) return;
+        const set = new Set();
+        parts.forEach(p=>{ const pr=(p.proveedor||'').trim(); if(pr) set.add(pr); });
+        dl.innerHTML = Array.from(set).sort((a,b)=>a.localeCompare(b)).map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
       }
 
       buildAlmacenOptions();
       buildAlmacenDatalist();
+      buildProveedorDatalist();
 
       function matchesFilters(p){
         const q = (search.value||'').toLowerCase().trim();
@@ -718,9 +807,8 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          consumoDiario: Number(fd.get('consumoDiario')||0),
+          // consumoDiario e stockMin são automáticos — ignoramos o form
           stock: Number(fd.get('stock')||0),
-          stockMin: Number(fd.get('stockMin')||0),
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -741,7 +829,8 @@
           }
           parts = await DB.listParts();
           buildAlmacenOptions();
-          buildAlmacenDatalist();   // atualiza sugestões
+          buildAlmacenDatalist();
+          buildProveedorDatalist();
           await paint();
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
@@ -761,9 +850,10 @@
           form.querySelector('input[name="almacen"]').value = p.almacen || '';
           form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
           form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          // mostra valores automáticos existentes
+          form.querySelector('input[name="consumoDiario"]').value = (p.consumoDiario||0).toFixed(2);
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
           form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
         }
@@ -773,7 +863,8 @@
             await DB.deletePart(id);
             parts = await DB.listParts();
             buildAlmacenOptions();
-            buildAlmacenDatalist();  // atualiza sugestões após deletar
+            buildAlmacenDatalist();
+            buildProveedorDatalist();
             await paint();
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
@@ -793,15 +884,17 @@
               const part = {
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
-                leadTimeDias: Number(obj.leadTimeDias||0), consumoDiario: Number(obj.consumoDiario||0),
-                stock: Number(obj.stock||0), stockMin: Number(obj.stockMin||0),
-                costo: Number(obj.costo_Bs||obj.costo||0), precio: Number(obj.precio_Bs||obj.precio||0)
+                leadTimeDias: Number(obj.leadTimeDias||0),
+                stock: Number(obj.stock||0),
+                costo: Number(obj.costo_Bs||obj.costo||0),
+                precio: Number(obj.precio_Bs||obj.precio||0)
               };
               await DB.upsertPart(part);
             }
             parts = await DB.listParts();
             buildAlmacenOptions();
-            buildAlmacenDatalist();  // atualiza após importação
+            buildAlmacenDatalist();
+            buildProveedorDatalist();
             await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
@@ -903,6 +996,10 @@
       const almFilter = document.getElementById('sugAlmacenFilter');
       let parts = await DB.listParts();
 
+      // garante métricas atualizadas (consumo/stock min) antes de calcular sugestões
+      await Promise.all(parts.map(p => DB.recomputeMetricsForPart(p.id).catch(()=>{})));
+      parts = await DB.listParts();
+
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
         almFilter.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
@@ -917,7 +1014,7 @@
           const lt = Number(p.leadTimeDias||0);
           const min = Number(p.stockMin||0);
           const stk = Number(p.stock||0);
-          const rop = cd*lt + min;
+          const rop = Math.ceil(cd*lt + min);
           const sug = Math.max(0, rop - stk);
           return {...p, rop, sugerido:sug};
         }).filter(x=>x.sugerido>0);
@@ -935,7 +1032,7 @@
             <td>${escapeHtml(p.almacen||'')}</td>
             <td class="num">${p.stock}</td>
             <td class="num">${p.stockMin}</td>
-            <td class="num">${p.consumoDiario||0}</td>
+            <td class="num">${fmtNum(p.consumoDiario||0)}</td>
             <td class="num">${p.leadTimeDias||0}</td>
             <td class="num">${p.rop}</td>
             <td class="num">${p.sugerido}</td>`;
