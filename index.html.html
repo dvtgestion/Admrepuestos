@@ -15,17 +15,13 @@
     body{
       margin:0;
       font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
-      color:var(--text);
-      background:var(--bg);
-      -webkit-text-size-adjust:100%;
-      text-size-adjust:100%;
+      color:var(--text); background:var(--bg);
+      -webkit-text-size-adjust:100%; text-size-adjust:100%;
     }
-
     .app{display:grid; grid-template-columns:260px 1fr; min-height:100vh;}
     .app.no-sidebar{ grid-template-columns:1fr; min-height:100dvh; }
     .sidebar{border-right:1px solid var(--border); background:#fafafa; padding:16px; display:flex; flex-direction:column; gap:16px;}
     .hidden{display:none !important}
-
     .brand{display:flex; align-items:center; gap:12px; padding:8px 6px}
     .brand .logo{font-size:28px}
     .nav{display:flex; flex-direction:column; gap:6px}
@@ -33,89 +29,48 @@
     .nav-btn:hover{border-color:#d1d5db}
     .sidebar-foot{ margin-top:auto; display:flex; flex-direction:column; gap:8px; }
     .user-label{font-size:12px; color:var(--muted)}
-
     .view{padding:24px; max-width:1200px; width:100%}
-
-    .center{
-      display:flex; align-items:center; justify-content:center;
-      min-height:100dvh;
-      padding:clamp(16px, 5vw, 48px);
-      padding-top:calc(env(safe-area-inset-top,0px) + clamp(16px, 5vw, 48px));
-      padding-bottom:calc(env(safe-area-inset-bottom,0px) + clamp(16px, 5vw, 48px));
-    }
+    .center{display:flex; align-items:center; justify-content:center; min-height:100dvh; padding:clamp(16px, 5vw, 48px);}
     .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px;}
     .card-max{width:min(100%, 420px)}
     .title{margin:0 0 8px}
     .muted{color:var(--muted)}
     .xs{font-size:12px}
-
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
     .field input, .field select, .input{
-      border:1px solid var(--border);
-      border-radius:10px;
-      padding:10px 12px;
-      background:#fff;
-      width:100%;
-      height:44px;
-      font-size:16px;
+      border:1px solid var(--border); border-radius:10px; padding:10px 12px; background:#fff;
+      width:100%; height:44px; font-size:16px;
     }
-    .field input[readonly]{background:#f8fafc}
     .field input:focus, .field select:focus, .input:focus{outline:2px solid rgba(31,111,235,.25)}
-
-    .btn{
-      border:1px solid var(--border);
-      background:#fff;
-      border-radius:10px;
-      padding:10px 14px;
-      cursor:pointer;
-      height:44px;
-      font-size:16px;
-    }
+    .btn{ border:1px solid var(--border); background:#fff; border-radius:10px; padding:10px 14px; cursor:pointer; height:44px; font-size:16px; }
     .btn-primary{background:var(--primary); color:#fff; border-color:transparent}
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
-
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
-
     .table-wrap{width:100%; overflow:auto}
     .table{width:100%; border-collapse:separate; border-spacing:0}
     .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
     .table th{font-weight:600; text-align:left; white-space:nowrap}
     .table td.num,.table th.num{text-align:right}
-
     .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border);}
     .badge.low{background:#fff5f5; color:#b91c1c; border-color:#fecaca}
-
     .row-actions{display:flex; gap:8px; align-items:center}
     .grid{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
     .grid .field{min-width:0}
-
     .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
-
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
-    @media (max-width:900px){
-      .app{grid-template-columns:1fr}
-      .sidebar{position:sticky; top:0; z-index:10}
-      .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
-    }
-    @media (max-width:600px){
-      .view{padding:16px}
-      .grid{grid-template-columns:1fr}
-      .kpis{grid-template-columns:1fr;}
-      .toolbar .right{gap:6px}
-    }
-
+    @media (max-width:900px){ .app{grid-template-columns:1fr} .sidebar{position:sticky; top:0; z-index:10} .grid{grid-template-columns:repeat(2, minmax(0,1fr))} }
+    @media (max-width:600px){ .view{padding:16px} .grid{grid-template-columns:1fr} .kpis{grid-template-columns:1fr;} .toolbar .right{gap:6px} }
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
   </style>
 </head>
 <body>
   <div id="app" class="app no-sidebar">
-    <!-- Sidebar (aparece solo tras login) -->
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
       <div class="brand">
         <div class="logo" aria-hidden="true">🔧</div>
@@ -148,7 +103,7 @@
             <input type="email" name="email" placeholder="admin@empresa.com" required autocomplete="username" />
           </label>
           <label class="field"><span>Contraseña</span>
-            <input type="password" name="password" placeholder="********" required autocomplete="current-password" />
+            <input type="password" name="password" placeholder="••••••" required autocomplete="current-password" />
           </label>
           <button class="btn btn-primary" type="submit">Entrar</button>
           <p class="muted xs" style="text-align:center">Cree usuarios en Supabase → Auth → Users</p>
@@ -170,7 +125,6 @@
           <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
         </div>
       </header>
-
       <details id="partFormWrap" class="card">
         <summary id="partFormSummary">Nueva pieza</summary>
         <form id="partForm" class="grid">
@@ -182,70 +136,44 @@
             </div>
             <video id="cam" playsinline></video>
           </label>
-
-          <label class="field"><span>Nombre</span>
-            <input name="nombre" required placeholder="Filtro de aceite" />
-          </label>
-
-          <label class="field"><span>Categoría</span>
-            <input name="categoria" placeholder="Motor, Suspensión, Frenos…" />
-          </label>
-
-          <label class="field"><span>Ubicación</span>
-            <input name="ubicacion" placeholder="Estante A3" />
-          </label>
+          <label class="field"><span>Nombre</span><input name="nombre" required placeholder="Filtro de aceite" /></label>
+          <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
+          <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
           <!-- Almacén con datalist -->
           <label class="field"><span>Almacén</span>
-            <input name="almacen" list="almacenesList" placeholder="Central, Sucursal 1…" />
+            <input name="almacen" placeholder="Central, Sucursal 1…" list="almacenesList" />
             <datalist id="almacenesList"></datalist>
           </label>
 
           <!-- Proveedor con datalist -->
           <label class="field"><span>Proveedor</span>
-            <input name="proveedor" list="proveedoresList" placeholder="Proveedor principal" />
+            <input name="proveedor" placeholder="Proveedor principal" list="proveedoresList" />
             <datalist id="proveedoresList"></datalist>
           </label>
 
-          <label class="field"><span>Lead time (días)</span>
-            <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
-          </label>
+          <label class="field"><span>Lead time (días)</span><input name="leadTimeDias" type="number" min="0" step="1" value="0" /></label>
 
-          <!-- CD y Mín automáticos (solo lectura) -->
+          <!-- Campos automáticos (sólo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
-            <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly />
+            <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly title="Calculado por salidas de los últimos 60 días"/>
           </label>
-
-          <label class="field"><span>Stock</span>
-            <input name="stock" type="number" min="0" step="1" value="0" required />
-          </label>
-
           <label class="field"><span>Stock mínimo (auto)</span>
-            <input name="stockMin" type="number" min="0" step="1" value="0" readonly />
+            <input name="stockMin" type="number" min="0" step="1" value="0" readonly title="CD × 2 días de seguridad"/>
           </label>
 
-          <label class="field"><span>Costo unitario (Bs)</span>
-            <input name="costo" type="text" inputmode="decimal" placeholder="0,00" />
-          </label>
-
-          <label class="field"><span>Precio venta (Bs)</span>
-            <input name="precio" type="text" inputmode="decimal" placeholder="0,00" />
-          </label>
-
-          <div class="row-actions">
-            <button class="btn btn-primary" type="submit">Guardar</button>
-            <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
-          </div>
+          <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
+          <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
+          <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
+          <div class="row-actions"><button class="btn btn-primary" type="submit">Guardar</button><button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button></div>
         </form>
       </details>
-
       <div class="card">
         <div class="table-wrap">
           <table class="table" id="partsTable">
             <thead><tr>
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
-              <th class="num">Stock</th><th class="num">CD</th><th class="num">Mín</th>
-              <th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th></th>
+              <th class="num">Stock</th><th class="num">Mín</th><th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
           </table>
@@ -268,7 +196,7 @@
         <h3>Registrar movimiento</h3>
         <form id="moveForm" class="grid">
           <label class="field"><span>Pieza</span><select name="piezaId" id="movePart" required></select></label>
-          <label class="field"><span>Tipo</span><select name="tipo" id="moveTipo" required><option value="entrada">Entrada</option><option value="salida">Salida</option></select></label>
+          <label class="field"><span>Tipo</span><select name="tipo" required><option value="entrada">Entrada</option><option value="salida">Salida</option></select></label>
           <label class="field"><span>Cantidad</span><input name="cantidad" type="number" min="1" step="1" required /></label>
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
           <div class="row-actions"><button type="submit" class="btn btn-primary">Aplicar</button></div>
@@ -291,7 +219,7 @@
   <template id="tpl-sugerencias">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Sugerencias de compra</h2><p class="muted">Basado en consumo, lead time y stock mínimo.</p></div>
+        <div class="left"><h2>Sugerencias de compra</h2><p class="muted">Basado en consumo (auto), lead time y stock mínimo (auto).</p></div>
         <div class="right"><select id="sugAlmacenFilter" class="input" title="Filtrar por almacén"></select></div>
       </header>
       <div class="card">
@@ -320,12 +248,31 @@
           <button id="resetBtn" class="btn btn-danger">Vaciar datos (empresa actual)</button>
         </div>
       </header>
-
       <div class="card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
         <strong>Empresa actual:</strong>
         <span id="orgName">—</span>
         <select id="orgSelect" class="input"></select>
         <button id="orgNewBtn" class="btn">Nueva empresa</button>
+      </div>
+    </section>
+  </template>
+
+  <template id="tpl-historial">
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left"><h2>Historial de precios</h2><p class="muted">Cambios de costo y precio por pieza.</p></div>
+        <div class="right"></div>
+      </header>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table" id="histTable">
+            <thead><tr>
+              <th>Fecha</th><th>Código</th><th>Nombre</th>
+              <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th><th>Usuario</th>
+            </tr></thead>
+            <tbody id="histTbody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </template>
@@ -341,39 +288,16 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    /* ===== Settings de cálculo automático ===== */
-    const SETTINGS = {
-      consumptionWindowDays: 60,
-      safetyDays: 2
-    };
-
-    /* ===== Helpers gerais ===== */
-    function fmtMoney(n){ n = toNum(n); return n.toLocaleString('es-BO', {style:'currency', currency:'BOB'}); }
+    /* ===== Helpers ===== */
+    const SAFETY_DAYS = 2; // dias de seguridad p/ stock mínimo automático
+    function toNum(n){ n = Number(n); return Number.isFinite(n) ? n : 0; }
+    function fmtMoney(n){ n = Number(n||0); return n.toLocaleString('es-BO', {style:'currency', currency:'BOB'}); }
     function fmtDate(d){ return new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'}); }
     function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
     function csvCell(v){ const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; }
     function parseCSVLine(s){ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; }
-    function toNum(v){
-      if (v === null || v === undefined) return 0;
-      if (typeof v === 'number' && isFinite(v)) return v;
-      const s = String(v).trim();
-      if (!s) return 0;
-      const raw = s.replace(/[^\d.,-]/g, '').replace(/\s/g, '');
-      const lastComma = raw.lastIndexOf(',');
-      const lastDot   = raw.lastIndexOf('.');
-      const decSep = lastComma > lastDot ? ',' : '.';
-      let normalized = raw;
-      if (decSep === ','){
-        normalized = raw.replace(/\./g,'').replace(',', '.');
-      } else {
-        normalized = raw.replace(/,/g,'');
-      }
-      const n = parseFloat(normalized);
-      return isFinite(n) ? n : 0;
-    }
-    function chunk(arr, n){ const out=[]; for(let i=0;i<arr.length;i+=n) out.push(arr.slice(i,i+n)); return out; }
 
-    /* ===== Autenticación (wrapper) ===== */
+    /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
       function set(user){
@@ -400,11 +324,10 @@
       return { init, isAuthed, currentUser, login, logout };
     })();
 
-    /* ===== Gestor de Empresa (Org) ===== */
+    /* ===== Empresa (Org) ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
-
       const get = () => ({ id: currentId, nombre: currentName });
       const set = (org) => {
         currentId = org?.id || null;
@@ -412,7 +335,6 @@
         if (currentId) localStorage.setItem('currentOrgId', currentId); else localStorage.removeItem('currentOrgId');
         if (currentName) localStorage.setItem('currentOrgName', currentName); else localStorage.removeItem('currentOrgName');
       };
-
       async function myOrgs() {
         const { data:{ user } } = await sb.auth.getUser();
         const uid = user?.id;
@@ -425,7 +347,6 @@
         if(e2) throw e2;
         return orgs;
       }
-
       async function ensureCurrent() {
         const orgs = await myOrgs();
         if (!orgs.length) {
@@ -443,13 +364,16 @@
         set(found);
         return found;
       }
-
       return { get, set, myOrgs, ensureCurrent };
     })();
 
-    /* ===== DB (Supabase) ===== */
+    /* ===== DB ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
+
+      // Listas para datalist (valores únicos)
+      async function listAlmacenes(){ const { data, error } = await sb.from('parts').select('almacen').eq('org_id', orgId()); if(error) throw error; return Array.from(new Set((data||[]).map(r=>(r.almacen||'').trim()).filter(Boolean))).sort(); }
+      async function listProveedores(){ const { data, error } = await sb.from('parts').select('proveedor').eq('org_id', orgId()); if(error) throw error; return Array.from(new Set((data||[]).map(r=>(r.proveedor||'').trim()).filter(Boolean))).sort(); }
 
       async function listParts(){
         const { data, error } = await sb.from('parts').select('*').eq('org_id', orgId()).order('nombre',{ascending:true});
@@ -457,12 +381,15 @@
         return (data||[]).map(r => ({
           id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria, ubicacion:r.ubicacion,
           almacen:r.almacen, proveedor:r.proveedor,
-          leadTimeDias: toNum(r.lead_time_dias||0),
-          consumoDiario: toNum(r.consumo_diario||0),
-          stock: Math.round(toNum(r.stock||0)),
-          stockMin: Math.round(toNum(r.stock_min||0)),
-          costo: toNum(r.costo||0), precio: toNum(r.precio||0)
+          leadTimeDias:toNum(r.lead_time_dias), consumoDiario:toNum(r.consumo_diario),
+          stock:toNum(r.stock), stockMin:toNum(r.stock_min),
+          costo:toNum(r.costo), precio:toNum(r.precio)
         }));
+      }
+
+      async function getPartById(id){
+        const { data, error } = await sb.from('parts').select('*').eq('id', id).eq('org_id', orgId()).maybeSingle();
+        if(error) throw error; return data;
       }
 
       async function upsertPart(part){
@@ -473,13 +400,27 @@
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: toNum(part.leadTimeDias||0),
           consumo_diario: toNum(part.consumoDiario||0),
-          stock_min: Math.round(toNum(part.stockMin||0)),
-          stock: Math.round(toNum(part.stock||0)),
+          stock: toNum(part.stock||0),
+          stock_min: toNum(part.stockMin||0),
           costo: toNum(part.costo||0), precio: toNum(part.precio||0)
         };
+
         if(part.id){
+          // carrega antigo para histórico de preço
+          const { data: old, error: eOld } = await sb.from('parts').select('codigo,nombre,costo,precio').eq('id', part.id).eq('org_id', orgId()).maybeSingle();
+          if(eOld) throw eOld;
           const { error } = await sb.from('parts').update(row).eq('id', part.id).eq('org_id', orgId());
           if(error) throw error;
+
+          if(old && (toNum(old.costo)!==toNum(row.costo) || toNum(old.precio)!==toNum(row.precio))){
+            const u = Auth.currentUser();
+            await addPriceHistory({
+              piezaId: part.id, codigo: old.codigo, nombre: old.nombre,
+              costoAntes: toNum(old.costo), costoDespues: toNum(row.costo),
+              precioAntes: toNum(old.precio), precioDespues: toNum(row.precio),
+              usuario: u ? u.email : ''
+            });
+          }
         }else{
           const { error } = await sb.from('parts').insert(row);
           if(error) throw error;
@@ -491,27 +432,59 @@
         if(error) throw error;
       }
 
-      async function getPartById(id){
-        const { data, error } = await sb.from('parts').select('*').eq('id', id).eq('org_id', orgId()).maybeSingle();
-        if(error) throw error;
-        return data;
-      }
-
-      async function listMoves(limit=1000){
+      async function listMoves(limit=500){
         const { data, error } = await sb.from('movements').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(limit);
         if(error) throw error; return data||[];
+      }
+
+      // Recalcula métricas (CD e stock_min) a partir de salidas últimas N días
+      async function recomputeMetricsForPart(piezaId, days=60){
+        const since = new Date(); since.setDate(since.getDate()-days);
+        const { data: mv, error } = await sb.from('movements')
+          .select('tipo,cantidad')
+          .eq('org_id', orgId())
+          .eq('pieza_id', piezaId)
+          .gte('fecha', since.toISOString());
+        if(error) throw error;
+        const salidas = (mv||[]).filter(m=>m.tipo==='salida').reduce((s,m)=> s + toNum(m.cantidad), 0);
+        const cd = salidas / days;
+        const stockMinAuto = Math.ceil(cd * SAFETY_DAYS);
+        await sb.from('parts').update({ consumo_diario: cd, stock_min: stockMinAuto }).eq('id', piezaId).eq('org_id', orgId());
+        return { consumoDiario: cd, stockMin: stockMinAuto };
+      }
+
+      // Métricas para todos (para sugerencias rápidas)
+      async function metricsForAll(days=60){
+        const since = new Date(); since.setDate(since.getDate()-days);
+        const { data: mv, error } = await sb.from('movements')
+          .select('pieza_id,tipo,cantidad')
+          .eq('org_id', orgId())
+          .gte('fecha', since.toISOString())
+          .limit(20000);
+        if(error) throw error;
+        const map = new Map();
+        for(const m of (mv||[])){
+          if(m.tipo!=='salida') continue;
+          const cur = map.get(m.pieza_id) || 0;
+          map.set(m.pieza_id, cur + toNum(m.cantidad));
+        }
+        const out = new Map();
+        for(const [id, salidas] of map.entries()){
+          const cd = salidas / days;
+          out.set(id, { cd, stockMin: Math.ceil(cd * SAFETY_DAYS) });
+        }
+        return out;
       }
 
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail}){
         const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
-        cantidad = Math.round(toNum(cantidad||0));
+        cantidad = toNum(cantidad||0);
         if(!(cantidad>0)) throw new Error('Cantidad inválida');
         if(tipo === 'salida' && toNum(p.stock) < cantidad) throw new Error('Stock insuficiente para la salida');
 
-        const newStock = (tipo === 'salida') ? Math.max(0, Math.round(toNum(p.stock)) - cantidad)
-                                             : Math.round(toNum(p.stock)) + cantidad;
+        const newStock = (tipo === 'salida') ? toNum(p.stock) - cantidad : toNum(p.stock) + cantidad;
         const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', piezaId).eq('org_id', orgId());
         if(upErr) throw upErr;
 
@@ -523,7 +496,7 @@
         });
         if(insErr) throw insErr;
 
-        // Recalcula métricas para esta peça
+        // Atualiza métricas automáticas após o movimento
         await recomputeMetricsForPart(piezaId);
       }
 
@@ -536,15 +509,15 @@
         if(e1) throw e1;
 
         if(p){
-          const newStock = last.tipo === 'entrada' ? Math.max(0, Math.round(toNum(p.stock)) - Math.round(toNum(last.cantidad)))
-                                                  : Math.round(toNum(p.stock)) + Math.round(toNum(last.cantidad));
+          const newStock = last.tipo === 'entrada' ? Math.max(0, toNum(p.stock) - toNum(last.cantidad))
+                                                  : toNum(p.stock) + toNum(last.cantidad);
           const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
         }
         const { error: delErr } = await sb.from('movements').delete().eq('id', last.id).eq('org_id', orgId());
         if(delErr) throw delErr;
 
-        if(p){ await recomputeMetricsForPart(p.id); }
+        if(p) await recomputeMetricsForPart(p.id);
       }
 
       async function listPriceHistory(limit=500){
@@ -552,8 +525,8 @@
         if(error) throw error;
         return (data||[]).map(h=>({
           fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
-          costoAntes: toNum(h.costo_antes), costoDespues: toNum(h.costo_despues),
-          precioAntes: toNum(h.precio_antes), precioDespues: toNum(h.precio_despues),
+          costoAntes:toNum(h.costo_antes), costoDespues:toNum(h.costo_despues),
+          precioAntes:toNum(h.precio_antes), precioDespues:toNum(h.precio_despues),
           usuario:h.usuario
         }));
       }
@@ -577,9 +550,7 @@
 
       async function restoreAll(jsonDump){
         if(Array.isArray(jsonDump.parts)){
-          for(const p of jsonDump.parts){
-            await upsertPart(p);
-          }
+          for(const p of jsonDump.parts){ await upsertPart(p); }
         }
       }
 
@@ -590,67 +561,22 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ------ Cálculos automáticos (CD / Mín) ------
-
-      async function recomputeMetricsForPart(piezaId){
-        const since = new Date(); since.setDate(since.getDate()-SETTINGS.consumptionWindowDays);
-        const { data: moves, error } = await sb.from('movements')
-          .select('cantidad,tipo').eq('org_id', orgId())
-          .eq('pieza_id', piezaId).gte('fecha', since.toISOString());
-        if(error) { console.warn('calc CD err', error); return; }
-        const salidas = (moves||[]).filter(m=>m.tipo==='salida').reduce((s,m)=> s + Math.round(toNum(m.cantidad||0)), 0);
-        const cd = salidas / Math.max(1, SETTINGS.consumptionWindowDays);
-        const stockMin = Math.ceil(cd * SETTINGS.safetyDays);
-        await sb.from('parts').update({ consumo_diario: cd, stock_min: stockMin }).eq('id', piezaId).eq('org_id', orgId());
-      }
-
-      async function computeAndSyncConsumptionForAll(parts){
-        const since = new Date(); since.setDate(since.getDate()-SETTINGS.consumptionWindowDays);
-        const { data: moves, error } = await sb.from('movements')
-          .select('pieza_id,tipo,cantidad').eq('org_id', orgId())
-          .gte('fecha', since.toISOString()).limit(10000);
-        if(error){ console.warn('calc all err', error); return parts; }
-
-        const salidasMap = new Map();
-        (moves||[]).forEach(m=>{
-          if(m.tipo!=='salida') return;
-          salidasMap.set(m.pieza_id, (salidasMap.get(m.pieza_id)||0) + Math.round(toNum(m.cantidad||0)));
-        });
-
-        const days = Math.max(1, SETTINGS.consumptionWindowDays);
-        const toUpdate = [];
-        parts.forEach(p=>{
-          const sal = salidasMap.get(p.id)||0;
-          const cd = sal / days;
-          const min = Math.ceil(cd * SETTINGS.safetyDays);
-          if (Math.abs(toNum(p.consumoDiario) - cd) > 0.0001 || Math.abs(toNum(p.stockMin) - min) > 0.5){
-            p.consumoDiario = cd; p.stockMin = min;
-            toUpdate.push({ id:p.id, consumo_diario: cd, stock_min: min });
-          }
-        });
-
-        for(const batch of chunk(toUpdate, 50)){
-          const promises = batch.map(u => sb.from('parts').update({
-            consumo_diario: u.consumo_diario, stock_min: u.stock_min
-          }).eq('id', u.id).eq('org_id', orgId()));
-          await Promise.all(promises);
-        }
-        return parts;
-      }
-
-      // ------ Reporte financiero (simple) ------
+      // ------ Reporte financiero (correcto) ------
       async function financialReport(days=30){
         const since = new Date(); since.setDate(since.getDate()-days);
         const [parts, movRes] = await Promise.all([
           listParts(),
-          sb.from('movements').select('pieza_id,tipo,cantidad').eq('org_id', orgId()).gte('fecha', since.toISOString()).limit(20000)
+          sb.from('movements')
+            .select('pieza_id,tipo,cantidad,fecha')
+            .eq('org_id', orgId())
+            .gte('fecha', since.toISOString())
+            .limit(20000)
         ]);
         const moves = movRes.data||[];
         const priceMap = new Map(parts.map(p => [p.id, {costo: toNum(p.costo)||0, precio: toNum(p.precio)||0, nombre:p.nombre, codigo:p.codigo}]));
 
         let ventas=0, cogs=0, compras=0;
         const byPart = new Map(); // id -> {nombre,codigo,qty,ventas}
-
         for(const m of moves){
           const pr = priceMap.get(m.pieza_id) || {costo:0,precio:0,nombre:'',codigo:''};
           const q = Math.round(toNum(m.cantidad||0));
@@ -664,23 +590,18 @@
             compras += pr.costo * q;
           }
         }
-        const bruto = ventas - cogs;
-        const netoAprox = ventas - compras;
-
-        const top = Array.from(byPart.values())
-          .sort((a,b)=> b.ventas - a.ventas)
-          .slice(0,5);
-
-        return { ventas, cogs, bruto, compras, netoAprox, top, desde: since.toISOString() };
+        const neto = ventas - cogs;
+        const top = Array.from(byPart.values()).sort((a,b)=> b.ventas - a.ventas).slice(0,5);
+        return { ventas, cogs, neto, compras, top, desde: since.toISOString() };
       }
 
       return {
+        listAlmacenes, listProveedores,
         listParts, upsertPart, deletePart, getPartById,
         listMoves, applyMovement, undoLastMovement,
         listPriceHistory, addPriceHistory,
         backupAll, restoreAll, wipeCurrentOrg,
-        computeAndSyncConsumptionForAll,
-        financialReport
+        recomputeMetricsForPart, metricsForAll, financialReport
       };
     })();
 
@@ -715,7 +636,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* ignora */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); app.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -733,9 +654,7 @@
         case 'sugerencias': await renderSugerencias(); break;
         case 'ajustes': await renderAjustes(); break;
         case 'historial': await renderHistorial(); break;
-        default:
-          location.hash = authed ? '#/dashboard' : '#/login';
-          return;
+        default: location.hash = authed ? '#/dashboard' : '#/login'; return;
       }
       if(authed) setNavActive(path);
     }
@@ -744,10 +663,8 @@
     async function renderLogin(){
       const tpl = document.getElementById('tpl-login').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
-
       const form = document.getElementById('loginForm');
       const clearBtn = document.getElementById('clearCacheBtn');
-
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
@@ -756,7 +673,6 @@
         if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
         location.hash = '#/dashboard'; await route();
       });
-
       clearBtn.addEventListener('click', async ()=>{
         localStorage.removeItem('currentOrgId');
         localStorage.removeItem('currentOrgName');
@@ -766,88 +682,60 @@
       });
     }
 
+    // Dashboard com bloco financeiro
     async function renderDashboard(){
-      let parts = await DB.listParts();
-      parts = await DB.computeAndSyncConsumptionForAll(parts);
+      const parts = await DB.listParts();
       const moves = await DB.listMoves();
-
       const valor = parts.reduce((s,p)=> s + toNum(p.costo)*toNum(p.stock), 0);
       const bajos = parts.filter(p => toNum(p.stock)<toNum(p.stockMin)).length;
       const hoy = new Date().toDateString();
       const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoy).length;
 
-      // Monta KPIs principais
+      // bloco financeiro (30 dias)
+      async function renderFinancialBlock(){
+        const wrap = document.createElement('div');
+        wrap.className = 'stack';
+        wrap.innerHTML = `
+          <div class="card"><h2 style="margin:0 0 8px">Reporte financiero (30 días)</h2>
+            <div id="finKpis" class="kpis" style="margin-top:12px"></div>
+          </div>
+          <div class="card">
+            <h3 style="margin:0 0 8px">Top 5 por ventas</h3>
+            <div class="table-wrap">
+              <table class="table"><thead><tr>
+                <th>Código</th><th>Nombre</th><th class="num">Cant.</th><th class="num">Ventas</th>
+              </tr></thead><tbody id="finTop"></tbody></table>
+            </div>
+          </div>`;
+        const rep = await DB.financialReport(30);
+        const finKpis = wrap.querySelector('#finKpis');
+        const margenPct = rep.ventas > 0 ? (rep.neto/rep.ventas*100) : 0;
+        finKpis.innerHTML = `
+          <div class="card"><h3>Ventas (bruto)</h3><strong>${fmtMoney(rep.ventas)}</strong></div>
+          <div class="card"><h3>Costo de ventas</h3><strong>${fmtMoney(rep.cogs)}</strong></div>
+          <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(rep.neto)}</strong><div class="muted xs">${margenPct.toFixed(1)}% sobre ventas</div></div>
+          <div class="card"><h3>Compras a inventario</h3><strong>${fmtMoney(rep.compras)}</strong><div class="muted xs">info</div></div>
+        `;
+        const tbody = wrap.querySelector('#finTop');
+        tbody.innerHTML = (rep.top||[]).map(t=>`
+          <tr><td>${escapeHtml(t.codigo||'')}</td><td>${escapeHtml(t.nombre||'')}</td><td class="num">${t.qty||0}</td><td class="num">${fmtMoney(t.ventas||0)}</td></tr>
+        `).join('');
+        return wrap;
+      }
+
       view.innerHTML = `
-        <section class="stack">
+        <section class="stack" id="dashRoot">
           <div class="kpis">
             <div class="card"><h3>Valor inventario</h3><strong>${fmtMoney(valor)}</strong></div>
             <div class="card"><h3>Ítems bajo mínimo</h3><strong>${bajos}</strong></div>
             <div class="card"><h3>Total SKUs</h3><strong>${parts.length}</strong></div>
             <div class="card"><h3>Movimientos hoy</h3><strong>${movHoy}</strong></div>
           </div>
-          <div class="card"><p class="muted">CD y Mín se calculan automáticamente según las <strong>salidas</strong> de los últimos ${SETTINGS.consumptionWindowDays} días, con <strong>${SETTINGS.safetyDays} días de seguridad</strong>.</p></div>
-          <div id="finCard" class="card"></div>
+          <div class="card"><p class="muted">Use el menú para navegar. Revise <strong>Sugerencias</strong> para reposición y <strong>Historial precios</strong> para auditoría.</p></div>
         </section>`;
-
-      // Renderiza el bloque financiero
-      await renderFinancialBlock();
-    }
-
-    async function renderFinancialBlock(){
-      const finCard = document.getElementById('finCard');
-      finCard.innerHTML = `
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
-          <h3 style="margin:0">Reporte financiero</h3>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <label class="muted xs">Período:</label>
-            <select id="finRange" class="input" style="height:36px">
-              <option value="7">Últimos 7 días</option>
-              <option value="30" selected>Últimos 30 días</option>
-              <option value="90">Últimos 90 días</option>
-              <option value="365">Últimos 365 días</option>
-            </select>
-          </div>
-        </div>
-        <div id="finKpis" class="kpis" style="margin-bottom:12px"></div>
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr><th>Top 5 piezas</th><th class="num">Cantidad</th><th class="num">Ventas</th></tr></thead>
-            <tbody id="finTopTbody"></tbody>
-          </table>
-        </div>
-        <p class="muted xs" style="margin-top:8px">Nota: estimado usando <em>costo</em> y <em>precio</em> actuales de cada pieza. Si desea precisión histórica, podemos registrar costo/precio unitario en cada movimiento.</p>
-      `;
-
-      const finRange = document.getElementById('finRange');
-      const finKpis = document.getElementById('finKpis');
-      const finTopTbody = document.getElementById('finTopTbody');
-
-      async function update(){
-        const days = Number(finRange.value||30);
-        const rep = await DB.financialReport(days);
-        finKpis.innerHTML = `
-          <div class="card"><h3>Ventas</h3><strong>${fmtMoney(rep.ventas)}</strong></div>
-          <div class="card"><h3>Costo de ventas</h3><strong>${fmtMoney(rep.cogs)}</strong></div>
-          <div class="card"><h3>Margen bruto</h3><strong>${fmtMoney(rep.bruto)}</strong></div>
-          <div class="card"><h3>Gastos (compras)</h3><strong>${fmtMoney(rep.compras)}</strong></div>
-          <div class="card"><h3>Ganancia líquida (aprox)</h3><strong>${fmtMoney(rep.netoAprox)}</strong></div>
-        `;
-        finTopTbody.innerHTML = '';
-        if(!rep.top.length){
-          finTopTbody.innerHTML = `<tr><td colspan="3" class="muted">Sin ventas en el período.</td></tr>`;
-        }else{
-          rep.top.forEach(t=>{
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${escapeHtml(t.codigo||'')} — ${escapeHtml(t.nombre||'')}</td>
-                            <td class="num">${t.qty}</td>
-                            <td class="num">${fmtMoney(t.ventas)}</td>`;
-            finTopTbody.appendChild(tr);
-          });
-        }
-      }
-
-      finRange.addEventListener('change', update);
-      await update();
+      // injeta bloco financeiro
+      const dashRoot = document.getElementById('dashRoot');
+      dashRoot.appendChild(await renderFinancialBlock());
     }
 
     async function renderInventario(){
@@ -863,19 +751,17 @@
       const cancelBtn = document.getElementById('cancelEdit');
       const importCSV = document.getElementById('importCSV');
       const filterAlm = document.getElementById('filterAlmacen');
-      const almacenesDL = document.getElementById('almacenesList');
-      const proveedoresDL = document.getElementById('proveedoresList');
+      const dlAlm = form.querySelector('#almacenesList');
+      const dlProv = form.querySelector('#proveedoresList');
 
       let parts = await DB.listParts();
-      parts = await DB.computeAndSyncConsumptionForAll(parts);
 
-      function rebuildDatalists(){
-        const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
-        const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
-        almacenesDL.innerHTML = almacenes.map(a => `<option value="${escapeHtml(a)}"></option>`).join('');
-        proveedoresDL.innerHTML = proveedores.map(a => `<option value="${escapeHtml(a)}"></option>`).join('');
+      async function fillDatalists(){
+        const [almacenes, proveedores] = await Promise.all([DB.listAlmacenes(), DB.listProveedores()]);
+        dlAlm.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}">`).join('');
+        dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
       }
-      rebuildDatalists();
+      await fillDatalists();
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -903,9 +789,8 @@
             <td>${escapeHtml(p.categoria||'')}</td>
             <td>${escapeHtml(p.almacen||'')}</td>
             <td>${escapeHtml(p.ubicacion||'')}</td>
-            <td class="num">${Math.round(toNum(p.stock))}</td>
-            <td class="num">${toNum(p.consumoDiario).toFixed(2)}</td>
-            <td class="num">${Math.round(toNum(p.stockMin))}</td>
+            <td class="num">${p.stock}</td>
+            <td class="num">${p.stockMin}</td>
             <td class="num">${fmtMoney(p.costo)}</td>
             <td class="num">${fmtMoney(p.precio)}</td>
             <td class="num">
@@ -919,18 +804,8 @@
 
       search.addEventListener('input', paint);
       filterAlm.addEventListener('change', paint);
-      addBtn.addEventListener('click', ()=>{
-        form.reset();
-        form.querySelector('input[name="id"]').value = '';
-        summary.textContent = 'Nueva pieza';
-        formWrap.open = true;
-      });
-      cancelBtn.addEventListener('click', ()=>{
-        form.reset();
-        form.querySelector('input[name="id"]').value = '';
-        summary.textContent = 'Nueva pieza';
-        formWrap.open = false;
-      });
+      addBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = true; });
+      cancelBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false; });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
       form.addEventListener('submit', async (e)=>{
@@ -945,32 +820,18 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: toNum(fd.get('leadTimeDias')||0),
-          consumoDiario: 0,
-          stock: Math.round(toNum(fd.get('stock')||0)),
-          stockMin: 0,
+          // estos dos vienen de los inputs readonly (ya calculados en edición) o 0 si nueva pieza
+          consumoDiario: toNum(fd.get('consumoDiario')||0),
+          stockMin: toNum(fd.get('stockMin')||0),
+          stock: toNum(fd.get('stock')||0),
           costo: toNum(fd.get('costo')||0),
           precio: toNum(fd.get('precio')||0),
         };
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
-        let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id); }
         try{
           await DB.upsertPart(part);
-
-          if(prev && (toNum(prev.costo)!==toNum(part.costo) || toNum(prev.precio)!==toNum(part.precio))){
-            const u = Auth.currentUser();
-            await DB.addPriceHistory({
-              piezaId: part.id,
-              codigo: prev.codigo, nombre: prev.nombre,
-              costoAntes: toNum(prev.costo)||0, costoDespues: toNum(part.costo)||0,
-              precioAntes: toNum(prev.precio)||0, precioDespues: toNum(part.precio)||0,
-              usuario: u ? u.email : ''
-            });
-          }
-
-          parts = await DB.listParts();
-          parts = await DB.computeAndSyncConsumptionForAll(parts);
-          rebuildDatalists(); buildAlmacenOptions(); await paint();
+          parts = await DB.listParts(); await fillDatalists(); buildAlmacenOptions(); await paint();
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
@@ -979,35 +840,28 @@
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
         if(act === 'edit'){
-          const raw = await DB.getPartById(id);
-          if(!raw) return;
-          const p = {
-            id: raw.id, codigo: raw.codigo, nombre: raw.nombre, categoria: raw.categoria||'',
-            ubicacion: raw.ubicacion||'', almacen: raw.almacen||'', proveedor: raw.proveedor||'',
-            leadTimeDias: toNum(raw.lead_time_dias||0),
-            consumoDiario: toNum(raw.consumo_diario||0),
-            stock: Math.round(toNum(raw.stock||0)),
-            stockMin: Math.round(toNum(raw.stock_min||0)),
-            costo: toNum(raw.costo||0), precio: toNum(raw.precio||0)
-          };
+          const p = parts.find(x => x.id === id) || (await DB.getPartById(id) && (await DB.listParts()).find(x=>x.id===id)); // fallback
+          if(!p){ alert('Pieza no encontrada'); return; }
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
           form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria;
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion;
-          form.querySelector('input[name="almacen"]').value = p.almacen;
-          form.querySelector('input[name="proveedor"]').value = p.proveedor;
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario.toFixed(2);
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          // recalcula métricas automáticas no momento da edição, para exibir
+          const rec = await DB.recomputeMetricsForPart(p.id);
+          form.querySelector('input[name="consumoDiario"]').value = (rec.consumoDiario||0).toFixed(3);
+          form.querySelector('input[name="stockMin"]').value = rec.stockMin || 0;
           form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
         }
         if(act === 'del'){
           if(!confirm('¿Eliminar esta pieza? Esta acción no se puede deshacer.')) return;
-          try{ await DB.deletePart(id); parts = await DB.listParts(); parts = await DB.computeAndSyncConsumptionForAll(parts); rebuildDatalists(); await paint(); }
+          try{ await DB.deletePart(id); parts = await DB.listParts(); await paint(); await fillDatalists(); }
           catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
@@ -1026,17 +880,13 @@
               const part = {
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
-                leadTimeDias: toNum(obj.leadTimeDias||0),
-                stock: Math.round(toNum(obj.stock||0)),
-                consumoDiario: 0, stockMin: 0,
-                costo: toNum(obj.costo_Bs ?? obj.costo ?? 0),
-                precio: toNum(obj.precio_Bs ?? obj.precio ?? 0)
+                leadTimeDias: toNum(obj.leadTimeDias||0), consumoDiario: toNum(obj.consumoDiario||0),
+                stock: toNum(obj.stock||0), stockMin: toNum(obj.stockMin||0),
+                costo: toNum(obj.costo_Bs||obj.costo||0), precio: toNum(obj.precio_Bs||obj.precio||0)
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts();
-            parts = await DB.computeAndSyncConsumptionForAll(parts);
-            rebuildDatalists(); buildAlmacenOptions(); await paint();
+            parts = await DB.listParts(); await fillDatalists(); buildAlmacenOptions(); await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           importCSV.value = '';
@@ -1057,7 +907,6 @@
       const almFilter = document.getElementById('moveAlmacenFilter');
 
       let parts = await DB.listParts();
-      parts = await DB.computeAndSyncConsumptionForAll(parts);
       let moves = await DB.listMoves();
 
       function buildAlmacenOptions(){
@@ -1085,7 +934,7 @@
             <td>${escapeHtml(m.nombre)}</td>
             <td>${escapeHtml(m.almacen||'')}</td>
             <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
-            <td class="num">${Math.round(toNum(m.cantidad))}</td>
+            <td class="num">${m.cantidad}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>`;
           tbody.appendChild(tr);
@@ -1098,14 +947,13 @@
       moveForm.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(moveForm);
-        const piezaId = fd.get('piezaId'); const tipo = fd.get('tipo'); const cantidad = Math.round(toNum(fd.get('cantidad'))); const referencia = String(fd.get('referencia')||'').trim();
+        const piezaId = fd.get('piezaId'); const tipo = fd.get('tipo'); const cantidad = toNum(fd.get('cantidad')); const referencia = String(fd.get('referencia')||'').trim();
         if(!piezaId || !tipo || !(cantidad>0)){ alert('Complete los campos del movimiento'); return; }
         try{
           const u = Auth.currentUser();
           await DB.applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail: u?u.email:''});
-          parts = await DB.listParts(); parts = await DB.computeAndSyncConsumptionForAll(parts);
-          moves = await DB.listMoves(); paintMoves();
-          alert('Movimiento registrado'); moveForm.reset(); fillPartOptions();
+          parts = await DB.listParts(); moves = await DB.listMoves(); paintMoves(); fillPartOptions();
+          alert('Movimiento registrado');
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
@@ -1126,7 +974,7 @@
       });
 
       undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(); parts = await DB.listParts(); parts = await DB.computeAndSyncConsumptionForAll(parts); paintMoves(); alert('Movimiento deshecho'); }
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(); paintMoves(); alert('Movimiento deshecho'); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
     }
@@ -1138,7 +986,7 @@
       const tbody = document.getElementById('sugTbody');
       const almFilter = document.getElementById('sugAlmacenFilter');
       let parts = await DB.listParts();
-      parts = await DB.computeAndSyncConsumptionForAll(parts);
+      const metricsMap = await DB.metricsForAll(60); // calcula CD/stockMin en vivo
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1150,13 +998,14 @@
         const alm = almFilter.value || '(Todos)';
         const base = parts.filter(p => alm === '(Todos)' || String(p.almacen||'').toLowerCase()===alm.toLowerCase());
         return base.map(p=>{
-          const cd = toNum(p.consumoDiario||0);
+          const met = metricsMap.get(p.id) || { cd: toNum(p.consumoDiario||0), stockMin: toNum(p.stockMin||0) };
+          const cd = toNum(met.cd||0);
           const lt = toNum(p.leadTimeDias||0);
-          const min = Math.round(toNum(p.stockMin||0));
-          const stk = Math.round(toNum(p.stock||0));
+          const min = toNum(met.stockMin||0);
+          const stk = toNum(p.stock||0);
           const rop = Math.ceil(cd*lt + min);
           const sug = Math.max(0, rop - stk);
-          return {...p, rop, sugerido:sug};
+          return {...p, consumoDiario:cd, stockMin:min, rop, sugerido:sug};
         }).filter(x=>x.sugerido>0);
       }
 
@@ -1170,12 +1019,12 @@
             <td>${escapeHtml(p.nombre)}</td>
             <td>${escapeHtml(p.proveedor||'')}</td>
             <td>${escapeHtml(p.almacen||'')}</td>
-            <td class="num">${Math.round(toNum(p.stock))}</td>
-            <td class="num">${Math.round(toNum(p.stockMin))}</td>
-            <td class="num">${toNum(p.consumoDiario).toFixed(2)}</td>
-            <td class="num">${Math.round(toNum(p.leadTimeDias))}</td>
-            <td class="num">${Math.round(toNum(p.rop))}</td>
-            <td class="num">${Math.round(toNum(p.sugerido))}</td>`;
+            <td class="num">${p.stock}</td>
+            <td class="num">${p.stockMin}</td>
+            <td class="num">${(p.consumoDiario||0).toFixed(3)}</td>
+            <td class="num">${p.leadTimeDias||0}</td>
+            <td class="num">${p.rop}</td>
+            <td class="num">${p.sugerido}</td>`;
           tbody.appendChild(tr);
         });
       }
@@ -1254,6 +1103,12 @@
       const tbody = document.getElementById('histTbody');
       const hist = await DB.listPriceHistory();
       tbody.innerHTML = '';
+      if(!hist.length){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="6" class="muted">Sin cambios registrados aún. Edite una pieza y cambie Costo/Precio para ver aquí.</td>`;
+        tbody.appendChild(tr);
+        return;
+      }
       hist.forEach(h=>{
         const tr = document.createElement('tr');
         tr.innerHTML = `
