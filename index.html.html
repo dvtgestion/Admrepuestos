@@ -195,7 +195,7 @@
             <input name="ubicacion" placeholder="Estante A3" />
           </label>
 
-          <!-- Almacén con datalist (sugiere existentes, pero permite texto libre) -->
+          <!-- Almacén con datalist -->
           <label class="field"><span>Almacén</span>
             <input name="almacen" list="almacenesList" placeholder="Central, Sucursal 1…" />
             <datalist id="almacenesList"></datalist>
@@ -211,7 +211,7 @@
             <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
           </label>
 
-          <!-- CD y Mín calculados automáticamente (solo lectura) -->
+          <!-- CD y Mín automáticos (solo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
             <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly />
           </label>
@@ -268,7 +268,7 @@
         <h3>Registrar movimiento</h3>
         <form id="moveForm" class="grid">
           <label class="field"><span>Pieza</span><select name="piezaId" id="movePart" required></select></label>
-          <label class="field"><span>Tipo</span><select name="tipo" required><option value="entrada">Entrada</option><option value="salida">Salida</option></select></label>
+          <label class="field"><span>Tipo</span><select name="tipo" id="moveTipo" required><option value="entrada">Entrada</option><option value="salida">Salida</option></select></label>
           <label class="field"><span>Cantidad</span><input name="cantidad" type="number" min="1" step="1" required /></label>
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
           <div class="row-actions"><button type="submit" class="btn btn-primary">Aplicar</button></div>
@@ -343,8 +343,8 @@
 
     /* ===== Settings de cálculo automático ===== */
     const SETTINGS = {
-      consumptionWindowDays: 60, // janela para média de consumo (apenas saídas)
-      safetyDays: 2             // “días de seguridad” -> buffer acima da média
+      consumptionWindowDays: 60,
+      safetyDays: 2
     };
 
     /* ===== Helpers gerais ===== */
@@ -386,7 +386,7 @@
         set(user || null);
         sb.auth.onAuthStateChange((_event, session)=>{
           set(session?.user || null);
-          route(); // re-render
+          route();
         });
       }
       const isAuthed = () => !!cache;
@@ -472,7 +472,6 @@
           categoria: part.categoria || null, ubicacion: part.ubicacion || null,
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: toNum(part.leadTimeDias||0),
-          // CD/Min automáticos -> começamos em 0
           consumo_diario: toNum(part.consumoDiario||0),
           stock_min: Math.round(toNum(part.stockMin||0)),
           stock: Math.round(toNum(part.stock||0)),
@@ -591,7 +590,7 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ------ Cálculos automáticos ------
+      // ------ Cálculos automáticos (CD / Mín) ------
 
       async function recomputeMetricsForPart(piezaId){
         const since = new Date(); since.setDate(since.getDate()-SETTINGS.consumptionWindowDays);
@@ -606,7 +605,6 @@
       }
 
       async function computeAndSyncConsumptionForAll(parts){
-        // Carrega movimentos da janela para todos, agrega por peça e atualiza onde mudar
         const since = new Date(); since.setDate(since.getDate()-SETTINGS.consumptionWindowDays);
         const { data: moves, error } = await sb.from('movements')
           .select('pieza_id,tipo,cantidad').eq('org_id', orgId())
@@ -619,7 +617,6 @@
           salidasMap.set(m.pieza_id, (salidasMap.get(m.pieza_id)||0) + Math.round(toNum(m.cantidad||0)));
         });
 
-        // Atualiza local + envia updates apenas onde necessário
         const days = Math.max(1, SETTINGS.consumptionWindowDays);
         const toUpdate = [];
         parts.forEach(p=>{
@@ -632,7 +629,6 @@
           }
         });
 
-        // Atualiza em lotes (reduz roundtrips)
         for(const batch of chunk(toUpdate, 50)){
           const promises = batch.map(u => sb.from('parts').update({
             consumo_diario: u.consumo_diario, stock_min: u.stock_min
@@ -642,7 +638,50 @@
         return parts;
       }
 
-      return { listParts, upsertPart, deletePart, getPartById, listMoves, applyMovement, undoLastMovement, listPriceHistory, addPriceHistory, backupAll, restoreAll, wipeCurrentOrg, computeAndSyncConsumptionForAll };
+      // ------ Reporte financiero (simple) ------
+      async function financialReport(days=30){
+        const since = new Date(); since.setDate(since.getDate()-days);
+        const [parts, movRes] = await Promise.all([
+          listParts(),
+          sb.from('movements').select('pieza_id,tipo,cantidad').eq('org_id', orgId()).gte('fecha', since.toISOString()).limit(20000)
+        ]);
+        const moves = movRes.data||[];
+        const priceMap = new Map(parts.map(p => [p.id, {costo: toNum(p.costo)||0, precio: toNum(p.precio)||0, nombre:p.nombre, codigo:p.codigo}]));
+
+        let ventas=0, cogs=0, compras=0;
+        const byPart = new Map(); // id -> {nombre,codigo,qty,ventas}
+
+        for(const m of moves){
+          const pr = priceMap.get(m.pieza_id) || {costo:0,precio:0,nombre:'',codigo:''};
+          const q = Math.round(toNum(m.cantidad||0));
+          if(m.tipo === 'salida'){
+            ventas += pr.precio * q;
+            cogs   += pr.costo  * q;
+            const cur = byPart.get(m.pieza_id) || {nombre:pr.nombre, codigo:pr.codigo, qty:0, ventas:0};
+            cur.qty += q; cur.ventas += pr.precio*q;
+            byPart.set(m.pieza_id, cur);
+          }else if(m.tipo === 'entrada'){
+            compras += pr.costo * q;
+          }
+        }
+        const bruto = ventas - cogs;
+        const netoAprox = ventas - compras;
+
+        const top = Array.from(byPart.values())
+          .sort((a,b)=> b.ventas - a.ventas)
+          .slice(0,5);
+
+        return { ventas, cogs, bruto, compras, netoAprox, top, desde: since.toISOString() };
+      }
+
+      return {
+        listParts, upsertPart, deletePart, getPartById,
+        listMoves, applyMovement, undoLastMovement,
+        listPriceHistory, addPriceHistory,
+        backupAll, restoreAll, wipeCurrentOrg,
+        computeAndSyncConsumptionForAll,
+        financialReport
+      };
     })();
 
     /* ===== App / Roteamento ===== */
@@ -729,7 +768,6 @@
 
     async function renderDashboard(){
       let parts = await DB.listParts();
-      // Sincroniza CD y Mín con base en movimientos (uma vez ao entrar)
       parts = await DB.computeAndSyncConsumptionForAll(parts);
       const moves = await DB.listMoves();
 
@@ -738,6 +776,7 @@
       const hoy = new Date().toDateString();
       const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoy).length;
 
+      // Monta KPIs principais
       view.innerHTML = `
         <section class="stack">
           <div class="kpis">
@@ -747,7 +786,68 @@
             <div class="card"><h3>Movimientos hoy</h3><strong>${movHoy}</strong></div>
           </div>
           <div class="card"><p class="muted">CD y Mín se calculan automáticamente según las <strong>salidas</strong> de los últimos ${SETTINGS.consumptionWindowDays} días, con <strong>${SETTINGS.safetyDays} días de seguridad</strong>.</p></div>
+          <div id="finCard" class="card"></div>
         </section>`;
+
+      // Renderiza el bloque financiero
+      await renderFinancialBlock();
+    }
+
+    async function renderFinancialBlock(){
+      const finCard = document.getElementById('finCard');
+      finCard.innerHTML = `
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px;">
+          <h3 style="margin:0">Reporte financiero</h3>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <label class="muted xs">Período:</label>
+            <select id="finRange" class="input" style="height:36px">
+              <option value="7">Últimos 7 días</option>
+              <option value="30" selected>Últimos 30 días</option>
+              <option value="90">Últimos 90 días</option>
+              <option value="365">Últimos 365 días</option>
+            </select>
+          </div>
+        </div>
+        <div id="finKpis" class="kpis" style="margin-bottom:12px"></div>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th>Top 5 piezas</th><th class="num">Cantidad</th><th class="num">Ventas</th></tr></thead>
+            <tbody id="finTopTbody"></tbody>
+          </table>
+        </div>
+        <p class="muted xs" style="margin-top:8px">Nota: estimado usando <em>costo</em> y <em>precio</em> actuales de cada pieza. Si desea precisión histórica, podemos registrar costo/precio unitario en cada movimiento.</p>
+      `;
+
+      const finRange = document.getElementById('finRange');
+      const finKpis = document.getElementById('finKpis');
+      const finTopTbody = document.getElementById('finTopTbody');
+
+      async function update(){
+        const days = Number(finRange.value||30);
+        const rep = await DB.financialReport(days);
+        finKpis.innerHTML = `
+          <div class="card"><h3>Ventas</h3><strong>${fmtMoney(rep.ventas)}</strong></div>
+          <div class="card"><h3>Costo de ventas</h3><strong>${fmtMoney(rep.cogs)}</strong></div>
+          <div class="card"><h3>Margen bruto</h3><strong>${fmtMoney(rep.bruto)}</strong></div>
+          <div class="card"><h3>Gastos (compras)</h3><strong>${fmtMoney(rep.compras)}</strong></div>
+          <div class="card"><h3>Ganancia líquida (aprox)</h3><strong>${fmtMoney(rep.netoAprox)}</strong></div>
+        `;
+        finTopTbody.innerHTML = '';
+        if(!rep.top.length){
+          finTopTbody.innerHTML = `<tr><td colspan="3" class="muted">Sin ventas en el período.</td></tr>`;
+        }else{
+          rep.top.forEach(t=>{
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${escapeHtml(t.codigo||'')} — ${escapeHtml(t.nombre||'')}</td>
+                            <td class="num">${t.qty}</td>
+                            <td class="num">${fmtMoney(t.ventas)}</td>`;
+            finTopTbody.appendChild(tr);
+          });
+        }
+      }
+
+      finRange.addEventListener('change', update);
+      await update();
     }
 
     async function renderInventario(){
@@ -845,7 +945,6 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: toNum(fd.get('leadTimeDias')||0),
-          // CD / Min automáticos: salvar como 0; serão atualizados pelo motor
           consumoDiario: 0,
           stock: Math.round(toNum(fd.get('stock')||0)),
           stockMin: 0,
@@ -880,7 +979,6 @@
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
         if(act === 'edit'){
-          // Carrega registro direto do banco (garante dados atuais)
           const raw = await DB.getPartById(id);
           if(!raw) return;
           const p = {
@@ -930,7 +1028,6 @@
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
                 leadTimeDias: toNum(obj.leadTimeDias||0),
                 stock: Math.round(toNum(obj.stock||0)),
-                // CD/Mín automáticos
                 consumoDiario: 0, stockMin: 0,
                 costo: toNum(obj.costo_Bs ?? obj.costo ?? 0),
                 precio: toNum(obj.precio_Bs ?? obj.precio ?? 0)
