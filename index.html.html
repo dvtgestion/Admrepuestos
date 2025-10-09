@@ -261,16 +261,45 @@
         <form id="moveForm" class="grid">
           <label class="field"><span>Pieza</span><select name="piezaId" id="movePart" required></select></label>
           <label class="field"><span>Tipo</span>
-            <select name="tipo" required>
+            <select name="tipo" id="moveTipo" required>
               <option value="entrada">Entrada</option>
               <option value="salida">Salida</option>
             </select>
           </label>
-          <label class="field"><span>Cantidad</span><input name="cantidad" type="number" min="1" step="1" required /></label>
+
+          <!-- Campos visíveis somente em ENTRADA -->
+          <label class="field" data-show-entrada><span>Costo unitario (Bs)</span>
+            <input name="movCosto" type="number" min="0" step="0.01" />
+          </label>
+          <label class="field" data-show-entrada><span>Precio unitario (Bs)</span>
+            <input name="movPrecio" type="number" min="0" step="0.01" />
+          </label>
+
+          <!-- Quantidade geral (entrada usa; saída será a soma das linhas do lote) -->
+          <label class="field"><span>Cantidad</span>
+            <input name="cantidad" id="moveCantidad" type="number" min="1" step="1" required />
+            <span class="xs muted" id="lotSumHint" style="display:none"></span>
+          </label>
+
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
-          <div class="row-actions"><button type="submit" class="btn btn-primary">Aplicar</button></div>
+          <div class="row-actions"><button type="submit" class="btn btn-primary" id="applyMoveBtn">Aplicar</button></div>
         </form>
       </div>
+
+      <!-- Picker de lotes para SAÍDA -->
+      <div class="card" id="lotPicker" style="display:none">
+        <h3>Lotes disponibles para salida</h3>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr>
+              <th>Lote</th><th class="num">Disponible</th><th class="num">Costo</th><th class="num">Precio</th><th class="num">Retirar</th>
+            </tr></thead>
+            <tbody id="lotRows"></tbody>
+          </table>
+        </div>
+        <p class="muted xs" id="lotSumInfo">Seleccione cantidades por lote. La suma definirá la cantidad total de la salida.</p>
+      </div>
+
       <div class="card">
         <div class="table-wrap">
           <table class="table" id="movesTable">
@@ -350,7 +379,7 @@
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
-    <script>
+  <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -368,6 +397,9 @@
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
+    const uuidv4 = ()=> (crypto?.randomUUID?.() || ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    ));
 
     /* ===== Auth ===== */
     const Auth = (() => {
@@ -509,10 +541,10 @@
         if(error) throw error;
       }
 
-      // ---- Movements ----
+      // ---- Movements (com custo/preço por lote) ----
       async function listMoves(limit=500){
         const { data, error } = await sb.from('movements')
-          .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario')
+          .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
           .eq('org_id', orgId())
           .order('fecha',{ascending:false})
           .limit(limit);
@@ -520,64 +552,122 @@
         return data||[];
       }
 
-      async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail}){
+      // Calcula disponibilidade por lote da peça (inclui lote null como "SIN-LOTE" se houver saldo)
+      async function getLots(piezaId){
+        const { data: movs, error } = await sb.from('movements')
+          .select('tipo, cantidad, lote_id, costo_unit, precio_unit')
+          .eq('org_id', orgId())
+          .eq('pieza_id', piezaId)
+          .order('fecha', { ascending: true });
+        if(error) throw error;
+
+        // Mapa por lote_id
+        const byLot = new Map();
+        for(const m of (movs||[])){
+          const key = m.lote_id || 'SIN-LOTE';
+          if(!byLot.has(key)) byLot.set(key, { entradas:0, salidas:0, costo:null, precio:null });
+          const acc = byLot.get(key);
+          if(m.tipo === 'entrada'){
+            acc.entradas += Number(m.cantidad||0);
+            if(acc.costo===null && m.costo_unit!=null) acc.costo = Number(m.costo_unit);
+            if(acc.precio===null && m.precio_unit!=null) acc.precio = Number(m.precio_unit);
+          }else{
+            acc.salidas += Number(m.cantidad||0);
+          }
+        }
+        const part = await getPartById(piezaId);
+        const lots = [];
+        for(const [key, v] of byLot.entries()){
+          const disp = (v.entradas - v.salidas);
+          if(disp > 0){
+            lots.push({
+              lote_id: key==='SIN-LOTE' ? null : key,
+              label: key==='SIN-LOTE' ? 'SIN-LOTE' : key,
+              disponible: disp,
+              costo_unit: (v.costo!=null ? v.costo : Number(part?.costo||0)),
+              precio_unit: (v.precio!=null ? v.precio : Number(part?.precio||0)),
+              legacy: key==='SIN-LOTE'
+            });
+          }
+        }
+        return lots.sort((a,b)=> (a.legacy===b.legacy ? 0 : a.legacy?1:-1)); // mostra lotes reais primeiro
+      }
+
+      async function applyEntry({piezaId, cantidad, referencia, usuarioEmail, costoUnit, precioUnit}){
         const { data: p, error: e1 } = await sb.from('parts')
-          .select('id, stock, codigo, nombre, almacen')
+          .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
 
         cantidad = Number(cantidad||0);
         if(!(cantidad>0)) throw new Error('Cantidad inválida');
-        if(tipo === 'salida' && Number(p.stock) < cantidad) throw new Error('Stock insuficiente para la salida');
 
-        const newStock = (tipo === 'salida') ? Number(p.stock) - cantidad : Number(p.stock) + cantidad;
+        // custo/preço do lote: usa input ou fallback da peça
+        const cu = (costoUnit!=null && costoUnit!=='') ? Number(costoUnit) : Number(p.costo||0);
+        const pu = (precioUnit!=null && precioUnit!=='') ? Number(precioUnit) : Number(p.precio||0);
+
+        const newStock = Number(p.stock) + cantidad;
         const { error: upErr } = await sb.from('parts')
           .update({ stock: newStock })
           .eq('id', piezaId).eq('org_id', orgId());
         if(upErr) throw upErr;
 
+        const loteId = uuidv4();
         const { error: insErr } = await sb.from('movements').insert({
           org_id: orgId(),
-          pieza_id: piezaId, codigo: p.codigo, nombre: p.nombre,
-          almacen: p.almacen || '', tipo, cantidad,
-          referencia: referencia || '', usuario: usuarioEmail || ''
+          pieza_id: piezaId,
+          codigo: p.codigo, nombre: p.nombre, almacen: p.almacen || '',
+          tipo: 'entrada', cantidad, referencia: referencia || '', usuario: usuarioEmail || '',
+          costo_unit: cu, precio_unit: pu, lote_id: loteId
         });
+        if(insErr) throw insErr;
+
+        // Recalcular métricas (consumo/stock_min não mudam com entrada, mas ok manter consistência)
+        await recomputeMetrics(piezaId);
+      }
+
+      async function applyExit({piezaId, referencia, usuarioEmail, selections}){
+        // selections: [{ lote_id|null, cantidad, costo_unit, precio_unit }]
+        if(!Array.isArray(selections) || !selections.length) throw new Error('Selección de lotes vacía');
+        const total = selections.reduce((s,x)=> s + Number(x.cantidad||0), 0);
+        if(!(total>0)) throw new Error('Cantidad total inválida');
+
+        const { data: p, error: e1 } = await sb.from('parts')
+          .select('id, stock, codigo, nombre, almacen')
+          .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
+        if(e1) throw e1;
+        if(!p) throw new Error('Pieza no encontrada');
+        if(Number(p.stock) < total) throw new Error('Stock insuficiente para la salida (total)');
+
+        const newStock = Number(p.stock) - total;
+        const { error: upErr } = await sb.from('parts')
+          .update({ stock: newStock })
+          .eq('id', piezaId).eq('org_id', orgId());
+        if(upErr) throw upErr;
+
+        // grava N movimentos (um por lote)
+        const rows = selections
+          .filter(s => Number(s.cantidad)>0)
+          .map(s => ({
+            org_id: orgId(),
+            pieza_id: piezaId, codigo: p.codigo, nombre: p.nombre,
+            almacen: p.almacen || '', tipo: 'salida', cantidad: Number(s.cantidad),
+            referencia: referencia || '', usuario: usuarioEmail || '',
+            costo_unit: Number(s.costo_unit||0), precio_unit: Number(s.precio_unit||0),
+            lote_id: s.lote_id || null
+          }));
+        const { error: insErr } = await sb.from('movements').insert(rows);
         if(insErr) throw insErr;
 
         await recomputeMetrics(piezaId);
       }
 
-      async function undoLastMovement(){
-        const { data: last, error } = await sb.from('movements')
-          .select('id, pieza_id, tipo, cantidad')
-          .eq('org_id', orgId())
-          .order('fecha',{ascending:false})
-          .limit(1).maybeSingle();
-        if(error) throw error;
-        if(!last) throw new Error('Sin movimientos');
-
-        const { data: p, error: e1 } = await sb.from('parts')
-          .select('id, stock')
-          .eq('id', last.pieza_id).eq('org_id', orgId()).maybeSingle();
-        if(e1) throw e1;
-
-        if(p){
-          const newStock = last.tipo === 'entrada'
-            ? Math.max(0, Number(p.stock) - Number(last.cantidad))
-            : Number(p.stock) + Number(last.cantidad);
-          const { error: upErr } = await sb.from('parts')
-            .update({ stock: newStock })
-            .eq('id', p.id).eq('org_id', orgId());
-          if(upErr) throw upErr;
-        }
-
-        const { error: delErr } = await sb.from('movements')
-          .delete().eq('id', last.id).eq('org_id', orgId());
-        if(delErr) throw delErr;
-
-        if(last.pieza_id){
-          await recomputeMetrics(last.pieza_id);
+      async function applyMovement(payload){
+        if(payload.tipo === 'entrada'){
+          return applyEntry(payload);
+        }else{
+          return applyExit(payload);
         }
       }
 
@@ -654,12 +744,15 @@
 
       return {
         listParts, getPartById, upsertPart, deletePart,
-        listMoves, applyMovement, undoLastMovement,
+        listMoves, applyMovement, applyEntry, applyExit, getLots,
         listPriceHistory, addPriceHistory,
         backupAll, restoreAll, wipeCurrentOrg,
         recomputeMetrics
       };
     })();
+
+/* ==== CONTINUA NA PARTE 2/2 ABAIXO ==== */
+/* ==== PARTE 2/2 ==== */
 
     /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
@@ -692,7 +785,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore aqui */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* mostra login se falhar selecionar org */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -752,15 +845,16 @@
       const hoyKey = new Date().toDateString();
       const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoyKey).length;
 
+      // Mapa para fallback de preço/custo quando o movimento antigo não tem valor por lote
       const partsMap = new Map(parts.map(p=>[p.id, p]));
       let bruto = 0, cogs = 0;
       for(const m of moves){
         if(m.tipo === 'salida'){
           const p = partsMap.get(m.pieza_id);
-          if(p){
-            bruto += Number(p.precio||0) * Number(m.cantidad||0);
-            cogs  += Number(p.costo ||0) * Number(m.cantidad||0);
-          }
+          const price = (m.precio_unit!=null) ? Number(m.precio_unit) : Number(p?.precio||0);
+          const cost  = (m.costo_unit !=null) ? Number(m.costo_unit)  : Number(p?.costo ||0);
+          bruto += price * Number(m.cantidad||0);
+          cogs  += cost  * Number(m.cantidad||0);
         }
       }
       const liquida = bruto - cogs;
@@ -777,9 +871,9 @@
             <div class="card"><h3>Ventas brutas (salidas)</h3><strong>${fmtMoney(bruto)}</strong></div>
             <div class="card"><h3>COGS (costo de ventas)</h3><strong>${fmtMoney(cogs)}</strong></div>
             <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(liquida)}</strong></div>
-            <div class="card"><h3>Días de seguridad</h3><strong>${SAFETY_DAYS}</strong></div>
+            <div class="card"><h3>Parámetros</h3><strong>CD: ${CD_WINDOW_DAYS}d · Seguridad: ${SAFETY_DAYS}d</strong></div>
           </div>
-          <div class="card"><p class="muted">Bruto/COGS/Líquida calculados sobre todas las <strong>salidas</strong> usando precios y costos actuales de cada pieza.</p></div>
+          <div class="card"><p class="muted">Bruto/COGS/Líquida calculados sobre todas las <strong>salidas</strong> usando el costo/precio del <strong>lote</strong> (si existe); si no, se usa el de la pieza.</p></div>
         </section>`;
     }
 
@@ -897,11 +991,12 @@
         };
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
-        let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id); }
+        let prev = null; if(part.id){ prev = (await DB.getPartById(part.id)); }
         try{
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
+          // historial de precio (se o usuário alterou custo ou preço na edição da peça)
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -920,11 +1015,11 @@
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
-      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
+      tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
         if(act === 'edit'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
+          const p = (await DB.getPartById(id)); if(!p) return;
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
@@ -950,7 +1045,7 @@
       });
 
       importCSV.addEventListener('change', ()=>{
-        const f = document.getElementById('importCSV').files[0]; if(!f) return;
+        const f = importCSV.files[0]; if(!f) return;
         const reader = new FileReader();
         reader.onload = async ()=>{
           try{
@@ -973,7 +1068,7 @@
             parts = await DB.listParts(); buildFilters(); buildSuggestors(); paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
-          document.getElementById('importCSV').value = '';
+          importCSV.value = '';
         };
         reader.readAsText(f);
       });
@@ -984,11 +1079,21 @@
       view.innerHTML = ''; view.appendChild(tpl);
 
       const moveForm = document.getElementById('moveForm');
-      const partSel = document.getElementById('movePart');
-      const tbody = document.getElementById('movesTbody');
-      const exportBtn = document.getElementById('exportCSV');
-      const undoBtn = document.getElementById('undoLast');
-      const almFilter = document.getElementById('moveAlmacenFilter');
+      const partSel  = document.getElementById('movePart');
+      const tipoSel  = document.getElementById('moveTipo');
+      const qtyInput = document.getElementById('moveCantidad');
+      const tbody    = document.getElementById('movesTbody');
+      const exportBtn= document.getElementById('exportCSV');
+      const undoBtn  = document.getElementById('undoLast');
+      const almFilter= document.getElementById('moveAlmacenFilter');
+      const lotPicker= document.getElementById('lotPicker');
+      const lotRows  = document.getElementById('lotRows');
+      const lotSumHint = document.getElementById('lotSumHint');
+
+      // campos de ENTRADA
+      const entradaFields = Array.from(moveForm.querySelectorAll('[data-show-entrada]'));
+      const costoIn = moveForm.querySelector('[name="movCosto"]');
+      const precioIn= moveForm.querySelector('[name="movPrecio"]');
 
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
@@ -1026,18 +1131,116 @@
       }
       paintMoves();
 
-      almFilter.addEventListener('change', fillPartOptions);
+      // Mostrar/ocultar controles conforme o tipo
+      function syncTipoUI(){
+        const isEntrada = (tipoSel.value === 'entrada');
+        entradaFields.forEach(el => el.style.display = isEntrada ? '' : 'none');
+        // quantidade: em saída será controlada pela soma dos lotes
+        qtyInput.readOnly = !isEntrada;
+        lotPicker.style.display = isEntrada ? 'none' : '';
+        lotSumHint.style.display = isEntrada ? 'none' : '';
+      }
+      syncTipoUI();
+
+      almFilter.addEventListener('change', ()=>{ fillPartOptions(); refreshLotUI(); });
+      partSel.addEventListener('change', refreshLotUI);
+      tipoSel.addEventListener('change', ()=>{ syncTipoUI(); refreshLotUI(); });
+
+      async function refreshLotUI(){
+        if(tipoSel.value !== 'salida'){ // entrada não usa lotes
+          lotRows.innerHTML = '';
+          return;
+        }
+        const piezaId = partSel.value;
+        if(!piezaId){ lotRows.innerHTML=''; return; }
+        const lots = await DB.getLots(piezaId);
+
+        lotRows.innerHTML = '';
+        if(!lots.length){
+          lotRows.innerHTML = `<tr><td colspan="5" class="muted">No hay lotes con stock disponible para esta pieza.</td></tr>`;
+          qtyInput.value = 0;
+          return;
+        }
+        for(const lt of lots){
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtml(lt.label)}</td>
+            <td class="num">${lt.disponible}</td>
+            <td class="num">${fmtMoney(lt.costo_unit)}</td>
+            <td class="num">${fmtMoney(lt.precio_unit)}</td>
+            <td class="num">
+              <input type="number" min="0" max="${lt.disponible}" step="1"
+                     data-lote="${lt.lote_id || ''}" data-cost="${lt.costo_unit}" data-price="${lt.precio_unit}" class="input" style="width:120px" />
+            </td>`;
+          lotRows.appendChild(tr);
+        }
+        updateLotSum();
+        lotRows.addEventListener('input', updateLotSum);
+      }
+
+      function updateLotSum(){
+        const inputs = Array.from(lotRows.querySelectorAll('input[type="number"]'));
+        let sum = 0;
+        inputs.forEach(i => { const v = Number(i.value||0); if(v>0) sum += v; });
+        qtyInput.value = sum || 0;
+        lotSumHint.textContent = `Suma de lotes: ${sum}`;
+        lotSumHint.style.display = '';
+      }
 
       moveForm.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(moveForm);
-        const piezaId = fd.get('piezaId'); const tipo = fd.get('tipo'); const cantidad = Number(fd.get('cantidad')); const referencia = String(fd.get('referencia')||'').trim();
-        if(!piezaId || !tipo || !(cantidad>0)){ alert('Complete los campos del movimiento'); return; }
+        const piezaId = fd.get('piezaId');
+        const tipo = fd.get('tipo');
+        const referencia = String(fd.get('referencia')||'').trim();
+
+        if(!piezaId || !tipo){ alert('Complete los campos del movimiento'); return; }
+
         try{
           const u = Auth.currentUser();
-          await DB.applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail: u?u.email:''});
-          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
-          alert('Movimiento registrado'); moveForm.reset(); fillPartOptions();
+
+          if(tipo === 'entrada'){
+            const cantidad = Number(fd.get('cantidad'));
+            if(!(cantidad>0)){ alert('Cantidad inválida'); return; }
+            const costoUnit  = fd.get('movCosto');
+            const precioUnit = fd.get('movPrecio');
+            await DB.applyEntry({
+              piezaId, cantidad, referencia, usuarioEmail: u?u.email:'',
+              costoUnit: costoUnit===''?null:Number(costoUnit),
+              precioUnit:precioUnit===''?null:Number(precioUnit)
+            });
+          }else{
+            // saída: coletar seleções por lote
+            const inputs = Array.from(lotRows.querySelectorAll('input[type="number"]'));
+            const selections = inputs
+              .map(i => ({
+                lote_id: i.dataset.lote || null,
+                cantidad: Number(i.value||0),
+                costo_unit: Number(i.dataset.cost||0),
+                precio_unit: Number(i.dataset.price||0)
+              }))
+              .filter(x => x.cantidad>0);
+
+            const total = selections.reduce((s,x)=> s+x.cantidad, 0);
+            if(total<=0){ alert('Seleccione cantidades en al menos un lote'); return; }
+
+            await DB.applyExit({
+              piezaId, referencia, usuarioEmail: u?u.email:'', selections
+            });
+          }
+
+          // Refresh
+          const [partsNew, movesNew] = await Promise.all([DB.listParts(), DB.listMoves(2000)]);
+          parts = partsNew; moves = movesNew; paintMoves();
+          alert('Movimiento registrado');
+
+          // reset form
+          moveForm.reset();
+          syncTipoUI();
+          fillPartOptions();
+          lotRows.innerHTML = '';
+          qtyInput.value = 0;
+
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
