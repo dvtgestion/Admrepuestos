@@ -36,7 +36,6 @@
 
     .view{padding:24px; max-width:1200px; width:100%}
 
-    /* Login centralizado */
     .center{
       display:flex; align-items:center; justify-content:center;
       min-height:100dvh;
@@ -61,9 +60,7 @@
       height:44px;
       font-size:16px;
     }
-    .field input[readonly]{
-      background:#f8fafc;
-    }
+    .field input[readonly]{ background:#f8fafc; }
     .field input:focus, .field select:focus, .input:focus{outline:2px solid rgba(31,111,235,.25)}
 
     .btn{
@@ -100,6 +97,11 @@
     .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
+
+    /* chips de sugestão */
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
+    .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
+    .chip:hover { border-color:#d1d5db }
 
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
@@ -188,16 +190,19 @@
           <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
-          <!-- Almacén con datalist -->
+          <!-- Almacén con datalist + chips -->
           <label class="field"><span>Almacén</span>
             <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
             <datalist id="dlAlmacenes"></datalist>
+            <div class="chips" id="almacenChips"></div>
+            <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
           </label>
 
-          <!-- Proveedor con datalist -->
+          <!-- Proveedor con datalist + chips -->
           <label class="field"><span>Proveedor</span>
             <input name="proveedor" placeholder="Proveedor principal" list="dlProveedores" />
             <datalist id="dlProveedores"></datalist>
+            <div class="chips" id="proveedorChips"></div>
           </label>
 
           <label class="field"><span>Lead time (días)</span>
@@ -206,10 +211,12 @@
 
           <!-- AUTOMÁTICOS (solo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
-            <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly title="Calculado automáticamente por movimientos (30 días)" />
+            <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly
+              title="Calculado automáticamente por movimientos (últimos 30 días)" />
           </label>
           <label class="field"><span>Stock mínimo (auto)</span>
-            <input name="stockMin" type="number" min="0" step="1" value="0" readonly title="ceil(CD × días de seguridad)" />
+            <input name="stockMin" type="number" min="0" step="1" value="0" readonly
+              title="ceil(CD × días de seguridad)" />
           </label>
 
           <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
@@ -220,7 +227,10 @@
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
           </div>
         </form>
-        <p class="muted xs">Cálculo: CD = salidas/30d. Stock mínimo = ceil(CD × <span id="safetyDaysHint"></span>). ROP = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).</p>
+        <p class="muted xs">
+          Cálculo: CD = salidas/30d. Stock mínimo = ceil(CD × <span id="safetyDaysHint"></span>).
+          ROP = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).
+        </p>
       </details>
       <div class="card">
         <div class="table-wrap">
@@ -339,8 +349,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -348,13 +358,13 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Parámetros del cálculo automático
+    // Parâmetros do cálculo automático
     const CD_WINDOW_DAYS = 30;
-    const SAFETY_DAYS = 2; // puedes cambiar si quieres > expuesto en UI
+    const SAFETY_DAYS   = 2; // días de seguridad
 
     /* ===== Utils ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
-    const fmtDate = (d)=> new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    const fmtDate  = (d)=> new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
@@ -433,79 +443,64 @@
       return { get, set, myOrgs, ensureCurrent };
     })();
 
-    /* ===== DB ===== */
+    /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      function toPartRow(part){
+      // ---- Parts ----
+      async function listParts(){
+        const { data, error } = await sb
+          .from('parts')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
+          .eq('org_id', orgId())
+          .order('nombre',{ascending:true});
+        if(error) throw error;
+        return (data||[]).map(r => ({
+          id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria||'',
+          ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
+          leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
+          stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
+          costo:Number(r.costo||0), precio:Number(r.precio||0)
+        }));
+      }
+
+      async function getPartById(id){
+        const { data, error } = await sb.from('parts')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
+          .eq('id', id).eq('org_id', orgId()).maybeSingle();
+        if(error) throw error;
+        if(!data) return null;
         return {
+          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria||'',
+          ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
+          leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
+          stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
+          costo:Number(data.costo||0), precio:Number(data.precio||0)
+        };
+      }
+
+      // Insert garante 0 em consumo/stock_min; Update não mexe neles (são calculados por movimentos)
+      async function upsertPart(part){
+        const base = {
           org_id: orgId(),
           codigo: part.codigo, nombre: part.nombre,
           categoria: part.categoria || null, ubicacion: part.ubicacion || null,
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: Number(part.leadTimeDias||0),
-          // Siempre enviamos consumo/stock_min para respetar NOT NULL
-          consumo_diario: Number(part.consumoDiario ?? 0),
-          stock_min: Number(part.stockMin ?? 0),
           stock: Number(part.stock||0),
           costo: Number(part.costo||0), precio: Number(part.precio||0)
         };
-      }
-
-      async function listParts(){
-        const { data, error } = await sb.from('parts').select('*').eq('org_id', orgId()).order('nombre',{ascending:true});
-        if(error) throw error;
-        return (data||[]).map(r => ({
-          id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria, ubicacion:r.ubicacion,
-          almacen:r.almacen, proveedor:r.proveedor,
-          leadTimeDias:Number(r.lead_time_dias||0),
-          consumoDiario:Number(r.consumo_diario||0),
-          stockMin:Number(r.stock_min||0),
-          stock:Number(r.stock||0),
-          costo:Number(r.costo||0), precio:Number(r.precio||0)
-        }));
-      }
-
-      async function getPartRaw(id){
-        const { data, error } = await sb.from('parts').select('*').eq('id', id).eq('org_id', orgId()).maybeSingle();
-        if(error) throw error;
-        return data;
-      }
-
-      // Registra historial si costo/precio cambiaron
-      async function logPriceHistoryIfChanged(prev, next){
-        const changedCosto = Number(prev.costo) !== Number(next.costo);
-        const changedPrecio = Number(prev.precio) !== Number(next.precio);
-        if(!(changedCosto || changedPrecio)) return;
-        const { data:{ user } } = await sb.auth.getUser();
-        await sb.from('price_history').insert({
-          org_id: orgId(),
-          pieza_id: prev.id,
-          codigo: prev.codigo,
-          nombre: prev.nombre,
-          costo_antes: Number(prev.costo)||0, costo_despues: Number(next.costo)||0,
-          precio_antes: Number(prev.precio)||0, precio_despues: Number(next.precio)||0,
-          usuario: user?.email || ''
-        });
-      }
-
-      // Insere/atualiza peça e retorna a peça (com id)
-      async function upsertPart(part){
         if(part.id){
-          const prev = await getPartRaw(part.id);
-          const row = toPartRow(part);
-          const { data, error } = await sb.from('parts').update(row).eq('id', part.id).eq('org_id', orgId()).select().maybeSingle();
+          const { error } = await sb.from('parts')
+            .update(base)
+            .eq('id', part.id).eq('org_id', orgId());
           if(error) throw error;
-          await logPriceHistoryIfChanged(prev, data);
-          return data;
+          return part.id;
         }else{
-          // defaults automáticos (evita NOT NULL)
-          const cd = Number(part.consumoDiario ?? 0) || 0;
-          const stockMin = Number(part.stockMin ?? Math.ceil(cd * SAFETY_DAYS)) || 0;
-          const row = { ...toPartRow(part), consumo_diario: cd, stock_min: stockMin };
-          const { data, error } = await sb.from('parts').insert(row).select().maybeSingle();
+          const rowInsert = { ...base, consumo_diario: 0, stock_min: 0 };
+          const { data, error } = await sb.from('parts').insert(rowInsert).select('id').maybeSingle();
           if(error) throw error;
-          return data;
+          return data?.id;
         }
       }
 
@@ -514,21 +509,32 @@
         if(error) throw error;
       }
 
+      // ---- Movements ----
       async function listMoves(limit=500){
-        const { data, error } = await sb.from('movements').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(limit);
-        if(error) throw error; return data||[];
+        const { data, error } = await sb.from('movements')
+          .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(limit);
+        if(error) throw error;
+        return data||[];
       }
 
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail}){
-        const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
+        const { data: p, error: e1 } = await sb.from('parts')
+          .select('id, stock, codigo, nombre, almacen')
+          .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
+
         cantidad = Number(cantidad||0);
         if(!(cantidad>0)) throw new Error('Cantidad inválida');
         if(tipo === 'salida' && Number(p.stock) < cantidad) throw new Error('Stock insuficiente para la salida');
 
         const newStock = (tipo === 'salida') ? Number(p.stock) - cantidad : Number(p.stock) + cantidad;
-        const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', piezaId).eq('org_id', orgId());
+        const { error: upErr } = await sb.from('parts')
+          .update({ stock: newStock })
+          .eq('id', piezaId).eq('org_id', orgId());
         if(upErr) throw upErr;
 
         const { error: insErr } = await sb.from('movements').insert({
@@ -539,39 +545,75 @@
         });
         if(insErr) throw insErr;
 
-        // Recalcular CD y stock mínimo para esta pieza
-        await recalcPartStats(piezaId);
+        await recomputeMetrics(piezaId);
       }
 
       async function undoLastMovement(){
-        const { data: last, error } = await sb.from('movements').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(1).maybeSingle();
+        const { data: last, error } = await sb.from('movements')
+          .select('id, pieza_id, tipo, cantidad')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(1).maybeSingle();
         if(error) throw error;
         if(!last) throw new Error('Sin movimientos');
 
-        const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', last.pieza_id).eq('org_id', orgId()).maybeSingle();
+        const { data: p, error: e1 } = await sb.from('parts')
+          .select('id, stock')
+          .eq('id', last.pieza_id).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
 
         if(p){
-          const newStock = last.tipo === 'entrada' ? Math.max(0, Number(p.stock) - Number(last.cantidad))
-                                                  : Number(p.stock) + Number(last.cantidad);
-          const { error: upErr } = await sb.from('parts').update({ stock: newStock }).eq('id', p.id).eq('org_id', orgId());
+          const newStock = last.tipo === 'entrada'
+            ? Math.max(0, Number(p.stock) - Number(last.cantidad))
+            : Number(p.stock) + Number(last.cantidad);
+          const { error: upErr } = await sb.from('parts')
+            .update({ stock: newStock })
+            .eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
         }
-        const { error: delErr } = await sb.from('movements').delete().eq('id', last.id).eq('org_id', orgId());
+
+        const { error: delErr } = await sb.from('movements')
+          .delete().eq('id', last.id).eq('org_id', orgId());
         if(delErr) throw delErr;
 
-        // Recalcular stats da peça afetada
-        await recalcPartStats(last.pieza_id);
+        if(last.pieza_id){
+          await recomputeMetrics(last.pieza_id);
+        }
       }
 
+      // ---- Historial de precios ----
       async function listPriceHistory(limit=500){
-        const { data, error } = await sb.from('price_history').select('*').eq('org_id', orgId()).order('fecha',{ascending:false}).limit(limit);
+        const { data, error } = await sb.from('price_history')
+          .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(limit);
         if(error) throw error;
-        return data||[];
+        return (data||[]).map(h=>({
+          fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
+          costoAntes:h.costo_antes, costoDespues:h.costo_despues,
+          precioAntes:h.precio_antes, precioDespues:h.precio_despues,
+          usuario:h.usuario
+        }));
       }
 
+      async function addPriceHistory(entry){
+        const row = {
+          org_id: orgId(),
+          pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
+          costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
+          precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
+          usuario: entry.usuario || ''
+        };
+        const { error } = await sb.from('price_history').insert(row);
+        if(error) throw error;
+      }
+
+      // ---- Backup simples ----
       async function backupAll(){
-        const [parts, moves, hist] = await Promise.all([listParts(), listMoves(10000), listPriceHistory(10000)]);
+        const [parts, moves, hist] = await Promise.all([
+          listParts(), listMoves(10000), listPriceHistory(10000)
+        ]);
         return { parts, moves, priceHistory: hist };
       }
 
@@ -590,47 +632,37 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ====== Cálculos automáticos ======
-      async function computeCDForPart(piezaId){
-        const since = new Date(Date.now() - CD_WINDOW_DAYS*24*60*60*1000).toISOString();
-        const { data: outs, error } = await sb
-          .from('movements')
+      // ---- Recalcular métricas automáticas (consumo_diario e stock_min) ----
+      async function recomputeMetrics(piezaId){
+        const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
+        const { data: outs, error } = await sb.from('movements')
           .select('cantidad')
           .eq('org_id', orgId())
           .eq('pieza_id', piezaId)
           .eq('tipo','salida')
           .gte('fecha', since);
         if(error) throw error;
-        const total = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
-        return total / CD_WINDOW_DAYS; // puede ser decimal
+        const totalOut = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
+        const cd = totalOut / CD_WINDOW_DAYS;                  // média diária 30d
+        const stockMin = Math.ceil(cd * SAFETY_DAYS);          // buffer de segurança
+
+        const { error: upErr } = await sb.from('parts')
+          .update({ consumo_diario: cd, stock_min: stockMin })
+          .eq('id', piezaId).eq('org_id', orgId());
+        if(upErr) throw upErr;
       }
 
-      async function recalcPartStats(piezaId){
-        const { data: p, error: e1 } = await sb.from('parts').select('*').eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
-        if(e1) throw e1; if(!p) return;
-        const cd = await computeCDForPart(piezaId); // decimal
-        const stockMin = Math.ceil(cd * SAFETY_DAYS);
-        // guarda en parts
-        const { error: e2 } = await sb.from('parts').update({
-          consumo_diario: Number(cd.toFixed(2)),
-          stock_min: stockMin
-        }).eq('id', piezaId).eq('org_id', orgId());
-        if(e2) throw e2;
-        return { cd: Number(cd.toFixed(2)), stockMin };
-      }
-
-      async function recalcAllParts(){
-        const parts = await listParts();
-        for(const p of parts){
-          await recalcPartStats(p.id);
-        }
-      }
-
-      return { listParts, upsertPart, deletePart, listMoves, applyMovement, undoLastMovement, listPriceHistory, backupAll, restoreAll, wipeCurrentOrg, recalcPartStats, recalcAllParts, getPartRaw };
+      return {
+        listParts, getPartById, upsertPart, deletePart,
+        listMoves, applyMovement, undoLastMovement,
+        listPriceHistory, addPriceHistory,
+        backupAll, restoreAll, wipeCurrentOrg,
+        recomputeMetrics
+      };
     })();
 
-    /* ===== App / Router ===== */
-    const app = document.getElementById('app');
+    /* ===== App / Navegação ===== */
+    const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
     const userLabel = document.getElementById('userLabel');
@@ -638,9 +670,6 @@
     const PUBLIC_ROUTES = ['login'];
 
     async function init(){
-      document.getElementById('safetyDaysHint')?.append(SAFETY_DAYS);
-      document.getElementById('safetyDaysHint2')?.append(SAFETY_DAYS);
-
       await Auth.init();
       if(logoutBtn){
         logoutBtn.addEventListener('click', async () => { await Auth.logout(); location.hash = '#/login'; await route(); });
@@ -663,12 +692,12 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* mostra login se falhar */ }
-        sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); app.classList.remove('no-sidebar');
+        try { await Org.ensureCurrent(); } catch(e){ /* ignore aqui */ }
+        sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
       }else{
-        sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); app.classList.add('no-sidebar');
+        sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); appEl.classList.add('no-sidebar');
       }
 
       if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
@@ -715,24 +744,26 @@
     }
 
     async function renderDashboard(){
-      // KPIs de inventario
-      const [parts, moves] = await Promise.all([DB.listParts(), DB.listMoves()]);
+      const parts = await DB.listParts();
+      const moves = await DB.listMoves(5000);
+
       const valor = parts.reduce((s,p)=> s + Number(p.costo||0)*Number(p.stock||0), 0);
       const bajos = parts.filter(p => Number(p.stock)<Number(p.stockMin)).length;
+      const hoyKey = new Date().toDateString();
+      const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoyKey).length;
 
-      // Reporte financiero (con base en saídas y costo/precio actuales)
-      const partsMap = new Map(parts.map(p => [p.id, p]));
+      const partsMap = new Map(parts.map(p=>[p.id, p]));
       let bruto = 0, cogs = 0;
       for(const m of moves){
         if(m.tipo === 'salida'){
           const p = partsMap.get(m.pieza_id);
           if(p){
             bruto += Number(p.precio||0) * Number(m.cantidad||0);
-            cogs  += Number(p.costo||0)  * Number(m.cantidad||0);
+            cogs  += Number(p.costo ||0) * Number(m.cantidad||0);
           }
         }
       }
-      const neto = bruto - cogs;
+      const liquida = bruto - cogs;
 
       view.innerHTML = `
         <section class="stack">
@@ -740,25 +771,21 @@
             <div class="card"><h3>Valor inventario</h3><strong>${fmtMoney(valor)}</strong></div>
             <div class="card"><h3>Ítems bajo mínimo</h3><strong>${bajos}</strong></div>
             <div class="card"><h3>Total SKUs</h3><strong>${parts.length}</strong></div>
-            <div class="card"><h3>Movimientos</h3><strong>${moves.length}</strong></div>
+            <div class="card"><h3>Movimientos hoy</h3><strong>${movHoy}</strong></div>
           </div>
-
           <div class="kpis">
-            <div class="card"><h3>Bruto (ventas)</h3><strong>${fmtMoney(bruto)}</strong></div>
-            <div class="card"><h3>Gastos (COGS)</h3><strong>${fmtMoney(cogs)}</strong></div>
-            <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(neto)}</strong></div>
+            <div class="card"><h3>Ventas brutas (salidas)</h3><strong>${fmtMoney(bruto)}</strong></div>
+            <div class="card"><h3>COGS (costo de ventas)</h3><strong>${fmtMoney(cogs)}</strong></div>
+            <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(liquida)}</strong></div>
             <div class="card"><h3>Días de seguridad</h3><strong>${SAFETY_DAYS}</strong></div>
           </div>
-
-          <div class="card"><p class="muted">Cálculos financieros com base no preço/custo atuais por peça. Se quiser valorizar por preço/custo no momento da venda, adicionamos colunas em <code>movements</code> para guardar os unitários.</p></div>
+          <div class="card"><p class="muted">Bruto/COGS/Líquida calculados sobre todas las <strong>salidas</strong> usando precios y costos actuales de cada pieza.</p></div>
         </section>`;
     }
 
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
-      document.getElementById('safetyDaysHint').textContent = SAFETY_DAYS;
-      document.getElementById('safetyDaysHint2').textContent = SAFETY_DAYS;
 
       const tbody = document.getElementById('partsTbody');
       const search = document.getElementById('searchParts');
@@ -769,21 +796,35 @@
       const cancelBtn = document.getElementById('cancelEdit');
       const importCSV = document.getElementById('importCSV');
       const filterAlm = document.getElementById('filterAlmacen');
+      const safety1 = document.getElementById('safetyDaysHint');
+      const safety2 = document.getElementById('safetyDaysHint2');
+      if(safety1) safety1.textContent = SAFETY_DAYS;
+      if(safety2) safety2.textContent = SAFETY_DAYS;
 
       let parts = await DB.listParts();
 
-      function refreshDatalists(){
-        const dlA = document.getElementById('dlAlmacenes');
-        const dlP = document.getElementById('dlProveedores');
-        const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
-        const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
-        dlA.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
-        dlP.innerHTML = proveedores.map(a=>`<option value="${escapeHtml(a)}"></option>`).join('');
+      function buildFilters(){
+        const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
+        filterAlm.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
 
-      function buildAlmacenFilter(){
-        const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
-        filterAlm.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+      function buildSuggestors(){
+        const dlAlm = document.getElementById('dlAlmacenes');
+        const almChips = document.getElementById('almacenChips');
+        const dlProv = document.getElementById('dlProveedores');
+        const provChips = document.getElementById('proveedorChips');
+
+        const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
+        const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
+
+        dlAlm.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}">`).join('');
+        almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
+
+        dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
+        provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
+
+        almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
+        provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
       }
 
       function matchesFilters(p){
@@ -795,7 +836,7 @@
         return passQ && passA;
       }
 
-      async function paint(){
+      function paint(){
         tbody.innerHTML = '';
         parts.filter(matchesFilters).forEach(p=>{
           const low = Number(p.stock) < Number(p.stockMin);
@@ -818,20 +859,30 @@
         });
       }
 
-      refreshDatalists();
-      buildAlmacenFilter();
-      await paint();
+      buildFilters();
+      buildSuggestors();
+      paint();
 
       search.addEventListener('input', paint);
       filterAlm.addEventListener('change', paint);
-      addBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = true; });
-      cancelBtn.addEventListener('click', ()=>{ form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false; });
+      addBtn.addEventListener('click', ()=>{
+        form.reset();
+        form.querySelector('input[name="id"]').value = '';
+        summary.textContent = 'Nueva pieza';
+        formWrap.open = true;
+      });
+      cancelBtn.addEventListener('click', ()=>{
+        form.reset();
+        form.querySelector('input[name="id"]').value = '';
+        summary.textContent = 'Nueva pieza';
+        formWrap.open = false;
+      });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
-        const draft = {
+        const part = {
           id: fd.get('id') || undefined,
           codigo: String(fd.get('codigo')).trim(),
           nombre: String(fd.get('nombre')).trim(),
@@ -840,90 +891,89 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          // AUTOMÁTICOS serão atualizados após salvar
-          consumoDiario: Number(fd.get('consumoDiario')||0),
-          stockMin: Number(fd.get('stockMin')||0),
           stock: Number(fd.get('stock')||0),
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
-        if(!draft.codigo || !draft.nombre){ alert('Código y nombre son obligatorios'); return; }
+        if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
+        let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id); }
         try{
-          const saved = await DB.upsertPart(draft);
-          // Recalcula CD/stock mínimo e preenche no form
-          const stats = await DB.recalcPartStats(saved.id);
-          draft.id = saved.id;
-          // Atualiza a lista local
-          parts = await DB.listParts(); refreshDatalists(); buildAlmacenFilter(); await paint();
+          const newId = await DB.upsertPart(part);
+          const finalId = part.id || newId;
+
+          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
+            const u = Auth.currentUser();
+            await DB.addPriceHistory({
+              piezaId: finalId,
+              codigo: prev.codigo, nombre: prev.nombre,
+              costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
+              precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
+              usuario: u ? u.email : ''
+            });
+          }
+
+          parts = await DB.listParts();
+          buildFilters(); buildSuggestors(); paint();
+
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
-      tbody.addEventListener('click', async (e)=>{
+      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
         if(act === 'edit'){
-          const raw = await DB.getPartRaw(id);
-          if(!raw) return;
-          const p = {
-            id: raw.id, codigo: raw.codigo, nombre: raw.nombre, categoria: raw.categoria||'',
-            ubicacion: raw.ubicacion||'', almacen: raw.almacen||'', proveedor: raw.proveedor||'',
-            leadTimeDias: Number(raw.lead_time_dias||0),
-            consumoDiario: Number(raw.consumo_diario||0),
-            stockMin: Number(raw.stock_min||0),
-            stock: Number(raw.stock||0), costo: Number(raw.costo||0), precio: Number(raw.precio||0)
-          };
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
           form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria;
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion;
-          form.querySelector('input[name="almacen"]').value = p.almacen;
-          form.querySelector('input[name="proveedor"]').value = p.proveedor;
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin;
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
         }
         if(act === 'del'){
           if(!confirm('¿Eliminar esta pieza? Esta acción no se puede deshacer.')) return;
-          try{ await DB.deletePart(id); parts = await DB.listParts(); refreshDatalists(); buildAlmacenFilter(); await paint(); }
-          catch(err){ alert(err.message || 'No se pudo eliminar'); }
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
 
       importCSV.addEventListener('change', ()=>{
-        const f = importCSV.files[0]; if(!f) return;
+        const f = document.getElementById('importCSV').files[0]; if(!f) return;
         const reader = new FileReader();
         reader.onload = async ()=>{
           try{
             const lines = String(reader.result||'').split(/\r?\n/).filter(Boolean);
             if(!lines.length){ alert('CSV vacío'); return; }
             const head = lines.shift().split(',').map(h=>h.trim());
-            const insertedIds = [];
             for(const line of lines){
               const cells = parseCSVLine(line);
               const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
-              const draft = {
+              const part = {
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
-                leadTimeDias: Number(obj.leadTimeDias||0), // CD/stockMin auto
+                leadTimeDias: Number(obj.leadTimeDias||0),
                 stock: Number(obj.stock||0),
-                costo: Number(obj.costo_Bs||obj.costo||0), precio: Number(obj.precio_Bs||obj.precio||0)
+                costo: Number(obj.costo_Bs||obj.costo||0),
+                precio: Number(obj.precio_Bs||obj.precio||0)
               };
-              const saved = await DB.upsertPart(draft);
-              insertedIds.push(saved.id);
+              await DB.upsertPart(part);
             }
-            // recalcula todos os inseridos
-            for(const id of insertedIds){ await DB.recalcPartStats(id); }
-            parts = await DB.listParts(); refreshDatalists(); buildAlmacenFilter(); await paint();
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
-          importCSV.value = '';
+          document.getElementById('importCSV').value = '';
         };
         reader.readAsText(f);
       });
@@ -941,11 +991,11 @@
       const almFilter = document.getElementById('moveAlmacenFilter');
 
       let parts = await DB.listParts();
-      let moves = await DB.listMoves();
+      let moves = await DB.listMoves(2000);
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
-        almFilter.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        almFilter.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
       buildAlmacenOptions();
 
@@ -986,7 +1036,7 @@
         try{
           const u = Auth.currentUser();
           await DB.applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail: u?u.email:''});
-          parts = await DB.listParts(); moves = await DB.listMoves(); paintMoves();
+          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
           alert('Movimiento registrado'); moveForm.reset(); fillPartOptions();
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
@@ -1008,7 +1058,7 @@
       });
 
       undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(); paintMoves(); alert('Movimiento deshecho'); }
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
     }
@@ -1023,7 +1073,7 @@
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
-        almFilter.innerHTML = Array.from(set).map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        almFilter.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
       buildAlmacenOptions();
 
@@ -1035,7 +1085,7 @@
           const lt = Number(p.leadTimeDias||0);
           const min = Number(p.stockMin||0);
           const stk = Number(p.stock||0);
-          const rop = Math.ceil(cd * (lt + SAFETY_DAYS)); // equivalente a cd*lt + stock_min si stock_min=ceil(cd*SAFETY_DAYS)
+          const rop = Math.ceil(cd * (lt + SAFETY_DAYS));
           const sug = Math.max(0, rop - stk);
           return {...p, rop, sugerido:sug};
         }).filter(x=>x.sugerido>0);
@@ -1141,14 +1191,14 @@
           <td>${fmtDate(h.fecha)}</td>
           <td>${escapeHtml(h.codigo)}</td>
           <td>${escapeHtml(h.nombre)}</td>
-          <td class="num">${fmtMoney(h.costo_antes)} ➝ ${fmtMoney(h.costo_despues)}</td>
-          <td class="num">${fmtMoney(h.precio_antes)} ➝ ${fmtMoney(h.precio_despues)}</td>
+          <td class="num">${fmtMoney(h.costoAntes)} ➝ ${fmtMoney(h.costoDespues)}</td>
+          <td class="num">${fmtMoney(h.precioAntes)} ➝ ${fmtMoney(h.precioDespues)}</td>
           <td>${escapeHtml(h.usuario||'')}</td>`;
         tbody.appendChild(tr);
       });
     }
 
-    /* ===== Escáner (opcional) ===== */
+    /* --------- Escáner (opcional) --------- */
     async function startScan(){
       try{
         if(!('BarcodeDetector' in window)){ alert('Escáner no soportado; ingrese el código manualmente.'); return; }
