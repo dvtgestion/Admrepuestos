@@ -2,8 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Gestión de Inventario — Autopartes</title>
+
+  <!-- Chart.js para gráficos de Reportes -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+
   <style>
     :root{
       --bg:#f6f7f9; --card:#ffffff; --text:#0f172a; --muted:#6b7280; --border:#e5e7eb;
@@ -34,7 +38,7 @@
     .sidebar-foot{ margin-top:auto; display:flex; flex-direction:column; gap:8px; }
     .user-label{font-size:12px; color:var(--muted)}
 
-    .view{padding:24px; max-width:1300px; width:100%}
+    .view{padding:24px; max-width:1200px; width:100%}
 
     .center{
       display:flex; align-items:center; justify-content:center;
@@ -76,13 +80,13 @@
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
 
-    .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+    .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
 
     .table-wrap{width:100%; overflow:auto}
     .table{width:100%; border-collapse:separate; border-spacing:0}
-    .table th,.table td{padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:middle}
+    .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
     .table th{font-weight:600; text-align:left; white-space:nowrap}
     .table td.num,.table th.num{text-align:right}
 
@@ -94,56 +98,51 @@
     .grid{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
     .grid .field{min-width:0}
 
-    .kpis{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px}
+    .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
 
-    /* chips de sugestão */
+    /* chips */
     .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
 
-    /* Inventario — caret + drawer de lotes */
-    .caret-cell{ width:34px; }
-    .caret-btn{
-      width:28px; height:28px; border-radius:8px; border:1px solid var(--border);
-      background:#fff; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
-      font-size:14px; line-height:1; transform:rotate(0deg); transition:transform .15s ease;
+    /* Inventario: linha compacta + drawer de lotes */
+    .table.compact th, .table.compact td { padding:8px 10px; font-size:14px; }
+    details.inline { display:block; }
+    details.inline > summary {
+      list-style: none;
+      cursor: pointer;
+      display:inline-flex; align-items:center; gap:6px;
+      font-weight:600; color:var(--text);
     }
-    .caret-btn[aria-expanded="true"]{ transform:rotate(90deg); }
-    .lot-row td{ background:#fafafa; }
-    .lot-grid{
-      display:grid; grid-template-columns:repeat(3, minmax(100px,1fr)); gap:8px; font-size:13px;
+    details.inline > summary::before{
+      content:"▸";
+      display:inline-block;
+      transform:translateY(1px);
     }
-    .lot-grid .lot{ padding:10px; border:1px dashed var(--border); border-radius:10px; background:#fff; }
-    .lot strong{ display:block; margin-bottom:4px; }
-    .lot small{ color:var(--muted); }
+    details.inline[open] > summary::before{ content:"▾"; }
+    .lots-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
+    .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
+    .lot-chip b{font-weight:700}
 
-    /* Reportes — toolbar de filtros */
-    .reportes-toolbar{ display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px }
-    .reportes-toolbar .field{ margin:0; }
-    .reportes-toolbar .field input{ height:38px; font-size:14px; }
-    .reportes-toolbar .btn{ height:38px; font-size:14px; padding:8px 12px; }
+    /* Charts mais compactos */
+    .charts-compact canvas { max-height: 180px; }
 
-    /* Charts compactos */
-    .chart-wrap{ width:100%; height:220px; }
-    canvas.report-chart{ width:100% !important; height:220px !important; }
-
-    /* Mobile refinado */
+    /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
       .sidebar{position:sticky; top:0; z-index:10}
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
-      .lot-grid{ grid-template-columns:repeat(2,minmax(120px,1fr)); }
+      .charts-compact{ grid-template-columns:1fr !important; }
     }
     @media (max-width:600px){
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
       .kpis{grid-template-columns:1fr;}
       .toolbar .right{gap:6px}
-      .lot-grid{ grid-template-columns:1fr; }
-      .reportes-toolbar{ gap:6px }
+      .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
@@ -193,10 +192,57 @@
     </section>
   </template>
 
+  <template id="tpl-reportes">
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left">
+          <h2>Reportes</h2>
+          <p class="muted">Vendas, inventario e período filtrável.</p>
+        </div>
+        <div class="right" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
+          <label class="field" style="min-width:160px">
+            <span class="xs muted">Desde</span>
+            <input type="date" id="repDesde" class="input" />
+          </label>
+          <label class="field" style="min-width:160px">
+            <span class="xs muted">Até</span>
+            <input type="date" id="repHasta" class="input" />
+          </label>
+          <button id="repAplicar" class="btn btn-primary">Aplicar</button>
+        </div>
+      </header>
+
+      <div class="kpis">
+        <div class="card"><h3>Vendas brutas</h3><strong id="kpiBruto">—</strong></div>
+        <div class="card"><h3>COGS</h3><strong id="kpiCogs">—</strong></div>
+        <div class="card"><h3>Ganancia líquida</h3><strong id="kpiLiquida">—</strong></div>
+        <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
+      </div>
+
+      <div class="kpis">
+        <div class="card"><h3>Valor del inventario (por lotes)</h3><strong id="kpiInvVal">—</strong></div>
+        <div class="card"><h3>Días de seguridad</h3><strong id="kpiSafety">—</strong></div>
+        <div class="card"><h3>SKUs</h3><strong id="kpiSkus">—</strong></div>
+        <div class="card"><h3>Movimientos (período)</h3><strong id="kpiMovs">—</strong></div>
+      </div>
+
+      <div class="charts-compact" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px">
+        <div class="card">
+          <h3 style="margin:0 0 8px">Top 10 vendidas (unid.)</h3>
+          <canvas id="chartTop" height="150"></canvas>
+        </div>
+        <div class="card">
+          <h3 style="margin:0 0 8px">Receita por dia</h3>
+          <canvas id="chartDia" height="150"></canvas>
+        </div>
+      </div>
+    </section>
+  </template>
+
   <template id="tpl-inventario">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Inventario</h2><p class="muted">Piezas, lotes y estado de stock.</p></div>
+        <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas, lotes y estado de stock.</p></div>
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
@@ -262,13 +308,15 @@
           ROP = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).
         </p>
       </details>
+
       <div class="card">
         <div class="table-wrap">
-          <table class="table" id="partsTable">
+          <table class="table compact" id="partsTable">
             <thead><tr>
-              <th class="caret-cell"></th>
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
-              <th class="num">Stock</th><th class="num">Mín</th><th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th></th>
+              <th class="num">Stock</th><th class="num">Mín</th>
+              <th class="num">Costo base</th><th class="num">Precio base</th>
+              <th>Lotes</th><th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
           </table>
@@ -287,6 +335,7 @@
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
         </div>
       </header>
+
       <div class="card">
         <h3>Registrar movimiento</h3>
         <form id="moveForm" class="grid">
@@ -331,9 +380,10 @@
           <div class="row-actions" style="grid-column: 1 / -1"><button type="submit" class="btn btn-primary">Aplicar</button></div>
         </form>
       </div>
+
       <div class="card">
         <div class="table-wrap">
-          <table class="table" id="movesTable">
+          <table class="table compact" id="movesTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th><th>Almacén</th><th>Tipo</th>
               <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th><th></th>
@@ -353,7 +403,7 @@
       </header>
       <div class="card">
         <div class="table-wrap">
-          <table class="table" id="sugTable">
+          <table class="table compact" id="sugTable">
             <thead><tr>
               <th>Código</th><th>Nombre</th><th>Proveedor</th><th>Almacén</th>
               <th class="num">Stock</th><th class="num">Mín</th><th class="num">CD</th><th class="num">LT</th>
@@ -395,7 +445,7 @@
       </header>
       <div class="card">
         <div class="table-wrap">
-          <table class="table" id="histTable">
+          <table class="table compact" id="histTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th>
               <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th><th>Usuario</th>
@@ -407,43 +457,8 @@
     </section>
   </template>
 
-  <!-- NOVO: Reportes -->
-  <template id="tpl-reportes">
-    <section class="stack">
-      <header class="toolbar">
-        <div class="left"><h2>Reportes</h2><p class="muted">Resumen financiero y ventas.</p></div>
-        <div class="right">
-          <div class="reportes-toolbar">
-            <label class="field"><span class="xs">Desde</span><input type="date" id="repDesde"></label>
-            <label class="field"><span class="xs">Hasta</span><input type="date" id="repHasta"></label>
-            <button id="repAplicar" class="btn btn-primary">Aplicar</button>
-          </div>
-        </div>
-      </header>
-
-      <div class="kpis">
-        <div class="card"><h3>Ventas brutas</h3><strong id="kpiBruto">—</strong></div>
-        <div class="card"><h3>COGS</h3><strong id="kpiCogs">—</strong></div>
-        <div class="card"><h3>Ganancia líquida</h3><strong id="kpiLiquida">—</strong></div>
-        <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
-        <div class="card"><h3>Valor del inventario</h3><strong id="kpiInvVal">—</strong></div>
-      </div>
-
-      <div class="card">
-        <h3 style="margin-top:0">Top 10 más vendidas</h3>
-        <div class="chart-wrap"><canvas id="chartTop" class="report-chart"></canvas></div>
-      </div>
-
-      <div class="card">
-        <h3 style="margin-top:0">Ventas por día</h3>
-        <div class="chart-wrap"><canvas id="chartDia" class="report-chart"></canvas></div>
-      </div>
-    </section>
-  </template>
-
-  <!-- Supabase JS & Chart.js -->
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
 
   <script>
     /* =======================
@@ -574,17 +589,6 @@
         };
       }
 
-      // ---- Movements ----
-      async function listMoves(limit=5000){
-        const { data, error } = await sb.from('movements')
-          .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
-          .eq('org_id', orgId())
-          .order('fecha',{ascending:false})
-          .limit(limit);
-        if(error) throw error;
-        return data||[];
-      }
-
       // ---- Lotes ----
       async function listLots(partId){
         const { data, error } = await sb.from('part_lots')
@@ -594,6 +598,18 @@
           .order('id', {ascending:true});
         if(error) throw error;
         return (data||[]).filter(l => Number(l.qty||0) > 0);
+      }
+      async function listAllLots(limit=20000){
+        const { data, error } = await sb.from('part_lots')
+          .select('id, part_id, qty, costo_unit, precio_unit')
+          .eq('org_id', orgId())
+          .limit(limit);
+        if(error) throw error;
+        return data||[];
+      }
+      async function getInventoryValueByLots(){
+        const lots = await listAllLots(50000);
+        return lots.reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
       }
 
       async function createLot({ partId, qty, costo_unit, precio_unit }){
@@ -677,7 +693,7 @@
           const initialQty = Number(part.stock || 0);
           const rowInsert = {
             ...base,
-            stock: 0,                 // começa zerado
+            stock: 0,
             consumo_diario: 0,
             stock_min: 0,
           };
@@ -701,15 +717,22 @@
       }
 
       async function deletePart(id){
-        // Apaga lotes e movimentos relacionados (ON DELETE CASCADE, se definido via triggers);
-        // fallback: deletar na mão
-        await sb.from('movements').delete().eq('pieza_id', id).eq('org_id', orgId());
-        await sb.from('part_lots').delete().eq('part_id', id).eq('org_id', orgId());
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
         if(error) throw error;
       }
 
-      // ---- Aplicar movimento com lotes ----
+      // ---- Movements ----
+      async function listMoves(limit=2000){
+        const { data, error } = await sb.from('movements')
+          .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(limit);
+        if(error) throw error;
+        return data||[];
+      }
+
+      // aplicar movimento com LOTES
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
@@ -721,8 +744,8 @@
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
-          const c = (costoUnit != null && costoUnit!=='') ? Number(costoUnit) : Number(p.costo||0);
-          const pr = (precioUnit != null && precioUnit!=='') ? Number(precioUnit) : Number(p.precio||0);
+          const c = (costoUnit != null) ? Number(costoUnit) : Number(p.costo||0);
+          const pr = (precioUnit != null) ? Number(precioUnit) : Number(p.precio||0);
 
           // cria novo lote com este custo/preço
           const lot = await createLot({ partId: p.id, qty: q, costo_unit: c, precio_unit: pr });
@@ -783,185 +806,202 @@
 
         await recomputeMetrics(piezaId);
       }
+      
+                  // fim de applyMovement
+        }
 
-      // ---- Deshacer por ID e último ----
-      async function undoMovementById(id){
-        const { data: mov, error: em } = await sb.from('movements')
-          .select('id, pieza_id, tipo, cantidad, lote_id')
-          .eq('org_id', orgId())
-          .eq('id', id)
-          .maybeSingle();
-        if(em) throw em;
-        if(!mov) throw new Error('Movimiento no encontrado');
+        // ==== DESHACER POR ID (seguro com lotes) ====
+        async function undoMovementById(movId){
+          // carrega o movimento
+          const { data: m, error: e0 } = await sb.from('movements')
+            .select('id, tipo, cantidad, pieza_id, lote_id')
+            .eq('org_id', orgId())
+            .eq('id', movId)
+            .maybeSingle();
+          if(e0) throw e0;
+          if(!m) throw new Error('Movimiento no encontrado');
 
-        const q = Number(mov.cantidad||0);
+          const q = Number(m.cantidad||0);
+          if(!(q>0)) throw new Error('Cantidad inválida');
 
-        if(mov.tipo === 'entrada'){
-          // reduzir estoque da peça
+          // peça atual
           const { data: p, error: ep } = await sb.from('parts')
-            .select('id, stock').eq('id', mov.pieza_id).eq('org_id', orgId()).maybeSingle();
+            .select('id, stock')
+            .eq('org_id', orgId())
+            .eq('id', m.pieza_id)
+            .maybeSingle();
           if(ep) throw ep;
-          if(!p) throw new Error('Pieza no encontrada para revertir');
+          if(!p) throw new Error('Pieza no encontrada (borrada?)');
 
-          if(Number(p.stock||0) < q)
-            throw new Error('No se puede deshacer: stock actual es menor que la entrada');
+          if(m.tipo === 'entrada'){
+            // Regras: só podemos deshacer uma entrada se:
+            // - o stock atual da peça >= q
+            // - se houver lote vinculado, o lote ainda tenha pelo menos q (ninguém vendeu desse lote)
+            if(Number(p.stock||0) < q){
+              throw new Error('No se puede deshacer: stock actual es menor que la entrada.');
+            }
+            if(m.lote_id){
+              const { data: lot, error: el } = await sb.from('part_lots')
+                .select('id, qty')
+                .eq('org_id', orgId())
+                .eq('id', m.lote_id)
+                .maybeSingle();
+              if(el) throw el;
+              // Se o lote não existe mais ou já foi consumido parcialmente, não dá para reverter com segurança
+              if(!lot || Number(lot.qty||0) < q){
+                throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
+              }
 
-          const { error: up } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) - q })
-            .eq('id', p.id).eq('org_id', orgId());
-          if(up) throw up;
-
-          // reduzir ou apagar o lote
-          if(mov.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('id', mov.lote_id).eq('org_id', orgId()).maybeSingle();
-            if(el) throw el;
-            if(lot){
-              const newQty = Math.max(0, Number(lot.qty||0) - q);
+              // 1) reduzir lote
               const { error: upLot } = await sb.from('part_lots')
-                .update({ qty: newQty })
-                .eq('id', lot.id).eq('org_id', orgId());
+                .update({ qty: Number(lot.qty||0) - q })
+                .eq('org_id', orgId())
+                .eq('id', lot.id);
               if(upLot) throw upLot;
             }
-          }
-        }else{ // salida
-          // devolver ao lote
-          if(mov.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('id', mov.lote_id).eq('org_id', orgId()).maybeSingle();
-            if(el) throw el;
-            if(lot){
+
+            // 2) reduzir stock peça
+            const { error: upP } = await sb.from('parts')
+              .update({ stock: Math.max(0, Number(p.stock||0) - q) })
+              .eq('org_id', orgId())
+              .eq('id', p.id);
+            if(upP) throw upP;
+
+          }else{ // SALIDA
+            // Regras: se houver lote vinculado, devolvemos q ao lote
+            if(m.lote_id){
+              const { data: lot, error: el } = await sb.from('part_lots')
+                .select('id, qty')
+                .eq('org_id', orgId())
+                .eq('id', m.lote_id)
+                .maybeSingle();
+              if(el) throw el;
+              if(!lot){
+                // lote foi apagado — não podemos desfazer com consistência
+                throw new Error('No se puede deshacer: el lote original no existe.');
+              }
               const { error: upLot } = await sb.from('part_lots')
                 .update({ qty: Number(lot.qty||0) + q })
-                .eq('id', lot.id).eq('org_id', orgId());
+                .eq('org_id', orgId())
+                .eq('id', lot.id);
               if(upLot) throw upLot;
+            }else{
+              // saída antiga sem lote -> não dá pra reverter (não sabemos de qual lote saiu)
+              throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+            }
+
+            // somar de volta no estoque da peça
+            const { error: upP } = await sb.from('parts')
+              .update({ stock: Number(p.stock||0) + q })
+              .eq('org_id', orgId())
+              .eq('id', p.id);
+            if(upP) throw upP;
+          }
+
+          // remover o movimento
+          const { error: del } = await sb.from('movements')
+            .delete()
+            .eq('org_id', orgId())
+            .eq('id', m.id);
+          if(del) throw del;
+
+          // métricas
+          await recomputeMetrics(m.pieza_id);
+        }
+
+        // Deshacer último (atalho)
+        async function undoLastMovement(){
+          const { data: last, error } = await sb.from('movements')
+            .select('id')
+            .eq('org_id', orgId())
+            .order('fecha',{ascending:false})
+            .limit(1).maybeSingle();
+          if(error) throw error;
+          if(!last) throw new Error('Sin movimientos');
+          await undoMovementById(last.id);
+        }
+
+        // ---- Historial de precios ----
+        async function listPriceHistory(limit=500){
+          const { data, error } = await sb.from('price_history')
+            .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
+            .eq('org_id', orgId())
+            .order('fecha',{ascending:false})
+            .limit(limit);
+          if(error) throw error;
+          return (data||[]).map(h=>({
+            fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
+            costoAntes:h.costo_antes, costoDespues:h.costo_despues,
+            precioAntes:h.precio_antes, precioDespues:h.precio_despues,
+            usuario:h.usuario
+          }));
+        }
+
+        async function addPriceHistory(entry){
+          const row = {
+            org_id: orgId(),
+            pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
+            costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
+            precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
+            usuario: entry.usuario || ''
+          };
+          const { error } = await sb.from('price_history').insert(row);
+          if(error) throw error;
+        }
+
+        // ---- Backup simples (mantém como antes) ----
+        async function backupAll(){
+          const [parts, moves, hist] = await Promise.all([
+            listParts(), listMoves(10000), listPriceHistory(10000)
+          ]);
+          return { parts, moves, priceHistory: hist };
+        }
+
+        async function restoreAll(jsonDump){
+          if(Array.isArray(jsonDump.parts)){
+            for(const p of jsonDump.parts){
+              await upsertPart(p);
             }
           }
-          // somar de volta no estoque da peça
-          const { data: p, error: ep } = await sb.from('parts')
-            .select('id, stock').eq('id', mov.pieza_id).eq('org_id', orgId()).maybeSingle();
-          if(ep) throw ep;
-          if(!p) throw new Error('Pieza no encontrada para revertir');
-
-          const { error: up } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) + q })
-            .eq('id', p.id).eq('org_id', orgId());
-          if(up) throw up;
         }
 
-        // apaga o movimento
-        const { error: delErr } = await sb.from('movements')
-          .delete().eq('id', mov.id).eq('org_id', orgId());
-        if(delErr) throw delErr;
-
-        if(mov.pieza_id){
-          await recomputeMetrics(mov.pieza_id);
+        async function wipeCurrentOrg(){
+          const oid = orgId();
+          await sb.from('price_history').delete().eq('org_id', oid);
+          await sb.from('movements').delete().eq('org_id', oid);
+          await sb.from('part_lots').delete().eq('org_id', oid);
+          await sb.from('parts').delete().eq('org_id', oid);
         }
-      }
 
-      async function undoLastMovement(){
-        const { data: last, error } = await sb.from('movements')
-          .select('id')
-          .eq('org_id', orgId())
-          .order('fecha',{ascending:false})
-          .limit(1).maybeSingle();
-        if(error) throw error;
-        if(!last) throw new Error('Sin movimientos');
-        await undoMovementById(last.id);
-      }
+        // ---- Recalcular métricas automáticas (CD e stock_min) ----
+        async function recomputeMetrics(piezaId){
+          const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
+          const { data: outs, error } = await sb.from('movements')
+            .select('cantidad')
+            .eq('org_id', orgId())
+            .eq('pieza_id', piezaId)
+            .eq('tipo','salida')
+            .gte('fecha', since);
+          if(error) throw error;
+          const totalOut = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
+          const cd = totalOut / CD_WINDOW_DAYS;
+          const stockMin = Math.ceil(cd * SAFETY_DAYS);
 
-      // ---- Historial de precios ----
-      async function listPriceHistory(limit=500){
-        const { data, error } = await sb.from('price_history')
-          .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
-          .eq('org_id', orgId())
-          .order('fecha',{ascending:false})
-          .limit(limit);
-        if(error) throw error;
-        return (data||[]).map(h=>({
-          fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
-          costoAntes:h.costo_antes, costoDespues:h.costo_despues,
-          precioAntes:h.precio_antes, precioDespues:h.precio_despues,
-          usuario:h.usuario
-        }));
-      }
+          const { error: upErr } = await sb.from('parts')
+            .update({ consumo_diario: cd, stock_min: stockMin })
+            .eq('id', piezaId).eq('org_id', orgId());
+          if(upErr) throw upErr;
+        }
 
-      async function addPriceHistory(entry){
-        const row = {
-          org_id: orgId(),
-          pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
-          costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
-          precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
-          usuario: entry.usuario || ''
+        return {
+          listParts, getPartById, upsertPart, deletePart,
+          listMoves, applyMovement, undoLastMovement, undoMovementById,
+          listLots, listAllLots, getInventoryValueByLots,
+          addPriceHistory, listPriceHistory,
+          backupAll, restoreAll, wipeCurrentOrg,
+          recomputeMetrics
         };
-        const { error } = await sb.from('price_history').insert(row);
-        if(error) throw error;
-      }
-
-      // ---- Backup simples ----
-      async function backupAll(){
-        const [parts, moves, hist] = await Promise.all([
-          listParts(), listMoves(10000), listPriceHistory(10000)
-        ]);
-        return { parts, moves, priceHistory: hist };
-      }
-
-      async function restoreAll(jsonDump){
-        if(Array.isArray(jsonDump.parts)){
-          for(const p of jsonDump.parts){
-            await upsertPart(p);
-          }
-        }
-      }
-
-      async function wipeCurrentOrg(){
-        const oid = orgId();
-        await sb.from('price_history').delete().eq('org_id', oid);
-        await sb.from('movements').delete().eq('org_id', oid);
-        await sb.from('part_lots').delete().eq('org_id', oid);
-        await sb.from('parts').delete().eq('org_id', oid);
-      }
-
-      // ---- Recalcular métricas automáticas (CD e stock_min) ----
-      async function recomputeMetrics(piezaId){
-        const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
-        const { data: outs, error } = await sb.from('movements')
-          .select('cantidad')
-          .eq('org_id', orgId())
-          .eq('pieza_id', piezaId)
-          .eq('tipo','salida')
-          .gte('fecha', since);
-        if(error) throw error;
-        const totalOut = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
-        const cd = totalOut / CD_WINDOW_DAYS;
-        const stockMin = Math.ceil(cd * SAFETY_DAYS);
-
-        const { error: upErr } = await sb.from('parts')
-          .update({ consumo_diario: cd, stock_min: stockMin })
-          .eq('id', piezaId).eq('org_id', orgId());
-        if(upErr) throw upErr;
-      }
-
-      // ---- Valorização do inventário por lotes ----
-      async function inventoryValuationByLots(){
-        const { data: lots, error } = await sb
-          .from('part_lots')
-          .select('qty, costo_unit')
-          .eq('org_id', orgId());
-        if(error) throw error;
-        return (lots||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
-      }
-
-      return {
-        listParts, getPartById, upsertPart, deletePart,
-        listMoves, applyMovement, undoLastMovement, undoMovementById,
-        listLots, addPriceHistory, listPriceHistory,
-        backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics, inventoryValuationByLots
-      };
     })();
-    
-        })();
 
     /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
@@ -994,7 +1034,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* noop */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -1020,6 +1060,8 @@
     }
 
     /* ===== Vistas ===== */
+
+    // ---- Login ----
     async function renderLogin(){
       const tpl = document.getElementById('tpl-login').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1045,114 +1087,125 @@
       });
     }
 
-    /* ===== Reportes (ex-Dashboard) ===== */
+    // ---- Reportes ----
+    let chartTop = null, chartDia = null;
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      const elDesde = document.getElementById('repDesde');
-      const elHasta = document.getElementById('repHasta');
-      const btnAp = document.getElementById('repAplicar');
+      // datas padrão: últimos 30 dias
+      const repDesde = document.getElementById('repDesde');
+      const repHasta = document.getElementById('repHasta');
+      const today = new Date();
+      const d0 = new Date(Date.now() - 29*24*3600*1000);
+      repDesde.value = d0.toISOString().slice(0,10);
+      repHasta.value = today.toISOString().slice(0,10);
 
-      // datas padrão: mês atual
-      const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), 1);
-      const toISOdate = d => new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
-      elDesde.value = toISOdate(start);
-      elHasta.value = toISOdate(now);
+      const elBruto = document.getElementById('kpiBruto');
+      const elCogs  = document.getElementById('kpiCogs');
+      const elLiq   = document.getElementById('kpiLiquida');
+      const elUnits = document.getElementById('kpiUnits');
+      const elInv   = document.getElementById('kpiInvVal');
+      const elSaf   = document.getElementById('kpiSafety');
+      const elSkus  = document.getElementById('kpiSkus');
+      const elMovs  = document.getElementById('kpiMovs');
 
-      let chartTop = null, chartDia = null;
-
-      async function computeAndPaint(){
+      async function run(){
         const parts = await DB.listParts();
-        const moves = await DB.listMoves(10000); // já vem ordenado
+        const moves = await DB.listMoves(10000);
 
-        // filtro por data (UTC date-only comparando YYYY-MM-DD)
-        const d0 = elDesde.value || toISOdate(start);
-        const d1 = elHasta.value || toISOdate(now);
-        const inRange = (iso) => {
-          const s = String(iso).slice(0,10);
-          return s >= d0 && s <= d1;
-        };
+        // filtro por período
+        const dFrom = new Date(repDesde.value + 'T00:00:00');
+        const dTo   = new Date(repHasta.value + 'T23:59:59');
 
-        // map de peça
-        const pMap = new Map(parts.map(p=>[p.id, p]));
+        // Mapa de peças
+        const pmap = new Map(parts.map(p=>[p.id, p]));
 
-        // apenas salidas no período
-        const salidas = moves.filter(m => m.tipo==='salida' && inRange(m.fecha));
+        let bruto=0, cogs=0, units=0, movs=0;
+        const byCode = new Map(); // codigo -> unidades
+        const byDay  = new Map(); // yyyy-mm-dd -> receita
 
-        // Totais
-        let bruto=0, cogs=0, units=0;
-        const bySku = new Map(); // key: codigo — acum qtd e receita
-        const byDay = new Map(); // key: YYYY-MM-DD — receita
-        for(const m of salidas){
-          const p = pMap.get(m.pieza_id);
-          const precio = (m.precio_unit!=null) ? Number(m.precio_unit) : Number(p?.precio||0);
-          const costo  = (m.costo_unit !=null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
-          const q = Number(m.cantidad||0);
-          bruto += precio*q; cogs += costo*q; units += q;
+        for(const m of moves){
+          const dt = new Date(m.fecha);
+          if(dt < dFrom || dt > dTo) continue;
+          movs++;
+          if(m.tipo === 'salida'){
+            const p = pmap.get(m.pieza_id);
+            const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
+            const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
+            const q = Number(m.cantidad||0);
+            bruto += precio * q;
+            cogs  +=  costo * q;
+            units += q;
 
-          const key = p ? `${p.codigo} — ${p.nombre}` : `${m.codigo} — ${m.nombre}`;
-          const cur = bySku.get(key)||{q:0, rev:0};
-          cur.q += q; cur.rev += precio*q; bySku.set(key, cur);
+            const k = (p?.codigo || m.codigo || '—');
+            byCode.set(k, (byCode.get(k)||0)+q);
 
-          const day = String(m.fecha).slice(0,10);
-          byDay.set(day, (byDay.get(day)||0) + precio*q);
+            const dayKey = dt.toISOString().slice(0,10);
+            byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
+          }
         }
-        const liquida = bruto - cogs;
+        const liq = bruto - cogs;
 
-        // KPI Inventário por lotes
-        const invVal = await DB.inventoryValuationByLots();
+        // KPIs
+        elBruto.textContent = fmtMoney(bruto);
+        elCogs.textContent  = fmtMoney(cogs);
+        elLiq.textContent   = fmtMoney(liq);
+        elUnits.textContent = String(units);
+        elSaf.textContent   = String(SAFETY_DAYS);
+        elSkus.textContent  = String(parts.length);
+        elMovs.textContent  = String(movs);
 
-        // Pintar KPIs
-        document.getElementById('kpiBruto').textContent = fmtMoney(bruto);
-        document.getElementById('kpiCogs').textContent  = fmtMoney(cogs);
-        document.getElementById('kpiLiquida').textContent = fmtMoney(liquida);
-        document.getElementById('kpiUnits').textContent = units;
-        document.getElementById('kpiInvVal').textContent = fmtMoney(invVal);
+        // valor de inventário por lotes
+        const invVal = await DB.getInventoryValueByLots();
+        elInv.textContent = fmtMoney(invVal);
 
         // Top 10
-        const top = Array.from(bySku.entries())
-          .map(([k,v])=>({sku:k, q:v.q, rev:v.rev}))
-          .sort((a,b)=> b.q - a.q)
-          .slice(0,10);
-        const ctxTop = document.getElementById('chartTop').getContext('2d');
-        if(chartTop){ chartTop.destroy(); }
+        const topArr = Array.from(byCode.entries())
+          .sort((a,b)=>b[1]-a[1]).slice(0,10);
+        const topLabels = topArr.map(x=>x[0]);
+        const topData   = topArr.map(x=>x[1]);
+
+        // Receita por dia (ordem cronológica)
+        const days = Array.from(byDay.keys()).sort();
+        const revs = days.map(d=> byDay.get(d));
+
+        // Destruir gráficos anteriores se houver
+        if(chartTop) chartTop.destroy();
+        if(chartDia) chartDia.destroy();
+
+        // Top 10
+        const ctxTop = document.getElementById('chartTop');
         chartTop = new Chart(ctxTop, {
-          type:'bar',
-          data:{
-            labels: top.map(t=>t.sku),
-            datasets:[{ label:'Unidades vendidas', data: top.map(t=>t.q) }]
-          },
-          options:{
-            responsive:true,
-            plugins:{ legend:{display:false} },
-            scales:{ x:{ ticks:{ autoSkip:false, maxRotation:45, minRotation:0 } } }
+          type: 'bar',
+          data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display:false } },
+            scales: { x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } }
           }
         });
 
-        // Vendas por dia
-        const days = Array.from(byDay.keys()).sort();
-        const ctxDia = document.getElementById('chartDia').getContext('2d');
-        if(chartDia){ chartDia.destroy(); }
+        // Receita por dia
+        const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
-          type:'line',
-          data:{
-            labels: days,
-            datasets:[{ label:'Receita por día', data: days.map(d=>byDay.get(d)||0) }]
-          },
-          options:{
-            responsive:true,
-            plugins:{ legend:{display:false} },
-            elements:{ line:{ tension:0.2 } }
+          type: 'line',
+          data: { labels: days, datasets: [{ label: 'Receita', data: revs }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display:false } },
+            scales: { y:{ beginAtZero:true, grace:'10%' } }
           }
         });
       }
 
-      await computeAndPaint();
-      btnAp.addEventListener('click', computeAndPaint);
+      document.getElementById('repAplicar').addEventListener('click', run);
+      await run();
     }
 
+    // ---- Inventario ----
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1206,123 +1259,71 @@
         return passQ && passA;
       }
 
-      const expanded = new Set();
+      function makeLotsDrawerCell(p){
+        // célula com <details> (seta) que carrega lotes sob demanda
+        const cell = document.createElement('td');
+        const det = document.createElement('details');
+        det.className = 'inline';
+        const sum = document.createElement('summary');
+        sum.textContent = 'ver lotes';
+        const box = document.createElement('div');
+        box.className = 'lots-list';
+        box.id = `lots-${p.id}`;
+        det.appendChild(sum);
+        det.appendChild(box);
 
-      async function addLotDrawerRow(afterTr, part){
-        // cria linha extra para mostrar lotes
-        const lotTr = document.createElement('tr');
-        lotTr.className = 'lot-row';
-        const lotTd = document.createElement('td');
-        lotTd.colSpan = 11; // caret + 10 colunas de dados
-        lotTd.innerHTML = `<div class="lot-grid" id="lotGrid-${part.id}"><div class="muted">Carregando lotes…</div></div>`;
-        lotTr.appendChild(lotTd);
-        afterTr.parentNode.insertBefore(lotTr, afterTr.nextSibling);
-
-        const lots = await DB.listLots(part.id);
-        const grid = document.getElementById(`lotGrid-${part.id}`);
-        if(!lots.length){
-          grid.innerHTML = `<div class="muted xs">Esta pieza no tiene lotes con disponibilidad.</div>`;
-          return;
-        }
-        grid.innerHTML = lots.map((l,idx)=>`
-          <div class="lot">
-            <strong>Lote ${idx+1}</strong>
-            <small>Disp: ${l.qty}</small><br/>
-            <small>Costo: ${fmtMoney(l.costo_unit)}</small><br/>
-            <small>Precio: ${fmtMoney(l.precio_unit)}</small>
-          </div>
-        `).join('');
-      }
-
-      function buildRow(part){
-        const low = Number(part.stock) < Number(part.stockMin);
-        const tr = document.createElement('tr');
-        tr.dataset.id = part.id;
-        tr.innerHTML = `
-          <td class="caret-cell">
-            <button class="caret-btn" aria-expanded="${expanded.has(part.id)?'true':'false'}" title="Lotes">▸</button>
-          </td>
-          <td>${escapeHtml(part.codigo)}</td>
-          <td>${escapeHtml(part.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
-          <td>${escapeHtml(part.categoria||'')}</td>
-          <td>${escapeHtml(part.almacen||'')}</td>
-          <td>${escapeHtml(part.ubicacion||'')}</td>
-          <td class="num">${part.stock}</td>
-          <td class="num">${part.stockMin}</td>
-          <td class="num">${fmtMoney(part.costo)}</td>
-          <td class="num">${fmtMoney(part.precio)}</td>
-          <td class="num">
-            <button class="btn btn-ghost" data-act="edit" data-id="${part.id}">Editar</button>
-            <button class="btn btn-danger" data-act="del" data-id="${part.id}">Eliminar</button>
-          </td>`;
-        return tr;
+        let loaded = false;
+        det.addEventListener('toggle', async ()=>{
+          if(det.open && !loaded){
+            const lots = await DB.listLots(p.id);
+            box.innerHTML = lots.length
+              ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
+              : '<span class="muted xs">Sem lotes disponíveis</span>';
+            loaded = true;
+          }
+        });
+        cell.appendChild(det);
+        return cell;
       }
 
       async function paint(){
         tbody.innerHTML = '';
-        const list = parts.filter(matchesFilters);
-        for(const p of list){
-          const row = buildRow(p);
-          tbody.appendChild(row);
-          // se estiver expandido, adicionar a drawer
-          if(expanded.has(p.id)){
-            await addLotDrawerRow(row, p);
-            const caret = row.querySelector('.caret-btn');
-            if(caret) caret.setAttribute('aria-expanded','true');
-          }
+        for(const p of parts.filter(matchesFilters)){
+          const low = Number(p.stock) < Number(p.stockMin);
+          const tr = document.createElement('tr');
+
+          const htmlLeft = `
+            <td>${escapeHtml(p.codigo)}</td>
+            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+            <td>${escapeHtml(p.categoria||'')}</td>
+            <td>${escapeHtml(p.almacen||'')}</td>
+            <td>${escapeHtml(p.ubicacion||'')}</td>
+            <td class="num">${p.stock}</td>
+            <td class="num">${p.stockMin}</td>
+            <td class="num">${fmtMoney(p.costo)}</td>
+            <td class="num">${fmtMoney(p.precio)}</td>
+          `;
+
+          tr.innerHTML = htmlLeft;
+          // coluna LOTES com drawer
+          tr.appendChild(makeLotsDrawerCell(p));
+
+          // ações
+          const tdAct = document.createElement('td');
+          tdAct.className = 'num';
+          tdAct.innerHTML = `
+            <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
+            <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
+          `;
+          tr.appendChild(tdAct);
+
+          tbody.appendChild(tr);
         }
       }
 
       buildFilters();
       buildSuggestors();
       await paint();
-
-      tbody.addEventListener('click', async (e)=>{
-        const caret = e.target.closest('.caret-btn');
-        if(caret){
-          const tr = caret.closest('tr');
-          const pid = tr.dataset.id;
-          const isExp = caret.getAttribute('aria-expanded')==='true';
-          if(isExp){
-            // recolher
-            caret.setAttribute('aria-expanded','false');
-            expanded.delete(pid);
-            const next = tr.nextElementSibling;
-            if(next && next.classList.contains('lot-row')) next.remove();
-          }else{
-            caret.setAttribute('aria-expanded','true');
-            expanded.add(pid);
-            await addLotDrawerRow(tr, parts.find(x=>x.id===pid));
-          }
-          return;
-        }
-        const btn = e.target.closest('button[data-act]'); if(!btn) return;
-        const id = btn.dataset.id; const act = btn.dataset.act;
-        if(act === 'edit'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
-          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
-          form.querySelector('input[name="id"]').value = p.id;
-          form.querySelector('input[name="codigo"]').value = p.codigo;
-          form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria || '';
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
-          form.querySelector('input[name="almacen"]').value = p.almacen || '';
-          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
-        }
-        if(act === 'del'){
-          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
-          try{
-            await DB.deletePart(id);
-            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
-          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
-        }
-      });
 
       search.addEventListener('input', paint);
       filterAlm.addEventListener('change', paint);
@@ -1381,6 +1382,35 @@
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
+      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button[data-act]'); if(!btn) return;
+        const id = btn.dataset.id; const act = btn.dataset.act;
+        if(act === 'edit'){
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
+          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
+          form.querySelector('input[name="id"]').value = p.id;
+          form.querySelector('input[name="codigo"]').value = p.codigo;
+          form.querySelector('input[name="nombre"]').value = p.nombre;
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
+          form.querySelector('input[name="stock"]').value = p.stock;
+          form.querySelector('input[name="costo"]').value = p.costo;
+          form.querySelector('input[name="precio"]').value = p.precio;
+        }
+        if(act === 'del'){
+          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+        }
+      });
+
       importCSV.addEventListener('change', ()=>{
         const f = document.getElementById('importCSV').files[0]; if(!f) return;
         const reader = new FileReader();
@@ -1396,7 +1426,7 @@
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
                 leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0),                      // vira lote inicial
+                stock: Number(obj.stock||0), // vira lote inicial
                 costo: Number(obj.costo_Bs||obj.costo||0),
                 precio: Number(obj.precio_Bs||obj.precio||0)
               };
@@ -1411,6 +1441,7 @@
       });
     }
 
+    // ---- Movimientos ----
     async function renderMovimientos(){
       const tpl = document.getElementById('tpl-movimientos').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1428,7 +1459,6 @@
       const exportBtn = document.getElementById('exportCSV');
       const undoBtn = document.getElementById('undoLast');
       const almFilter = document.getElementById('moveAlmacenFilter');
-      const applyBtn = moveForm.querySelector('button[type="submit"]');
 
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
@@ -1456,10 +1486,8 @@
         if(!lots.length){
           salidaLoteSel.innerHTML = '';
           salidaLotesInfo.textContent = 'Sin lotes disponibles para esta pieza.';
-          applyBtn.disabled = true;
           return;
         }
-        applyBtn.disabled = false;
         salidaLoteSel.innerHTML = lots.map((l,idx)=>{
           return `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`;
         }).join('');
@@ -1472,7 +1500,6 @@
         if(t==='entrada'){
           entradaFields.style.display = '';
           salidaFields.style.display = 'none';
-          applyBtn.disabled = false;
         }else{
           entradaFields.style.display = 'none';
           salidaFields.style.display = '';
@@ -1494,26 +1521,11 @@
             <td class="num">${m.cantidad}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
-            <td class="num"><button class="btn btn-danger" data-undo-id="${m.id}">Deshacer</button></td>`;
+            <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
       }
       paintMoves();
-
-      // Deshacer por linha
-      tbody.addEventListener('click', async (e)=>{
-        const b = e.target.closest('button[data-undo-id]');
-        if(!b) return;
-        const id = b.getAttribute('data-undo-id');
-        if(!confirm('¿Deshacer este movimiento?')) return;
-        try{
-          await DB.undoMovementById(id);
-          moves = await DB.listMoves(2000);
-          parts = await DB.listParts();
-          paintMoves();
-          alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
-      });
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
       partSel.addEventListener('change', ()=>{ if(tipoSel.value==='salida') fillMoveLots(); });
@@ -1545,6 +1557,26 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
+      // Deshacer por linha
+      tbody.addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button[data-undo]');
+        if(!btn) return;
+        const id = btn.getAttribute('data-undo');
+        if(!confirm('¿Deshacer este movimiento?')) return;
+        try{
+          await DB.undoMovementById(id);
+          moves = await DB.listMoves(2000);
+          paintMoves();
+          alert('Movimiento deshecho');
+        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
+      });
+
+      // Deshacer último
+      undoBtn.addEventListener('click', async ()=>{
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); }
+        catch(e){ alert(e.message || 'No se pudo deshacer'); }
+      });
+
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
@@ -1560,13 +1592,9 @@
         a.href = url; a.download = `inventario_${stamp}.csv`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       });
-
-      undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
-        catch(e){ alert(e.message || 'No se pudo deshacer'); }
-      });
     }
 
+    // ---- Sugerencias ----
     async function renderSugerencias(){
       const tpl = document.getElementById('tpl-sugerencias').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1616,6 +1644,7 @@
       almFilter.addEventListener('change', paint); paint();
     }
 
+    // ---- Ajustes ----
     async function renderAjustes(){
       const tpl = document.getElementById('tpl-ajustes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1681,6 +1710,7 @@
       });
     }
 
+    // ---- Historial ----
     async function renderHistorial(){
       const tpl = document.getElementById('tpl-historial').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
