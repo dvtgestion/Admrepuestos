@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -81,11 +81,10 @@
     .stack{display:flex; flex-direction:column; gap:12px}
 
     .table-wrap{width:100%; overflow:auto}
-    .table{width:100%; border-collapse:separate; border-spacing:0; min-width:860px;}
-    .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border); background:#fff}
-    .table th{font-weight:600; text-align:left; white-space:nowrap; position:sticky; top:0; z-index:5}
-    /* primeira coluna fixa p/ facilitar leitura lateral */
-    .table td:first-child, .table th:first-child{ position:sticky; left:0; z-index:6; background:#fff; box-shadow: 1px 0 0 var(--border); }
+    .table{width:100%; border-collapse:separate; border-spacing:0}
+    .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
+    .table th{font-weight:600; text-align:left; white-space:nowrap}
+    .table td.num,.table th.num{text-align:right}
 
     .badge{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border);}
     .badge.low{background:#fff5f5; color:#b91c1c; border-color:#fecaca}
@@ -99,49 +98,40 @@
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
 
-    /* chips */
+    /* chips de sugestão */
     .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
 
-    /* modo denso opcional */
-    body.dense .table th, body.dense .table td{ padding:6px 8px; }
-    body.dense .grid{ gap:8px; }
-    body.dense .btn, body.dense .field input, body.dense .field select, body.dense .input{ height:40px; }
+    /* densidade compacta opcional */
+    body.dense .table th, body.dense .table td { padding:8px 10px; }
+    body.dense .btn, body.dense .input, body.dense .field input, body.dense .field select { height:40px; }
+    #toggleDense{ display:inline-flex; align-items:center; gap:6px; }
 
-    /* barra de ação fixa (mobile) no formulário de movimentos */
-    .mobile-sticky{
-      position:sticky; bottom:0; background:linear-gradient(to top, rgba(255,255,255,.95), rgba(255,255,255,.75));
-      padding:12px; margin:-12px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:8px;
-    }
-
-    /* tabelas viram “cards” abaixo de 480px */
-    @media (max-width:480px){
-      .table{ min-width:0; border-spacing:0; }
-      .table thead{ display:none; }
-      .table tbody{ display:block; }
-      .table tbody tr{ display:block; border:1px solid var(--border); border-radius:10px; margin-bottom:8px; overflow:hidden; }
-      .table td{ display:flex; justify-content:space-between; gap:10px; padding:10px 12px; }
-      .table td::before{ content:attr(data-label); font-weight:600; color:var(--muted); }
-      .table td:first-child{ position:relative; left:auto; box-shadow:none; border-bottom:1px solid var(--border); }
-      .table-wrap{ overflow:visible; }
-    }
+    /* Cartões de gráfico mais baixos */
+    .chart-card { height: 220px; padding: 12px; }
+    .chart-card canvas{ width:100% !important; height:100% !important; display:block; }
 
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
       .sidebar{position:sticky; top:0; z-index:10}
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
+      .chart-card{ height: 200px; }
     }
     @media (max-width:600px){
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
       .kpis{grid-template-columns:1fr;}
       .toolbar .right{gap:6px}
+      .chart-card{ height: 180px; }
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
   </style>
+
+  <!-- Chart.js para os gráficos do Reportes -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="app" class="app no-sidebar">
@@ -151,7 +141,6 @@
         <div><strong>Autopartes</strong><small> Inventario</small></div>
       </div>
       <nav class="nav" aria-label="Navegación principal">
-        <!-- RENOMEADO: Dashboard -> Reportes -->
         <button class="nav-btn" data-route="reportes">Reportes</button>
         <button class="nav-btn" data-route="inventario">Inventario</button>
         <button class="nav-btn" data-route="movimientos">Movimientos</button>
@@ -161,7 +150,6 @@
       </nav>
       <div class="sidebar-foot">
         <span id="userLabel" class="user-label"></span>
-        <button id="toggleDense" class="btn">Modo compacto</button>
         <button id="logoutBtn" class="btn btn-ghost">Cerrar sesión</button>
       </div>
     </aside>
@@ -189,44 +177,49 @@
     </section>
   </template>
 
-  <!-- NOVO: REPORTES (com filtros e gráficos) -->
+  <!-- REPORTES -->
   <template id="tpl-reportes">
     <section class="stack">
       <header class="toolbar">
         <div class="left">
           <h2>Reportes</h2>
-          <p class="muted">Ventas (salidas), piezas más vendidas y resumen financiero por período.</p>
+          <p class="muted">Ventas, top piezas y resumen financiero.</p>
         </div>
         <div class="right">
-          <input type="date" id="repDesde" class="input" title="Desde" />
-          <input type="date" id="repHasta" class="input" title="Hasta" />
+          <label class="field" style="min-width:160px"><span class="xs">Desde</span><input id="repDesde" type="date"/></label>
+          <label class="field" style="min-width:160px"><span class="xs">Hasta</span><input id="repHasta" type="date"/></label>
           <button id="repAplicar" class="btn btn-primary">Aplicar</button>
+          <button id="toggleDense" class="btn" title="Alternar modo compacto">Vista compacta</button>
         </div>
       </header>
 
+      <!-- KPIs -->
       <div class="kpis">
-        <div class="card"><h3>Ventas brutas</h3><strong id="repBruto">—</strong></div>
-        <div class="card"><h3>COGS</h3><strong id="repCogs">—</strong></div>
+        <div class="card"><h3>Ventas brutas (salidas)</h3><strong id="repBruto">—</strong></div>
+        <div class="card"><h3>COGS (costo de ventas)</h3><strong id="repCogs">—</strong></div>
         <div class="card"><h3>Ganancia líquida</h3><strong id="repLiquida">—</strong></div>
         <div class="card"><h3>Unidades vendidas</h3><strong id="repUnidades">—</strong></div>
+        <!-- NOVO KPI -->
+        <div class="card"><h3>Valor inventario (actual)</h3><strong id="repValorInv">—</strong></div>
+      </div>
+
+      <!-- Gráfico TOP vendidos -->
+      <div class="card chart-card">
+        <canvas id="repChartTop" aria-label="Top piezas por unidades" role="img"></canvas>
+      </div>
+
+      <!-- Gráfico série diária -->
+      <div class="card chart-card">
+        <canvas id="repChartSerie" aria-label="Ventas brutas por día" role="img"></canvas>
       </div>
 
       <div class="card">
-        <h3 style="margin-top:0">Top piezas por cantidad vendida</h3>
-        <canvas id="repChartTop" height="180"></canvas>
-      </div>
-
-      <div class="card">
-        <h3 style="margin-top:0">Ventas diarias (Bruto) del período</h3>
-        <canvas id="repChartSerie" height="180"></canvas>
-      </div>
-
-      <div class="card">
+        <h3>Top 20 piezas (por unidades)</h3>
         <div class="table-wrap">
-          <table class="table" id="repTopTable">
-            <thead>
-              <tr><th>Pieza</th><th class="num">Unidades</th><th class="num">Bruto</th></tr>
-            </thead>
+          <table class="table">
+            <thead><tr>
+              <th>Pieza</th><th class="num">Unidades</th><th class="num">Bruto</th>
+            </tr></thead>
             <tbody id="repTopBody"></tbody>
           </table>
         </div>
@@ -237,7 +230,7 @@
   <template id="tpl-inventario">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas, lotes y estado de stock.</p></div>
+        <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas y estado de stock.</p></div>
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
@@ -277,22 +270,22 @@
           </label>
 
           <label class="field"><span>Lead time (días)</span>
-            <input name="leadTimeDias" type="number" inputmode="numeric" min="0" step="1" value="0" />
+            <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
           </label>
 
           <!-- AUTOMÁTICOS (solo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
-            <input name="consumoDiario" type="number" inputmode="decimal" min="0" step="0.01" value="0" readonly
+            <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly
               title="Calculado automáticamente por movimientos (últimos 30 días)" />
           </label>
           <label class="field"><span>Stock mínimo (auto)</span>
-            <input name="stockMin" type="number" inputmode="numeric" min="0" step="1" value="0" readonly
+            <input name="stockMin" type="number" min="0" step="1" value="0" readonly
               title="ceil(CD × días de seguridad)" />
           </label>
 
-          <label class="field"><span>Stock</span><input name="stock" type="number" inputmode="numeric" min="0" step="1" value="0" required /></label>
-          <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" inputmode="decimal" min="0" step="0.01" value="0" /></label>
-          <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" inputmode="decimal" min="0" step="0.01" value="0" /></label>
+          <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
+          <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
+          <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
           <div class="row-actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
@@ -303,8 +296,6 @@
           ROP = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).
         </p>
       </details>
-
-      <!-- Tabela principal (continuará igual; lotes serão mostrados na coluna “Lotes/Precios”) -->
       <div class="card">
         <div class="table-wrap">
           <table class="table" id="partsTable">
@@ -325,7 +316,6 @@
         <div class="left"><h2>Movimientos</h2><p class="muted">Entradas y salidas que afectan el stock.</p></div>
         <div class="right">
           <select id="moveAlmacenFilter" class="input" title="Filtrar piezas por almacén"></select>
-          <!-- VOLTA AO VERMELHO -->
           <button id="undoLast" class="btn btn-danger">Deshacer último</button>
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
         </div>
@@ -345,17 +335,17 @@
           </label>
 
           <label class="field"><span>Cantidad</span>
-            <input name="cantidad" type="number" inputmode="numeric" min="1" step="1" required />
+            <input name="cantidad" type="number" min="1" step="1" required />
           </label>
 
           <!-- CAMPOS EXTRAS PARA ENTRADA -->
           <div id="entradaFields" class="field" style="grid-column: span 2; display:none">
             <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px">
               <label class="field"><span>Costo unitario (Bs)</span>
-                <input id="entradaCosto" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Costo deste lote" />
+                <input id="entradaCosto" type="number" step="0.01" min="0" placeholder="Costo deste lote" />
               </label>
               <label class="field"><span>Precio unitario (Bs)</span>
-                <input id="entradaPrecio" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Precio deste lote" />
+                <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio deste lote" />
               </label>
             </div>
             <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
@@ -371,8 +361,7 @@
 
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
 
-          <!-- barra fixa no mobile -->
-          <div class="row-actions mobile-sticky" style="grid-column: 1 / -1"><button type="submit" class="btn btn-primary">Aplicar</button></div>
+          <div class="row-actions" style="grid-column: 1 / -1"><button type="submit" class="btn btn-primary">Aplicar</button></div>
         </form>
       </div>
       <div class="card">
@@ -380,7 +369,7 @@
           <table class="table" id="movesTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th><th>Almacén</th><th>Tipo</th>
-              <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th>
+              <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th><th>Acciones</th>
             </tr></thead>
             <tbody id="movesTbody"></tbody>
           </table>
@@ -451,12 +440,10 @@
     </section>
   </template>
 
-  <!-- Chart.js p/ gráficos -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -474,8 +461,8 @@
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
-    const toISODate = (d)=> new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
-        /* ===== Auth ===== */
+
+    /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
       function set(user){
@@ -586,7 +573,7 @@
       }
 
       // ---- Movements ----
-      async function listMoves(limit=5000){
+      async function listMoves(limit=500){
         const { data, error } = await sb.from('movements')
           .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
           .eq('org_id', orgId())
@@ -599,20 +586,12 @@
       // ---- Lotes ----
       async function listLots(partId){
         const { data, error } = await sb.from('part_lots')
-          .select('id, part_id, qty, costo_unit, precio_unit')
+          .select('id, qty, costo_unit, precio_unit')
           .eq('org_id', orgId())
           .eq('part_id', partId)
           .order('id', {ascending:true});
         if(error) throw error;
         return (data||[]).filter(l => Number(l.qty||0) > 0);
-      }
-
-      async function listAllLots(){
-        const { data, error } = await sb.from('part_lots')
-          .select('id, part_id, qty, costo_unit, precio_unit')
-          .eq('org_id', orgId());
-        if(error) throw error;
-        return data||[];
       }
 
       async function createLot({ partId, qty, costo_unit, precio_unit }){
@@ -628,6 +607,15 @@
           .maybeSingle();
         if(error) throw error;
         return data;
+      }
+
+      // Valor de inventário atual por LOTES (custo)
+      async function inventoryValuationByLots(){
+        const { data, error } = await sb.from('part_lots')
+          .select('qty, costo_unit')
+          .eq('org_id', orgId());
+        if(error) throw error;
+        return (data||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
       }
 
       // Cria lote + movimento de ENTRADA para peça recém-criada (estoque inicial)
@@ -696,7 +684,7 @@
           const initialQty = Number(part.stock || 0);
           const rowInsert = {
             ...base,
-            stock: 0,                 // começa zerado e é ajustado pelo lote inicial
+            stock: 0,                 // começa zerado
             consumo_diario: 0,
             stock_min: 0,
           };
@@ -720,17 +708,11 @@
       }
 
       async function deletePart(id){
-        // apaga lotes e movimentos por segurança (assumindo ON DELETE RESTRICT nas FK fora do SQL)
-        await sb.from('part_lots').delete().eq('org_id', orgId()).eq('part_id', id);
+        // Remove movimentos relacionados (set null em lote_id já está na FK, mas vamos limpar por segurança)
         await sb.from('movements').delete().eq('org_id', orgId()).eq('pieza_id', id);
+        await sb.from('part_lots').delete().eq('org_id', orgId()).eq('part_id', id);
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
         if(error) throw error;
-      }
-
-      // ---- Avaliação do inventário por lotes
-      async function inventoryValueFromLots(){
-        const lots = await listAllLots();
-        return lots.reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
       }
 
       // ---- Aplicar movimento com lotes ----
@@ -808,7 +790,62 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ---- Desfazer último movimento
+      // ---- Deshacer POR ID (além do "último") ----
+      async function undoMovementById(movId){
+        const { data: m, error: em } = await sb.from('movements')
+          .select('id, pieza_id, tipo, cantidad, lote_id')
+          .eq('org_id', orgId()).eq('id', movId).maybeSingle();
+        if(em) throw em;
+        if(!m) throw new Error('Movimiento no encontrado');
+
+        const q = Number(m.cantidad||0);
+
+        // pegar peça
+        const { data: p, error: ep } = await sb.from('parts')
+          .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
+        if(ep) throw ep;
+
+        if(m.tipo === 'entrada'){
+          // precisa que o lote relacionado tenha pelo menos q disponível agora
+          if(!m.lote_id) throw new Error('Movimiento de entrada sin lote asociado');
+          const { data: lot, error: el } = await sb.from('part_lots')
+            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
+          if(el) throw el;
+          if(!lot) throw new Error('Lote no encontrado para esta entrada');
+          if(Number(lot.qty||0) < q) throw new Error('No se puede deshacer: parte del lote ya fue consumida');
+
+          // reduzir peça e lote
+          if(p){
+            const newStock = Math.max(0, Number(p.stock||0) - q);
+            await sb.from('parts').update({ stock: newStock }).eq('id', p.id).eq('org_id', orgId());
+          }
+          await sb.from('part_lots').update({ qty: Number(lot.qty||0) - q }).eq('id', lot.id).eq('org_id', orgId());
+
+        }else{ // salida
+          // devolver ao lote
+          if(!m.lote_id) throw new Error('Movimiento de salida sin lote asociado');
+          const { data: lot, error: el } = await sb.from('part_lots')
+            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
+          if(el) throw el;
+          if(!lot) throw new Error('Lote no encontrado para esta salida');
+
+          await sb.from('part_lots').update({ qty: Number(lot.qty||0) + q }).eq('id', lot.id).eq('org_id', orgId());
+
+          // somar no estoque da peça
+          if(p){
+            await sb.from('parts').update({ stock: Number(p.stock||0) + q }).eq('id', p.id).eq('org_id', orgId());
+          }
+        }
+
+        // apaga o movimento
+        await sb.from('movements').delete().eq('id', m.id).eq('org_id', orgId());
+
+        if(m.pieza_id){
+          await recomputeMetrics(m.pieza_id);
+        }
+      }
+
+      // ---- Desfazer último movimento (mantido) ----
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
           .select('id')
@@ -818,81 +855,6 @@
         if(error) throw error;
         if(!last) throw new Error('Sin movimientos');
         await undoMovementById(last.id);
-      }
-
-      // ---- Desfazer por ID (para qualquer linha)
-      async function undoMovementById(movId){
-        const { data: m, error } = await sb.from('movements')
-          .select('id, pieza_id, tipo, cantidad, lote_id, costo_unit, precio_unit, codigo, nombre')
-          .eq('org_id', orgId()).eq('id', movId).maybeSingle();
-        if(error) throw error;
-        if(!m) throw new Error('Movimiento no encontrado');
-
-        const q = Number(m.cantidad||0);
-
-        if(m.tipo === 'entrada'){
-          // recuperar peça
-          const { data: p, error: ep } = await sb.from('parts')
-            .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
-          if(ep) throw ep;
-          if(!p) throw new Error('Pieza no encontrada (entrada)');
-
-          if(Number(p.stock||0) < q){
-            throw new Error('No se puede deshacer: stock actual es menor que la entrada');
-          }
-
-          // reduzir estoque
-          const { error: up } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) - q })
-            .eq('id', p.id).eq('org_id', orgId());
-          if(up) throw up;
-
-          // reduzir lote (se existir)
-          if(m.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-            if(el) throw el;
-            if(lot){
-              const newQty = Math.max(0, Number(lot.qty||0) - q);
-              const { error: upLot } = await sb.from('part_lots')
-                .update({ qty: newQty })
-                .eq('id', lot.id).eq('org_id', orgId());
-              if(upLot) throw upLot;
-            }
-          }
-
-        }else{ // salida
-          // devolver ao lote
-          if(m.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-            if(el) throw el;
-            if(lot){
-              const { error: upLot } = await sb.from('part_lots')
-                .update({ qty: Number(lot.qty||0) + q })
-                .eq('id', lot.id).eq('org_id', orgId());
-              if(upLot) throw upLot;
-            }
-          }
-          // somar de volta no estoque da peça
-          const { data: p, error: ep } = await sb.from('parts')
-            .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
-          if(ep) throw ep;
-          if(!p) throw new Error('Pieza no encontrada (salida)');
-          const { error: up } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) + q })
-            .eq('id', p.id).eq('org_id', orgId());
-          if(up) throw up;
-        }
-
-        // apaga o movimento
-        const { error: delErr } = await sb.from('movements')
-          .delete().eq('id', m.id).eq('org_id', orgId());
-        if(delErr) throw delErr;
-
-        if(m.pieza_id){
-          await recomputeMetrics(m.pieza_id);
-        }
       }
 
       // ---- Historial de precios ----
@@ -970,9 +932,9 @@
       return {
         listParts, getPartById, upsertPart, deletePart,
         listMoves, applyMovement, undoLastMovement, undoMovementById,
-        listLots, listAllLots, addPriceHistory, listPriceHistory,
+        listLots, addPriceHistory, listPriceHistory,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics, inventoryValueFromLots
+        recomputeMetrics, inventoryValuationByLots
       };
     })();
 
@@ -982,19 +944,13 @@
     const sidebar = document.getElementById('sidebar');
     const userLabel = document.getElementById('userLabel');
     const logoutBtn = document.getElementById('logoutBtn');
-    const toggleDenseBtn = document.getElementById('toggleDense');
     const PUBLIC_ROUTES = ['login'];
+
+    // densidade memorável
+    (()=>{ if(localStorage.getItem('denseMode')==='1') document.body.classList.add('dense'); })();
 
     async function init(){
       await Auth.init();
-      // modo denso persistente
-      if(localStorage.getItem('denseMode')==='1'){ document.body.classList.add('dense'); }
-      if(toggleDenseBtn){
-        toggleDenseBtn.addEventListener('click', ()=>{
-          document.body.classList.toggle('dense');
-          localStorage.setItem('denseMode', document.body.classList.contains('dense') ? '1' : '0');
-        });
-      }
       if(logoutBtn){
         logoutBtn.addEventListener('click', async () => { await Auth.logout(); location.hash = '#/login'; await route(); });
       }
@@ -1028,7 +984,7 @@
 
       switch(path){
         case 'login': await renderLogin(); break;
-        case 'reportes': await renderReportes(); break;   // novo nome
+        case 'reportes': await renderReportes(); break;
         case 'inventario': await renderInventario(); break;
         case 'movimientos': await renderMovimientos(); break;
         case 'sugerencias': await renderSugerencias(); break;
@@ -1067,107 +1023,124 @@
       });
     }
 
-    /* ===== REPORTES (gráficos + filtro de datas) ===== */
-    let repTopChart = null, repSerieChart = null;
-
+    /* ===== REPORTES ===== */
+    let chartTop = null, chartSerie = null;
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      const desde = document.getElementById('repDesde');
-      const hasta = document.getElementById('repHasta');
-      const btn = document.getElementById('repAplicar');
-      const elBruto = document.getElementById('repBruto');
-      const elCogs = document.getElementById('repCogs');
-      const elLiquida = document.getElementById('repLiquida');
-      const elUnidades = document.getElementById('repUnidades');
-      const tbody = document.getElementById('repTopBody');
+      const desdeEl = document.getElementById('repDesde');
+      const hastaEl = document.getElementById('repHasta');
+      const aplicarBtn = document.getElementById('repAplicar');
+      const brutoEl = document.getElementById('repBruto');
+      const cogsEl = document.getElementById('repCogs');
+      const liqEl = document.getElementById('repLiquida');
+      const unidEl = document.getElementById('repUnidades');
+      const valorInvEl = document.getElementById('repValorInv');
+      const topBody = document.getElementById('repTopBody');
+      const toggleDenseBtn = document.getElementById('toggleDense');
 
-      // padrão: últimos 30 dias
-      const h = new Date();
-      const d = new Date(Date.now()-29*24*3600*1000);
-      desde.value = toISODate(d);
-      hasta.value = toISODate(h);
+      // datas padrão (últimos 30 dias)
+      const now = new Date();
+      const start = new Date(now.getTime() - 29*24*3600*1000);
+      desdeEl.value = start.toISOString().slice(0,10);
+      hastaEl.value = now.toISOString().slice(0,10);
 
-      const parts = await DB.listParts();
-      const partsMap = new Map(parts.map(p=>[p.id, p]));
+      toggleDenseBtn.addEventListener('click', ()=>{
+        document.body.classList.toggle('dense');
+        localStorage.setItem('denseMode', document.body.classList.contains('dense') ? '1' : '0');
+      });
 
-      async function loadAndPaint(){
-        const all = await DB.listMoves(10000);
-        const d1 = new Date(desde.value+'T00:00:00');
-        const d2 = new Date(hasta.value+'T23:59:59');
+      async function load(){
+        const d1 = new Date(desdeEl.value+'T00:00:00');
+        const d2 = new Date(hastaEl.value+'T23:59:59');
+        const moves = await DB.listMoves(10000);
+        const parts = await DB.listParts();
+        const pmap = new Map(parts.map(p=>[p.id, p]));
 
-        const sel = all.filter(m=>{
-          const t = new Date(m.fecha);
-          return (m.tipo==='salida' && t>=d1 && t<=d2);
+        // filtro por período
+        const rng = moves.filter(m => {
+          const t = new Date(m.fecha).getTime();
+          return t >= d1.getTime() && t <= d2.getTime();
         });
 
-        // KPIs e agrupamentos
-        let bruto=0, cogs=0, unidades=0;
-        const byPart = new Map(); // id -> {nombre,codigo, units, bruto}
-        const byDay = new Map();  // 'YYYY-MM-DD' -> bruto
+        // totais
+        let bruto = 0, cogs = 0, unidades = 0;
+        const byKey = new Map(); // key = pieza_id || codigo|nombre
+        const byDay = new Map(); // yyyy-mm-dd -> bruto
 
-        for(const m of sel){
-          const p = m.pieza_id ? partsMap.get(m.pieza_id) : null;
+        for(const m of rng){
+          if(m.tipo !== 'salida') continue;
+          const p = m.pieza_id ? pmap.get(m.pieza_id) : null;
           const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
           const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
           const q = Number(m.cantidad||0);
-
           bruto += precio*q;
-          cogs  += costo*q;
+          cogs  +=  costo*q;
           unidades += q;
 
           const key = m.pieza_id || `${m.codigo}|${m.nombre}`;
-          const rec = byPart.get(key) || { nombre:m.nombre, codigo:m.codigo, units:0, bruto:0 };
-          rec.units += q; rec.bruto += precio*q;
-          byPart.set(key, rec);
+          const agg = byKey.get(key) || { codigo:m.codigo, nombre:m.nombre, unidades:0, bruto:0 };
+          agg.unidades += q; agg.bruto += precio*q;
+          byKey.set(key, agg);
 
-          const dayKey = (new Date(m.fecha).toISOString()).slice(0,10);
-          byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
+          const day = new Date(m.fecha).toISOString().slice(0,10);
+          byDay.set(day, (byDay.get(day)||0) + precio*q);
         }
 
-        elBruto.textContent = fmtMoney(bruto);
-        elCogs.textContent = fmtMoney(cogs);
-        elLiquida.textContent = fmtMoney(bruto-cogs);
-        elUnidades.textContent = unidades;
+        const valorInv = await DB.inventoryValuationByLots();
 
-        // Tabela top
-        const top = Array.from(byPart.values()).sort((a,b)=> b.units-a.units).slice(0,20);
-        tbody.innerHTML = top.map(x=>`
+        brutoEl.textContent = fmtMoney(bruto);
+        cogsEl.textContent = fmtMoney(cogs);
+        liqEl.textContent = fmtMoney(bruto-cogs);
+        unidEl.textContent = unidades;
+        valorInvEl.textContent = fmtMoney(valorInv);
+
+        // tabela top
+        const topArr = Array.from(byKey.values()).sort((a,b)=> b.unidades - a.unidades).slice(0,20);
+        topBody.innerHTML = topArr.map(r=>`
           <tr>
-            <td data-label="Pieza">${escapeHtml(x.codigo||'')} — ${escapeHtml(x.nombre||'')}</td>
-            <td class="num" data-label="Unidades">${x.units}</td>
-            <td class="num" data-label="Bruto">${fmtMoney(x.bruto)}</td>
-          </tr>
-        `).join('');
+            <td>${escapeHtml(r.codigo||'—')} — ${escapeHtml(r.nombre||'')}</td>
+            <td class="num">${r.unidades}</td>
+            <td class="num">${fmtMoney(r.bruto)}</td>
+          </tr>`).join('');
 
-        // Gráfico Top (barras)
-        const labelsTop = top.map(x=> (x.codigo||'') + ' ' + (x.nombre||''));
-        const dataTop = top.map(x=> x.units);
-        if(repTopChart){ repTopChart.destroy(); }
-        repTopChart = new Chart(document.getElementById('repChartTop'), {
+        // chart TOP
+        const labelsTop = topArr.map(r => r.nombre || r.codigo || '—');
+        const dataTop = topArr.map(r => r.unidades);
+
+        const ctxTop = document.getElementById('repChartTop').getContext('2d');
+        if(chartTop) chartTop.destroy();
+        chartTop = new Chart(ctxTop, {
           type: 'bar',
           data: { labels: labelsTop, datasets: [{ label: 'Unidades', data: dataTop }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ autoSkip:false, maxRotation:60, minRotation:0 }}} }
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display:false } },
+            scales: { x: { ticks:{ autoSkip: true, maxRotation:0 } }, y:{ beginAtZero:true, precision:0 } }
+          }
         });
 
-        // Série diária
-        // preencher dias faltantes no range
-        const days = [];
-        for(let t=new Date(d1); t<=d2; t.setDate(t.getDate()+1)){
-          days.push(toISODate(t));
-        }
-        const serie = days.map(k => byDay.get(k)||0);
-        if(repSerieChart){ repSerieChart.destroy(); }
-        repSerieChart = new Chart(document.getElementById('repChartSerie'), {
+        // chart série diária (bruto)
+        const days = Array.from(byDay.keys()).sort();
+        const dataSerie = days.map(d => byDay.get(d));
+        const ctxSerie = document.getElementById('repChartSerie').getContext('2d');
+        if(chartSerie) chartSerie.destroy();
+        chartSerie = new Chart(ctxSerie, {
           type: 'line',
-          data: { labels: days, datasets: [{ label: 'Bruto', data: serie }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, elements:{ line:{ tension:.2 } } }
+          data: { labels: days, datasets: [{ label: 'Bruto/día', data: dataSerie, tension:.2, fill:false }] },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display:true } },
+            scales: { y: { beginAtZero:true } }
+          }
         });
       }
 
-      btn.addEventListener('click', loadAndPaint);
-      await loadAndPaint();
+      aplicarBtn.addEventListener('click', load);
+      await load();
     }
 
     async function renderInventario(){
@@ -1189,12 +1162,7 @@
       if(safety2) safety2.textContent = SAFETY_DAYS;
 
       let parts = await DB.listParts();
-      let lotsAll = await DB.listAllLots(); // para mostrar “Lotes/Precios”
-      const lotsByPart = new Map();
-      for(const l of lotsAll){
-        if(!lotsByPart.has(l.part_id)) lotsByPart.set(l.part_id, []);
-        lotsByPart.get(l.part_id).push(l);
-      }
+      const lotsCache = new Map();
 
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1229,37 +1197,43 @@
         return passQ && passA;
       }
 
-      function lotBadgesHtml(pId){
-        const arr = (lotsByPart.get(pId)||[]).filter(l=>Number(l.qty||0)>0);
-        if(!arr.length) return '<span class="muted xs">—</span>';
-        // exemplo: "5× 100 • 5× 115"
-        return arr.map(l => {
-          return `<span class="badge">${Number(l.qty)}× ${fmtMoney(l.precio_unit)}</span>`;
-        }).join(' ');
+      async function renderLotsCell(partId){
+        if(!lotsCache.has(partId)){
+          lotsCache.set(partId, DB.listLots(partId));
+        }
+        const lots = await lotsCache.get(partId);
+        if(!lots.length) return '<span class="xs muted">—</span>';
+        return lots.map(l => `<span class="badge" title="Costo ${fmtMoney(l.costo_unit)} | Precio ${fmtMoney(l.precio_unit)}">${l.qty}u @ ${fmtMoney(l.precio_unit)}</span>`).join(' ');
       }
 
-      function paint(){
+      async function paint(){
         tbody.innerHTML = '';
-        parts.filter(matchesFilters).forEach(p=>{
+        const filtered = parts.filter(matchesFilters);
+        for(const p of filtered){
           const low = Number(p.stock) < Number(p.stockMin);
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td data-label="Código">${escapeHtml(p.codigo)}</td>
-            <td data-label="Nombre">${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
-            <td data-label="Categoría">${escapeHtml(p.categoria||'')}</td>
-            <td data-label="Almacén">${escapeHtml(p.almacen||'')}</td>
-            <td data-label="Ubicación">${escapeHtml(p.ubicacion||'')}</td>
-            <td class="num" data-label="Stock">${p.stock}</td>
-            <td class="num" data-label="Mín">${p.stockMin}</td>
-            <td class="num" data-label="Costo (Bs)">${fmtMoney(p.costo)}</td>
-            <td class="num" data-label="Precio (Bs)">${fmtMoney(p.precio)}</td>
-            <td data-label="Lotes/Precios">${lotBadgesHtml(p.id)}</td>
-            <td class="num" data-label="Acciones">
+            <td>${escapeHtml(p.codigo)}</td>
+            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+            <td>${escapeHtml(p.categoria||'')}</td>
+            <td>${escapeHtml(p.almacen||'')}</td>
+            <td>${escapeHtml(p.ubicacion||'')}</td>
+            <td class="num">${p.stock}</td>
+            <td class="num">${p.stockMin}</td>
+            <td class="num">${fmtMoney(p.costo)}</td>
+            <td class="num">${fmtMoney(p.precio)}</td>
+            <td id="lots-${p.id}"><span class="xs muted">cargando…</span></td>
+            <td class="num">
               <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
               <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
             </td>`;
           tbody.appendChild(tr);
-        });
+          // preencher a célula de lotes async sem travar a UI
+          renderLotsCell(p.id).then(html=>{
+            const cell = document.getElementById(`lots-${p.id}`);
+            if(cell) cell.innerHTML = html;
+          });
+        }
       }
 
       buildFilters();
@@ -1305,7 +1279,7 @@
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          // historial de precio si alterou base
+          // historial de precio se alterou base
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -1318,9 +1292,8 @@
           }
 
           parts = await DB.listParts();
-          lotsAll = await DB.listAllLots(); lotsByPart.clear();
-          for(const l of lotsAll){ if(!lotsByPart.has(l.part_id)) lotsByPart.set(l.part_id,[]); lotsByPart.get(l.part_id).push(l); }
-          buildFilters(); buildSuggestors(); paint();
+          lotsCache.clear();
+          buildFilters(); buildSuggestors(); await paint();
 
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
@@ -1342,7 +1315,7 @@
           form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
           form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
           form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
+          form.querySelector('input[name="stock"]').value = p.stock; // ajuste de estoque via movimentos
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
         }
@@ -1350,9 +1323,7 @@
           if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
           try{
             await DB.deletePart(id);
-            parts = await DB.listParts(); lotsAll = await DB.listAllLots(); lotsByPart.clear();
-            for(const l of lotsAll){ if(!lotsByPart.has(l.part_id)) lotsByPart.set(l.part_id,[]); lotsByPart.get(l.part_id).push(l); }
-            buildFilters(); buildSuggestors(); paint();
+            parts = await DB.listParts(); lotsCache.clear(); buildFilters(); buildSuggestors(); await paint();
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
@@ -1378,9 +1349,7 @@
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts(); lotsAll = await DB.listAllLots(); lotsByPart.clear();
-            for(const l of lotsAll){ if(!lotsByPart.has(l.part_id)) lotsByPart.set(l.part_id,[]); lotsByPart.get(l.part_id).push(l); }
-            buildFilters(); buildSuggestors(); paint();
+            parts = await DB.listParts(); lotsCache.clear(); buildFilters(); buildSuggestors(); await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           document.getElementById('importCSV').value = '';
@@ -1409,7 +1378,7 @@
       const applyBtn = moveForm.querySelector('button[type="submit"]');
 
       let parts = await DB.listParts();
-      let moves = await DB.listMoves(5000);
+      let moves = await DB.listMoves(2000);
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1464,22 +1433,15 @@
         moves.forEach(m=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td data-label="Fecha">${fmtDate(m.fecha)}</td>
-            <td data-label="Código">${escapeHtml(m.codigo)}</td>
-            <td data-label="Nombre">${escapeHtml(m.nombre)}</td>
-            <td data-label="Almacén">${escapeHtml(m.almacen||'')}</td>
-            <td data-label="Tipo">${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
-            <td class="num" data-label="Cantidad">${m.cantidad}</td>
-            <td data-label="Referencia">${escapeHtml(m.referencia||'')}</td>
-            <td data-label="Usuario">${escapeHtml(m.usuario||'')}</td>
-          `;
-          // botão “deshacer” por linha (coluna extra visualmente no fim)
-          const tdAct = document.createElement('td');
-          tdAct.className = 'num';
-          tdAct.setAttribute('data-label','Acciones');
-          tdAct.innerHTML = `<button class="btn btn-danger" data-act="undo" data-id="${m.id}">Deshacer</button>`;
-          tr.appendChild(tdAct);
-
+            <td>${fmtDate(m.fecha)}</td>
+            <td>${escapeHtml(m.codigo)}</td>
+            <td>${escapeHtml(m.nombre)}</td>
+            <td>${escapeHtml(m.almacen||'')}</td>
+            <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
+            <td class="num">${m.cantidad}</td>
+            <td>${escapeHtml(m.referencia||'')}</td>
+            <td>${escapeHtml(m.usuario||'')}</td>
+            <td><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
       }
@@ -1509,28 +1471,28 @@
           }
 
           await DB.applyMovement(payload);
-          parts = await DB.listParts(); moves = await DB.listMoves(5000); paintMoves();
+          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
           alert('Movimiento registrado');
           moveForm.reset(); fillPartOptions(); toggleMoveFields();
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // deshacer último (botão vermelho topo)
+      // Deshacer último (botão vermelho)
       undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(5000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
 
-      // deshacer por linha
+      // Deshacer por línea
       tbody.addEventListener('click', async (e)=>{
-        const b = e.target.closest('button[data-act="undo"]'); if(!b) return;
-        const id = b.dataset.id;
+        const btn = e.target.closest('button[data-undo]'); if(!btn) return;
+        const id = btn.getAttribute('data-undo');
         if(!confirm('¿Deshacer este movimiento?')) return;
         try{
           await DB.undoMovementById(id);
-          moves = await DB.listMoves(5000); paintMoves();
+          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
           alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
+        }catch(err){ alert(err.message || 'No se pudo deshacer este movimiento'); }
       });
 
       exportBtn.addEventListener('click', async ()=>{
@@ -1584,16 +1546,16 @@
         list.forEach(p=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td data-label="Código">${escapeHtml(p.codigo)}</td>
-            <td data-label="Nombre">${escapeHtml(p.nombre)}</td>
-            <td data-label="Proveedor">${escapeHtml(p.proveedor||'')}</td>
-            <td data-label="Almacén">${escapeHtml(p.almacen||'')}</td>
-            <td class="num" data-label="Stock">${p.stock}</td>
-            <td class="num" data-label="Mín">${p.stockMin}</td>
-            <td class="num" data-label="CD">${p.consumoDiario||0}</td>
-            <td class="num" data-label="LT">${p.leadTimeDias||0}</td>
-            <td class="num" data-label="ROP">${p.rop}</td>
-            <td class="num" data-label="Sugerido">${p.sugerido}</td>`;
+            <td>${escapeHtml(p.codigo)}</td>
+            <td>${escapeHtml(p.nombre)}</td>
+            <td>${escapeHtml(p.proveedor||'')}</td>
+            <td>${escapeHtml(p.almacen||'')}</td>
+            <td class="num">${p.stock}</td>
+            <td class="num">${p.stockMin}</td>
+            <td class="num">${p.consumoDiario||0}</td>
+            <td class="num">${p.leadTimeDias||0}</td>
+            <td class="num">${p.rop}</td>
+            <td class="num">${p.sugerido}</td>`;
           tbody.appendChild(tr);
         });
       }
@@ -1675,12 +1637,12 @@
       hist.forEach(h=>{
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td data-label="Fecha">${fmtDate(h.fecha)}</td>
-          <td data-label="Código">${escapeHtml(h.codigo)}</td>
-          <td data-label="Nombre">${escapeHtml(h.nombre)}</td>
-          <td class="num" data-label="Costo">${fmtMoney(h.costoAntes)} ➝ ${fmtMoney(h.costoDespues)}</td>
-          <td class="num" data-label="Precio">${fmtMoney(h.precioAntes)} ➝ ${fmtMoney(h.precioDespues)}</td>
-          <td data-label="Usuario">${escapeHtml(h.usuario||'')}</td>`;
+          <td>${fmtDate(h.fecha)}</td>
+          <td>${escapeHtml(h.codigo)}</td>
+          <td>${escapeHtml(h.nombre)}</td>
+          <td class="num">${fmtMoney(h.costoAntes)} ➝ ${fmtMoney(h.costoDespues)}</td>
+          <td class="num">${fmtMoney(h.precioAntes)} ➝ ${fmtMoney(h.precioDespues)}</td>
+          <td>${escapeHtml(h.usuario||'')}</td>`;
         tbody.appendChild(tr);
       });
     }
@@ -1712,4 +1674,3 @@
   </script>
 </body>
 </html>
-    
