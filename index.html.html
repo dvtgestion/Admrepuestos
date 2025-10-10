@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -34,7 +34,7 @@
     .sidebar-foot{ margin-top:auto; display:flex; flex-direction:column; gap:8px; }
     .user-label{font-size:12px; color:var(--muted)}
 
-    .view{padding:24px; max-width:1200px; width:100%}
+    .view{padding:24px; max-width:1300px; width:100%}
 
     .center{
       display:flex; align-items:center; justify-content:center;
@@ -76,13 +76,13 @@
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
 
-    .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
+    .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
 
     .table-wrap{width:100%; overflow:auto}
     .table{width:100%; border-collapse:separate; border-spacing:0}
-    .table th,.table td{padding:10px 12px; border-bottom:1px solid var(--border)}
+    .table th,.table td{padding:10px 10px; border-bottom:1px solid var(--border); vertical-align:middle}
     .table th{font-weight:600; text-align:left; white-space:nowrap}
     .table td.num,.table th.num{text-align:right}
 
@@ -94,7 +94,7 @@
     .grid{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:12px; }
     .grid .field{min-width:0}
 
-    .kpis{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px}
+    .kpis{display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px}
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
 
@@ -103,35 +103,51 @@
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
 
-    /* densidade compacta opcional */
-    body.dense .table th, body.dense .table td { padding:8px 10px; }
-    body.dense .btn, body.dense .input, body.dense .field input, body.dense .field select { height:40px; }
-    #toggleDense{ display:inline-flex; align-items:center; gap:6px; }
+    /* Inventario — caret + drawer de lotes */
+    .caret-cell{ width:34px; }
+    .caret-btn{
+      width:28px; height:28px; border-radius:8px; border:1px solid var(--border);
+      background:#fff; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+      font-size:14px; line-height:1; transform:rotate(0deg); transition:transform .15s ease;
+    }
+    .caret-btn[aria-expanded="true"]{ transform:rotate(90deg); }
+    .lot-row td{ background:#fafafa; }
+    .lot-grid{
+      display:grid; grid-template-columns:repeat(3, minmax(100px,1fr)); gap:8px; font-size:13px;
+    }
+    .lot-grid .lot{ padding:10px; border:1px dashed var(--border); border-radius:10px; background:#fff; }
+    .lot strong{ display:block; margin-bottom:4px; }
+    .lot small{ color:var(--muted); }
 
-    /* Cartões de gráfico mais baixos */
-    .chart-card { height: 220px; padding: 12px; }
-    .chart-card canvas{ width:100% !important; height:100% !important; display:block; }
+    /* Reportes — toolbar de filtros */
+    .reportes-toolbar{ display:flex; align-items:end; gap:8px; flex-wrap:wrap; margin-bottom:12px }
+    .reportes-toolbar .field{ margin:0; }
+    .reportes-toolbar .field input{ height:38px; font-size:14px; }
+    .reportes-toolbar .btn{ height:38px; font-size:14px; padding:8px 12px; }
 
+    /* Charts compactos */
+    .chart-wrap{ width:100%; height:220px; }
+    canvas.report-chart{ width:100% !important; height:220px !important; }
+
+    /* Mobile refinado */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
       .sidebar{position:sticky; top:0; z-index:10}
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
-      .chart-card{ height: 200px; }
+      .lot-grid{ grid-template-columns:repeat(2,minmax(120px,1fr)); }
     }
     @media (max-width:600px){
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
       .kpis{grid-template-columns:1fr;}
       .toolbar .right{gap:6px}
-      .chart-card{ height: 180px; }
+      .lot-grid{ grid-template-columns:1fr; }
+      .reportes-toolbar{ gap:6px }
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
   </style>
-
-  <!-- Chart.js para os gráficos do Reportes -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
   <div id="app" class="app no-sidebar">
@@ -177,60 +193,10 @@
     </section>
   </template>
 
-  <!-- REPORTES -->
-  <template id="tpl-reportes">
-    <section class="stack">
-      <header class="toolbar">
-        <div class="left">
-          <h2>Reportes</h2>
-          <p class="muted">Ventas, top piezas y resumen financiero.</p>
-        </div>
-        <div class="right">
-          <label class="field" style="min-width:160px"><span class="xs">Desde</span><input id="repDesde" type="date"/></label>
-          <label class="field" style="min-width:160px"><span class="xs">Hasta</span><input id="repHasta" type="date"/></label>
-          <button id="repAplicar" class="btn btn-primary">Aplicar</button>
-          <button id="toggleDense" class="btn" title="Alternar modo compacto">Vista compacta</button>
-        </div>
-      </header>
-
-      <!-- KPIs -->
-      <div class="kpis">
-        <div class="card"><h3>Ventas brutas (salidas)</h3><strong id="repBruto">—</strong></div>
-        <div class="card"><h3>COGS (costo de ventas)</h3><strong id="repCogs">—</strong></div>
-        <div class="card"><h3>Ganancia líquida</h3><strong id="repLiquida">—</strong></div>
-        <div class="card"><h3>Unidades vendidas</h3><strong id="repUnidades">—</strong></div>
-        <!-- NOVO KPI -->
-        <div class="card"><h3>Valor inventario (actual)</h3><strong id="repValorInv">—</strong></div>
-      </div>
-
-      <!-- Gráfico TOP vendidos -->
-      <div class="card chart-card">
-        <canvas id="repChartTop" aria-label="Top piezas por unidades" role="img"></canvas>
-      </div>
-
-      <!-- Gráfico série diária -->
-      <div class="card chart-card">
-        <canvas id="repChartSerie" aria-label="Ventas brutas por día" role="img"></canvas>
-      </div>
-
-      <div class="card">
-        <h3>Top 20 piezas (por unidades)</h3>
-        <div class="table-wrap">
-          <table class="table">
-            <thead><tr>
-              <th>Pieza</th><th class="num">Unidades</th><th class="num">Bruto</th>
-            </tr></thead>
-            <tbody id="repTopBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-  </template>
-
   <template id="tpl-inventario">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas y estado de stock.</p></div>
+        <div class="left"><h2>Inventario</h2><p class="muted">Piezas, lotes y estado de stock.</p></div>
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
@@ -300,8 +266,9 @@
         <div class="table-wrap">
           <table class="table" id="partsTable">
             <thead><tr>
+              <th class="caret-cell"></th>
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
-              <th class="num">Stock</th><th class="num">Mín</th><th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th>Lotes/Precios</th><th></th>
+              <th class="num">Stock</th><th class="num">Mín</th><th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
           </table>
@@ -369,7 +336,7 @@
           <table class="table" id="movesTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th><th>Almacén</th><th>Tipo</th>
-              <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th><th>Acciones</th>
+              <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th><th></th>
             </tr></thead>
             <tbody id="movesTbody"></tbody>
           </table>
@@ -440,10 +407,45 @@
     </section>
   </template>
 
-  <!-- Supabase JS -->
+  <!-- NOVO: Reportes -->
+  <template id="tpl-reportes">
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left"><h2>Reportes</h2><p class="muted">Resumen financiero y ventas.</p></div>
+        <div class="right">
+          <div class="reportes-toolbar">
+            <label class="field"><span class="xs">Desde</span><input type="date" id="repDesde"></label>
+            <label class="field"><span class="xs">Hasta</span><input type="date" id="repHasta"></label>
+            <button id="repAplicar" class="btn btn-primary">Aplicar</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="kpis">
+        <div class="card"><h3>Ventas brutas</h3><strong id="kpiBruto">—</strong></div>
+        <div class="card"><h3>COGS</h3><strong id="kpiCogs">—</strong></div>
+        <div class="card"><h3>Ganancia líquida</h3><strong id="kpiLiquida">—</strong></div>
+        <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
+        <div class="card"><h3>Valor del inventario</h3><strong id="kpiInvVal">—</strong></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Top 10 más vendidas</h3>
+        <div class="chart-wrap"><canvas id="chartTop" class="report-chart"></canvas></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-top:0">Ventas por día</h3>
+        <div class="chart-wrap"><canvas id="chartDia" class="report-chart"></canvas></div>
+      </div>
+    </section>
+  </template>
+
+  <!-- Supabase JS & Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-    <script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+
+  <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -573,7 +575,7 @@
       }
 
       // ---- Movements ----
-      async function listMoves(limit=500){
+      async function listMoves(limit=5000){
         const { data, error } = await sb.from('movements')
           .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
           .eq('org_id', orgId())
@@ -607,15 +609,6 @@
           .maybeSingle();
         if(error) throw error;
         return data;
-      }
-
-      // Valor de inventário atual por LOTES (custo)
-      async function inventoryValuationByLots(){
-        const { data, error } = await sb.from('part_lots')
-          .select('qty, costo_unit')
-          .eq('org_id', orgId());
-        if(error) throw error;
-        return (data||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
       }
 
       // Cria lote + movimento de ENTRADA para peça recém-criada (estoque inicial)
@@ -708,9 +701,10 @@
       }
 
       async function deletePart(id){
-        // Remove movimentos relacionados (set null em lote_id já está na FK, mas vamos limpar por segurança)
-        await sb.from('movements').delete().eq('org_id', orgId()).eq('pieza_id', id);
-        await sb.from('part_lots').delete().eq('org_id', orgId()).eq('part_id', id);
+        // Apaga lotes e movimentos relacionados (ON DELETE CASCADE, se definido via triggers);
+        // fallback: deletar na mão
+        await sb.from('movements').delete().eq('pieza_id', id).eq('org_id', orgId());
+        await sb.from('part_lots').delete().eq('part_id', id).eq('org_id', orgId());
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
         if(error) throw error;
       }
@@ -727,8 +721,8 @@
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
-          const c = (costoUnit != null) ? Number(costoUnit) : Number(p.costo||0);
-          const pr = (precioUnit != null) ? Number(precioUnit) : Number(p.precio||0);
+          const c = (costoUnit != null && costoUnit!=='') ? Number(costoUnit) : Number(p.costo||0);
+          const pr = (precioUnit != null && precioUnit!=='') ? Number(precioUnit) : Number(p.precio||0);
 
           // cria novo lote com este custo/preço
           const lot = await createLot({ partId: p.id, qty: q, costo_unit: c, precio_unit: pr });
@@ -790,62 +784,81 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ---- Deshacer POR ID (além do "último") ----
-      async function undoMovementById(movId){
-        const { data: m, error: em } = await sb.from('movements')
+      // ---- Deshacer por ID e último ----
+      async function undoMovementById(id){
+        const { data: mov, error: em } = await sb.from('movements')
           .select('id, pieza_id, tipo, cantidad, lote_id')
-          .eq('org_id', orgId()).eq('id', movId).maybeSingle();
+          .eq('org_id', orgId())
+          .eq('id', id)
+          .maybeSingle();
         if(em) throw em;
-        if(!m) throw new Error('Movimiento no encontrado');
+        if(!mov) throw new Error('Movimiento no encontrado');
 
-        const q = Number(m.cantidad||0);
+        const q = Number(mov.cantidad||0);
 
-        // pegar peça
-        const { data: p, error: ep } = await sb.from('parts')
-          .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
-        if(ep) throw ep;
+        if(mov.tipo === 'entrada'){
+          // reduzir estoque da peça
+          const { data: p, error: ep } = await sb.from('parts')
+            .select('id, stock').eq('id', mov.pieza_id).eq('org_id', orgId()).maybeSingle();
+          if(ep) throw ep;
+          if(!p) throw new Error('Pieza no encontrada para revertir');
 
-        if(m.tipo === 'entrada'){
-          // precisa que o lote relacionado tenha pelo menos q disponível agora
-          if(!m.lote_id) throw new Error('Movimiento de entrada sin lote asociado');
-          const { data: lot, error: el } = await sb.from('part_lots')
-            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-          if(el) throw el;
-          if(!lot) throw new Error('Lote no encontrado para esta entrada');
-          if(Number(lot.qty||0) < q) throw new Error('No se puede deshacer: parte del lote ya fue consumida');
+          if(Number(p.stock||0) < q)
+            throw new Error('No se puede deshacer: stock actual es menor que la entrada');
 
-          // reduzir peça e lote
-          if(p){
-            const newStock = Math.max(0, Number(p.stock||0) - q);
-            await sb.from('parts').update({ stock: newStock }).eq('id', p.id).eq('org_id', orgId());
+          const { error: up } = await sb.from('parts')
+            .update({ stock: Number(p.stock||0) - q })
+            .eq('id', p.id).eq('org_id', orgId());
+          if(up) throw up;
+
+          // reduzir ou apagar o lote
+          if(mov.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty').eq('id', mov.lote_id).eq('org_id', orgId()).maybeSingle();
+            if(el) throw el;
+            if(lot){
+              const newQty = Math.max(0, Number(lot.qty||0) - q);
+              const { error: upLot } = await sb.from('part_lots')
+                .update({ qty: newQty })
+                .eq('id', lot.id).eq('org_id', orgId());
+              if(upLot) throw upLot;
+            }
           }
-          await sb.from('part_lots').update({ qty: Number(lot.qty||0) - q }).eq('id', lot.id).eq('org_id', orgId());
-
         }else{ // salida
           // devolver ao lote
-          if(!m.lote_id) throw new Error('Movimiento de salida sin lote asociado');
-          const { data: lot, error: el } = await sb.from('part_lots')
-            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-          if(el) throw el;
-          if(!lot) throw new Error('Lote no encontrado para esta salida');
-
-          await sb.from('part_lots').update({ qty: Number(lot.qty||0) + q }).eq('id', lot.id).eq('org_id', orgId());
-
-          // somar no estoque da peça
-          if(p){
-            await sb.from('parts').update({ stock: Number(p.stock||0) + q }).eq('id', p.id).eq('org_id', orgId());
+          if(mov.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty').eq('id', mov.lote_id).eq('org_id', orgId()).maybeSingle();
+            if(el) throw el;
+            if(lot){
+              const { error: upLot } = await sb.from('part_lots')
+                .update({ qty: Number(lot.qty||0) + q })
+                .eq('id', lot.id).eq('org_id', orgId());
+              if(upLot) throw upLot;
+            }
           }
+          // somar de volta no estoque da peça
+          const { data: p, error: ep } = await sb.from('parts')
+            .select('id, stock').eq('id', mov.pieza_id).eq('org_id', orgId()).maybeSingle();
+          if(ep) throw ep;
+          if(!p) throw new Error('Pieza no encontrada para revertir');
+
+          const { error: up } = await sb.from('parts')
+            .update({ stock: Number(p.stock||0) + q })
+            .eq('id', p.id).eq('org_id', orgId());
+          if(up) throw up;
         }
 
         // apaga o movimento
-        await sb.from('movements').delete().eq('id', m.id).eq('org_id', orgId());
+        const { error: delErr } = await sb.from('movements')
+          .delete().eq('id', mov.id).eq('org_id', orgId());
+        if(delErr) throw delErr;
 
-        if(m.pieza_id){
-          await recomputeMetrics(m.pieza_id);
+        if(mov.pieza_id){
+          await recomputeMetrics(mov.pieza_id);
         }
       }
 
-      // ---- Desfazer último movimento (mantido) ----
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
           .select('id')
@@ -929,6 +942,16 @@
         if(upErr) throw upErr;
       }
 
+      // ---- Valorização do inventário por lotes ----
+      async function inventoryValuationByLots(){
+        const { data: lots, error } = await sb
+          .from('part_lots')
+          .select('qty, costo_unit')
+          .eq('org_id', orgId());
+        if(error) throw error;
+        return (lots||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
+      }
+
       return {
         listParts, getPartById, upsertPart, deletePart,
         listMoves, applyMovement, undoLastMovement, undoMovementById,
@@ -937,6 +960,8 @@
         recomputeMetrics, inventoryValuationByLots
       };
     })();
+    
+        })();
 
     /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
@@ -945,9 +970,6 @@
     const userLabel = document.getElementById('userLabel');
     const logoutBtn = document.getElementById('logoutBtn');
     const PUBLIC_ROUTES = ['login'];
-
-    // densidade memorável
-    (()=>{ if(localStorage.getItem('denseMode')==='1') document.body.classList.add('dense'); })();
 
     async function init(){
       await Auth.init();
@@ -972,7 +994,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore aqui */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -1023,124 +1045,112 @@
       });
     }
 
-    /* ===== REPORTES ===== */
-    let chartTop = null, chartSerie = null;
+    /* ===== Reportes (ex-Dashboard) ===== */
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      const desdeEl = document.getElementById('repDesde');
-      const hastaEl = document.getElementById('repHasta');
-      const aplicarBtn = document.getElementById('repAplicar');
-      const brutoEl = document.getElementById('repBruto');
-      const cogsEl = document.getElementById('repCogs');
-      const liqEl = document.getElementById('repLiquida');
-      const unidEl = document.getElementById('repUnidades');
-      const valorInvEl = document.getElementById('repValorInv');
-      const topBody = document.getElementById('repTopBody');
-      const toggleDenseBtn = document.getElementById('toggleDense');
+      const elDesde = document.getElementById('repDesde');
+      const elHasta = document.getElementById('repHasta');
+      const btnAp = document.getElementById('repAplicar');
 
-      // datas padrão (últimos 30 dias)
+      // datas padrão: mês atual
       const now = new Date();
-      const start = new Date(now.getTime() - 29*24*3600*1000);
-      desdeEl.value = start.toISOString().slice(0,10);
-      hastaEl.value = now.toISOString().slice(0,10);
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const toISOdate = d => new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);
+      elDesde.value = toISOdate(start);
+      elHasta.value = toISOdate(now);
 
-      toggleDenseBtn.addEventListener('click', ()=>{
-        document.body.classList.toggle('dense');
-        localStorage.setItem('denseMode', document.body.classList.contains('dense') ? '1' : '0');
-      });
+      let chartTop = null, chartDia = null;
 
-      async function load(){
-        const d1 = new Date(desdeEl.value+'T00:00:00');
-        const d2 = new Date(hastaEl.value+'T23:59:59');
-        const moves = await DB.listMoves(10000);
+      async function computeAndPaint(){
         const parts = await DB.listParts();
-        const pmap = new Map(parts.map(p=>[p.id, p]));
+        const moves = await DB.listMoves(10000); // já vem ordenado
 
-        // filtro por período
-        const rng = moves.filter(m => {
-          const t = new Date(m.fecha).getTime();
-          return t >= d1.getTime() && t <= d2.getTime();
-        });
+        // filtro por data (UTC date-only comparando YYYY-MM-DD)
+        const d0 = elDesde.value || toISOdate(start);
+        const d1 = elHasta.value || toISOdate(now);
+        const inRange = (iso) => {
+          const s = String(iso).slice(0,10);
+          return s >= d0 && s <= d1;
+        };
 
-        // totais
-        let bruto = 0, cogs = 0, unidades = 0;
-        const byKey = new Map(); // key = pieza_id || codigo|nombre
-        const byDay = new Map(); // yyyy-mm-dd -> bruto
+        // map de peça
+        const pMap = new Map(parts.map(p=>[p.id, p]));
 
-        for(const m of rng){
-          if(m.tipo !== 'salida') continue;
-          const p = m.pieza_id ? pmap.get(m.pieza_id) : null;
-          const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
-          const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
+        // apenas salidas no período
+        const salidas = moves.filter(m => m.tipo==='salida' && inRange(m.fecha));
+
+        // Totais
+        let bruto=0, cogs=0, units=0;
+        const bySku = new Map(); // key: codigo — acum qtd e receita
+        const byDay = new Map(); // key: YYYY-MM-DD — receita
+        for(const m of salidas){
+          const p = pMap.get(m.pieza_id);
+          const precio = (m.precio_unit!=null) ? Number(m.precio_unit) : Number(p?.precio||0);
+          const costo  = (m.costo_unit !=null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
           const q = Number(m.cantidad||0);
-          bruto += precio*q;
-          cogs  +=  costo*q;
-          unidades += q;
+          bruto += precio*q; cogs += costo*q; units += q;
 
-          const key = m.pieza_id || `${m.codigo}|${m.nombre}`;
-          const agg = byKey.get(key) || { codigo:m.codigo, nombre:m.nombre, unidades:0, bruto:0 };
-          agg.unidades += q; agg.bruto += precio*q;
-          byKey.set(key, agg);
+          const key = p ? `${p.codigo} — ${p.nombre}` : `${m.codigo} — ${m.nombre}`;
+          const cur = bySku.get(key)||{q:0, rev:0};
+          cur.q += q; cur.rev += precio*q; bySku.set(key, cur);
 
-          const day = new Date(m.fecha).toISOString().slice(0,10);
+          const day = String(m.fecha).slice(0,10);
           byDay.set(day, (byDay.get(day)||0) + precio*q);
         }
+        const liquida = bruto - cogs;
 
-        const valorInv = await DB.inventoryValuationByLots();
+        // KPI Inventário por lotes
+        const invVal = await DB.inventoryValuationByLots();
 
-        brutoEl.textContent = fmtMoney(bruto);
-        cogsEl.textContent = fmtMoney(cogs);
-        liqEl.textContent = fmtMoney(bruto-cogs);
-        unidEl.textContent = unidades;
-        valorInvEl.textContent = fmtMoney(valorInv);
+        // Pintar KPIs
+        document.getElementById('kpiBruto').textContent = fmtMoney(bruto);
+        document.getElementById('kpiCogs').textContent  = fmtMoney(cogs);
+        document.getElementById('kpiLiquida').textContent = fmtMoney(liquida);
+        document.getElementById('kpiUnits').textContent = units;
+        document.getElementById('kpiInvVal').textContent = fmtMoney(invVal);
 
-        // tabela top
-        const topArr = Array.from(byKey.values()).sort((a,b)=> b.unidades - a.unidades).slice(0,20);
-        topBody.innerHTML = topArr.map(r=>`
-          <tr>
-            <td>${escapeHtml(r.codigo||'—')} — ${escapeHtml(r.nombre||'')}</td>
-            <td class="num">${r.unidades}</td>
-            <td class="num">${fmtMoney(r.bruto)}</td>
-          </tr>`).join('');
-
-        // chart TOP
-        const labelsTop = topArr.map(r => r.nombre || r.codigo || '—');
-        const dataTop = topArr.map(r => r.unidades);
-
-        const ctxTop = document.getElementById('repChartTop').getContext('2d');
-        if(chartTop) chartTop.destroy();
+        // Top 10
+        const top = Array.from(bySku.entries())
+          .map(([k,v])=>({sku:k, q:v.q, rev:v.rev}))
+          .sort((a,b)=> b.q - a.q)
+          .slice(0,10);
+        const ctxTop = document.getElementById('chartTop').getContext('2d');
+        if(chartTop){ chartTop.destroy(); }
         chartTop = new Chart(ctxTop, {
-          type: 'bar',
-          data: { labels: labelsTop, datasets: [{ label: 'Unidades', data: dataTop }] },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display:false } },
-            scales: { x: { ticks:{ autoSkip: true, maxRotation:0 } }, y:{ beginAtZero:true, precision:0 } }
+          type:'bar',
+          data:{
+            labels: top.map(t=>t.sku),
+            datasets:[{ label:'Unidades vendidas', data: top.map(t=>t.q) }]
+          },
+          options:{
+            responsive:true,
+            plugins:{ legend:{display:false} },
+            scales:{ x:{ ticks:{ autoSkip:false, maxRotation:45, minRotation:0 } } }
           }
         });
 
-        // chart série diária (bruto)
+        // Vendas por dia
         const days = Array.from(byDay.keys()).sort();
-        const dataSerie = days.map(d => byDay.get(d));
-        const ctxSerie = document.getElementById('repChartSerie').getContext('2d');
-        if(chartSerie) chartSerie.destroy();
-        chartSerie = new Chart(ctxSerie, {
-          type: 'line',
-          data: { labels: days, datasets: [{ label: 'Bruto/día', data: dataSerie, tension:.2, fill:false }] },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display:true } },
-            scales: { y: { beginAtZero:true } }
+        const ctxDia = document.getElementById('chartDia').getContext('2d');
+        if(chartDia){ chartDia.destroy(); }
+        chartDia = new Chart(ctxDia, {
+          type:'line',
+          data:{
+            labels: days,
+            datasets:[{ label:'Receita por día', data: days.map(d=>byDay.get(d)||0) }]
+          },
+          options:{
+            responsive:true,
+            plugins:{ legend:{display:false} },
+            elements:{ line:{ tension:0.2 } }
           }
         });
       }
 
-      aplicarBtn.addEventListener('click', load);
-      await load();
+      await computeAndPaint();
+      btnAp.addEventListener('click', computeAndPaint);
     }
 
     async function renderInventario(){
@@ -1162,7 +1172,6 @@
       if(safety2) safety2.textContent = SAFETY_DAYS;
 
       let parts = await DB.listParts();
-      const lotsCache = new Map();
 
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1197,48 +1206,123 @@
         return passQ && passA;
       }
 
-      async function renderLotsCell(partId){
-        if(!lotsCache.has(partId)){
-          lotsCache.set(partId, DB.listLots(partId));
+      const expanded = new Set();
+
+      async function addLotDrawerRow(afterTr, part){
+        // cria linha extra para mostrar lotes
+        const lotTr = document.createElement('tr');
+        lotTr.className = 'lot-row';
+        const lotTd = document.createElement('td');
+        lotTd.colSpan = 11; // caret + 10 colunas de dados
+        lotTd.innerHTML = `<div class="lot-grid" id="lotGrid-${part.id}"><div class="muted">Carregando lotes…</div></div>`;
+        lotTr.appendChild(lotTd);
+        afterTr.parentNode.insertBefore(lotTr, afterTr.nextSibling);
+
+        const lots = await DB.listLots(part.id);
+        const grid = document.getElementById(`lotGrid-${part.id}`);
+        if(!lots.length){
+          grid.innerHTML = `<div class="muted xs">Esta pieza no tiene lotes con disponibilidad.</div>`;
+          return;
         }
-        const lots = await lotsCache.get(partId);
-        if(!lots.length) return '<span class="xs muted">—</span>';
-        return lots.map(l => `<span class="badge" title="Costo ${fmtMoney(l.costo_unit)} | Precio ${fmtMoney(l.precio_unit)}">${l.qty}u @ ${fmtMoney(l.precio_unit)}</span>`).join(' ');
+        grid.innerHTML = lots.map((l,idx)=>`
+          <div class="lot">
+            <strong>Lote ${idx+1}</strong>
+            <small>Disp: ${l.qty}</small><br/>
+            <small>Costo: ${fmtMoney(l.costo_unit)}</small><br/>
+            <small>Precio: ${fmtMoney(l.precio_unit)}</small>
+          </div>
+        `).join('');
+      }
+
+      function buildRow(part){
+        const low = Number(part.stock) < Number(part.stockMin);
+        const tr = document.createElement('tr');
+        tr.dataset.id = part.id;
+        tr.innerHTML = `
+          <td class="caret-cell">
+            <button class="caret-btn" aria-expanded="${expanded.has(part.id)?'true':'false'}" title="Lotes">▸</button>
+          </td>
+          <td>${escapeHtml(part.codigo)}</td>
+          <td>${escapeHtml(part.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+          <td>${escapeHtml(part.categoria||'')}</td>
+          <td>${escapeHtml(part.almacen||'')}</td>
+          <td>${escapeHtml(part.ubicacion||'')}</td>
+          <td class="num">${part.stock}</td>
+          <td class="num">${part.stockMin}</td>
+          <td class="num">${fmtMoney(part.costo)}</td>
+          <td class="num">${fmtMoney(part.precio)}</td>
+          <td class="num">
+            <button class="btn btn-ghost" data-act="edit" data-id="${part.id}">Editar</button>
+            <button class="btn btn-danger" data-act="del" data-id="${part.id}">Eliminar</button>
+          </td>`;
+        return tr;
       }
 
       async function paint(){
         tbody.innerHTML = '';
-        const filtered = parts.filter(matchesFilters);
-        for(const p of filtered){
-          const low = Number(p.stock) < Number(p.stockMin);
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${escapeHtml(p.codigo)}</td>
-            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
-            <td>${escapeHtml(p.categoria||'')}</td>
-            <td>${escapeHtml(p.almacen||'')}</td>
-            <td>${escapeHtml(p.ubicacion||'')}</td>
-            <td class="num">${p.stock}</td>
-            <td class="num">${p.stockMin}</td>
-            <td class="num">${fmtMoney(p.costo)}</td>
-            <td class="num">${fmtMoney(p.precio)}</td>
-            <td id="lots-${p.id}"><span class="xs muted">cargando…</span></td>
-            <td class="num">
-              <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
-              <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
-            </td>`;
-          tbody.appendChild(tr);
-          // preencher a célula de lotes async sem travar a UI
-          renderLotsCell(p.id).then(html=>{
-            const cell = document.getElementById(`lots-${p.id}`);
-            if(cell) cell.innerHTML = html;
-          });
+        const list = parts.filter(matchesFilters);
+        for(const p of list){
+          const row = buildRow(p);
+          tbody.appendChild(row);
+          // se estiver expandido, adicionar a drawer
+          if(expanded.has(p.id)){
+            await addLotDrawerRow(row, p);
+            const caret = row.querySelector('.caret-btn');
+            if(caret) caret.setAttribute('aria-expanded','true');
+          }
         }
       }
 
       buildFilters();
       buildSuggestors();
-      paint();
+      await paint();
+
+      tbody.addEventListener('click', async (e)=>{
+        const caret = e.target.closest('.caret-btn');
+        if(caret){
+          const tr = caret.closest('tr');
+          const pid = tr.dataset.id;
+          const isExp = caret.getAttribute('aria-expanded')==='true';
+          if(isExp){
+            // recolher
+            caret.setAttribute('aria-expanded','false');
+            expanded.delete(pid);
+            const next = tr.nextElementSibling;
+            if(next && next.classList.contains('lot-row')) next.remove();
+          }else{
+            caret.setAttribute('aria-expanded','true');
+            expanded.add(pid);
+            await addLotDrawerRow(tr, parts.find(x=>x.id===pid));
+          }
+          return;
+        }
+        const btn = e.target.closest('button[data-act]'); if(!btn) return;
+        const id = btn.dataset.id; const act = btn.dataset.act;
+        if(act === 'edit'){
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
+          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
+          form.querySelector('input[name="id"]').value = p.id;
+          form.querySelector('input[name="codigo"]').value = p.codigo;
+          form.querySelector('input[name="nombre"]').value = p.nombre;
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
+          form.querySelector('input[name="stock"]').value = p.stock;
+          form.querySelector('input[name="costo"]').value = p.costo;
+          form.querySelector('input[name="precio"]').value = p.precio;
+        }
+        if(act === 'del'){
+          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+        }
+      });
 
       search.addEventListener('input', paint);
       filterAlm.addEventListener('change', paint);
@@ -1279,7 +1363,6 @@
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          // historial de precio se alterou base
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -1292,40 +1375,10 @@
           }
 
           parts = await DB.listParts();
-          lotsCache.clear();
           buildFilters(); buildSuggestors(); await paint();
 
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
-      });
-
-      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-act]'); if(!btn) return;
-        const id = btn.dataset.id; const act = btn.dataset.act;
-        if(act === 'edit'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
-          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
-          form.querySelector('input[name="id"]').value = p.id;
-          form.querySelector('input[name="codigo"]').value = p.codigo;
-          form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria || '';
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
-          form.querySelector('input[name="almacen"]').value = p.almacen || '';
-          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock; // ajuste de estoque via movimentos
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
-        }
-        if(act === 'del'){
-          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
-          try{
-            await DB.deletePart(id);
-            parts = await DB.listParts(); lotsCache.clear(); buildFilters(); buildSuggestors(); await paint();
-          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
-        }
       });
 
       importCSV.addEventListener('change', ()=>{
@@ -1349,7 +1402,7 @@
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts(); lotsCache.clear(); buildFilters(); buildSuggestors(); await paint();
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           document.getElementById('importCSV').value = '';
@@ -1441,11 +1494,26 @@
             <td class="num">${m.cantidad}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
-            <td><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
+            <td class="num"><button class="btn btn-danger" data-undo-id="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
       }
       paintMoves();
+
+      // Deshacer por linha
+      tbody.addEventListener('click', async (e)=>{
+        const b = e.target.closest('button[data-undo-id]');
+        if(!b) return;
+        const id = b.getAttribute('data-undo-id');
+        if(!confirm('¿Deshacer este movimiento?')) return;
+        try{
+          await DB.undoMovementById(id);
+          moves = await DB.listMoves(2000);
+          parts = await DB.listParts();
+          paintMoves();
+          alert('Movimiento deshecho');
+        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
+      });
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
       partSel.addEventListener('change', ()=>{ if(tipoSel.value==='salida') fillMoveLots(); });
@@ -1477,24 +1545,6 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // Deshacer último (botão vermelho)
-      undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
-        catch(e){ alert(e.message || 'No se pudo deshacer'); }
-      });
-
-      // Deshacer por línea
-      tbody.addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-undo]'); if(!btn) return;
-        const id = btn.getAttribute('data-undo');
-        if(!confirm('¿Deshacer este movimiento?')) return;
-        try{
-          await DB.undoMovementById(id);
-          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
-          alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer este movimiento'); }
-      });
-
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
@@ -1509,6 +1559,11 @@
         const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
         a.href = url; a.download = `inventario_${stamp}.csv`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      });
+
+      undoBtn.addEventListener('click', async ()=>{
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
+        catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
     }
 
@@ -1532,7 +1587,6 @@
         return base.map(p=>{
           const cd = Number(p.consumoDiario||0);
           const lt = Number(p.leadTimeDias||0);
-          const min = Number(p.stockMin||0);
           const stk = Number(p.stock||0);
           const rop = Math.ceil(cd * (lt + SAFETY_DAYS));
           const sug = Math.max(0, rop - stk);
