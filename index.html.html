@@ -102,6 +102,11 @@
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
 
+    /* Sub-tabela de lotes (inventario) */
+    .lot-subrow td { background:#fafafa; }
+    .lot-subtable{ width:100%; border-collapse:separate; border-spacing:0; margin-top:8px }
+    .lot-subtable th,.lot-subtable td{ padding:6px 8px; border-bottom:1px solid var(--border); font-size:13px }
+
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
@@ -146,7 +151,7 @@
     <section class="center">
       <div class="card card-max" role="dialog" aria-labelledby="loginTitle">
         <h1 id="loginTitle" class="title" style="text-align:center">Iniciar sesión</h1>
-      <p class="muted" style="text-align:center">Acceso interno — Gestión de inventario de autopartes.</p>
+        <p class="muted" style="text-align:center">Acceso interno — Gestión de inventario de autopartes.</p>
         <form id="loginForm" class="form">
           <label class="field"><span>Correo</span>
             <input type="email" name="email" placeholder="admin@empresa.com" required autocomplete="username" />
@@ -208,7 +213,7 @@
             <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
           </label>
 
-          <!-- AUTOMÁTICOS -->
+          <!-- AUTOMÁTICOS (solo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
             <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly
               title="Calculado automáticamente por movimientos (últimos 30 días)" />
@@ -236,7 +241,11 @@
           <table class="table" id="partsTable">
             <thead><tr>
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
-              <th class="num">Stock</th><th class="num">Mín</th><th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th><th></th>
+              <th class="num">Stock</th><th class="num">Mín</th>
+              <th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th>
+              <th class="num">Costo lote (vigente)</th><th class="num">Precio lote (vigente)</th>
+              <th>Lotes</th>
+              <th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
           </table>
@@ -273,7 +282,7 @@
             <input name="cantidad" type="number" min="1" step="1" required />
           </label>
 
-          <!-- ENTRADA: custo/preço do lote -->
+          <!-- CAMPOS EXTRAS PARA ENTRADA -->
           <div id="entradaFields" class="field" style="grid-column: span 2; display:none">
             <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px">
               <label class="field"><span>Costo unitario (Bs)</span>
@@ -283,10 +292,10 @@
                 <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio deste lote" />
               </label>
             </div>
-            <span class="xs muted">Se guarda en el <strong>lote</strong> que entra; no cambia el precio/costo base de la pieza.</span>
+            <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
           </div>
 
-          <!-- SALIDA: escolher lote -->
+          <!-- CAMPOS EXTRAS PARA SALIDA -->
           <div id="salidaFields" class="field" style="grid-column: span 2; display:none">
             <label class="field"><span>Seleccionar lote para salida</span>
               <select id="salidaLote"></select>
@@ -388,7 +397,7 @@
 
     // Parâmetros do cálculo automático
     const CD_WINDOW_DAYS = 30;
-    const SAFETY_DAYS   = 2; // días de seguridad (buffer além do lead time)
+    const SAFETY_DAYS   = 2; // buffer de seguridad além do lead time
 
     /* ===== Utils ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
@@ -524,9 +533,10 @@
           .select('id, qty, costo_unit, precio_unit')
           .eq('org_id', orgId())
           .eq('part_id', partId)
+          .gt('qty', 0)
           .order('id', {ascending:true});
         if(error) throw error;
-        return (data||[]).filter(l => Number(l.qty||0) > 0);
+        return data||[];
       }
 
       async function listAllLots(){
@@ -618,7 +628,7 @@
           const initialQty = Number(part.stock || 0);
           const rowInsert = {
             ...base,
-            stock: 0,                 // começa zerado; estoque vai via lote inicial
+            stock: 0,
             consumo_diario: 0,
             stock_min: 0,
           };
@@ -642,7 +652,7 @@
       }
 
       async function deletePart(id){
-        // apaga dependências (movements -> part_lots -> part)
+        // Remove movimentos e lotes para evitar FKs pendentes, depois a peça
         await sb.from('movements').delete().eq('org_id', orgId()).eq('pieza_id', id);
         await sb.from('part_lots').delete().eq('org_id', orgId()).eq('part_id', id);
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
@@ -724,7 +734,7 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ---- Deshacer último (mantemos) baseado no ID mais recente ----
+      // ---- Desfazer último movimento (compatibilidade) ----
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
           .select('id')
@@ -736,65 +746,76 @@
         await undoMovementById(last.id);
       }
 
-      // ---- Deshacer QUALQUER movimiento por ID ----
+      // ---- Desfazer QUALQUER movimento por ID ----
       async function undoMovementById(movId){
         const { data: m, error } = await sb.from('movements')
           .select('id, pieza_id, tipo, cantidad, lote_id')
-          .eq('org_id', orgId()).eq('id', movId).maybeSingle();
+          .eq('org_id', orgId())
+          .eq('id', movId).maybeSingle();
         if(error) throw error;
         if(!m) throw new Error('Movimiento no encontrado');
 
         const q = Number(m.cantidad||0);
+        if(!m.pieza_id){
+          // movimento antigo sem peça vinculada: apenas apagar
+          await sb.from('movements').delete().eq('org_id', orgId()).eq('id', movId);
+          return;
+        }
 
-        // peça
         const { data: p, error: ep } = await sb.from('parts')
           .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
         if(ep) throw ep;
-        if(!p) throw new Error('Pieza del movimiento no existe');
+        if(!p) throw new Error('Pieza no encontrada');
 
         if(m.tipo === 'entrada'){
-          // precisa do lote e que haja quantidade disponível >= q
-          if(!m.lote_id) throw new Error('No se puede deshacer: movimiento de entrada sin lote');
-          const { data: lot, error: el } = await sb.from('part_lots')
-            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-          if(el) throw el;
-          if(!lot) throw new Error('No se puede deshacer: lote no existe');
-          if(Number(lot.qty||0) < q) throw new Error(`No se puede deshacer: el lote ya fue consumido (disp ${Number(lot.qty||0)} < ${q})`);
-          if(Number(p.stock||0) < q) throw new Error('No se puede deshacer: stock actual es menor que la entrada');
+          // Se entrada criou lote, só é possível desfazer se o lote ainda tiver >= q
+          if(m.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty').eq('org_id', orgId()).eq('id', m.lote_id).maybeSingle();
+            if(el) throw el;
+            if(!lot) throw new Error('Lote no encontrado para esta entrada');
+            if(Number(lot.qty||0) < q){
+              throw new Error('No se puede deshacer: ya hubo salidas de este lote.');
+            }
+            // reduzir lote
+            const { error: upLot } = await sb.from('part_lots')
+              .update({ qty: Number(lot.qty||0) - q })
+              .eq('id', lot.id).eq('org_id', orgId());
+            if(upLot) throw upLot;
+          }
+          // reduzir stock da peça
+          const newStock = Number(p.stock||0) - q;
+          if(newStock < 0) throw new Error('No se puede deshacer: stock actual es menor que la entrada.');
+          const { error: upP } = await sb.from('parts')
+            .update({ stock: newStock })
+            .eq('id', p.id).eq('org_id', orgId());
+          if(upP) throw upP;
 
-          // aplica reverso
-          const { error: upLot } = await sb.from('part_lots')
-            .update({ qty: Number(lot.qty||0) - q }).eq('id', lot.id).eq('org_id', orgId());
-          if(upLot) throw upLot;
-
-          const { error: upPart } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) - q }).eq('id', p.id).eq('org_id', orgId());
-          if(upPart) throw upPart;
-
-        }else{ // salida
-          if(!m.lote_id) throw new Error('No se puede deshacer: movimiento de salida sin lote');
-          const { data: lot, error: el } = await sb.from('part_lots')
-            .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
-          if(el) throw el;
-          if(!lot) throw new Error('No se puede deshacer: lote no existe');
-
-          // devolve ao lote
-          const { error: upLot } = await sb.from('part_lots')
-            .update({ qty: Number(lot.qty||0) + q }).eq('id', lot.id).eq('org_id', orgId());
-          if(upLot) throw upLot;
-
-          // devolve ao estoque da peça
-          const { error: upPart } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) + q }).eq('id', p.id).eq('org_id', orgId());
-          if(upPart) throw upPart;
+        }else{ // SALIDA
+          // devolver ao lote, se houver
+          if(m.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty').eq('org_id', orgId()).eq('id', m.lote_id).maybeSingle();
+            if(el) throw el;
+            if(!lot) throw new Error('Lote no encontrado para esta salida');
+            const { error: upLot } = await sb.from('part_lots')
+              .update({ qty: Number(lot.qty||0) + q })
+              .eq('id', lot.id).eq('org_id', orgId());
+            if(upLot) throw upLot;
+          }
+          // somar ao estoque da peça
+          const { error: upP } = await sb.from('parts')
+            .update({ stock: Number(p.stock||0) + q })
+            .eq('id', p.id).eq('org_id', orgId());
+          if(upP) throw upP;
         }
 
         // apaga o movimento
-        const { error: del } = await sb.from('movements')
+        const { error: delErr } = await sb.from('movements')
           .delete().eq('id', m.id).eq('org_id', orgId());
-        if(del) throw del;
+        if(delErr) throw delErr;
 
-        await recomputeMetrics(m.pieza_id);
+        await recomputeMetrics(p.id);
       }
 
       // ---- Historial de precios ----
@@ -825,17 +846,29 @@
         if(error) throw error;
       }
 
-      // ---- Backup / Restore / Wipe ----
+      // ---- Valorização do inventário por lotes ----
+      async function getInventoryValuation(){
+        const { data, error } = await sb.from('part_lots')
+          .select('qty, costo_unit')
+          .eq('org_id', orgId());
+        if(error) throw error;
+        const total = (data||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
+        return total;
+      }
+
+      // ---- Backup simples ----
       async function backupAll(){
-        const [parts, moves, hist] = await Promise.all([
-          listParts(), listMoves(10000), listPriceHistory(10000)
+        const [parts, moves, hist, lots] = await Promise.all([
+          listParts(), listMoves(10000), listPriceHistory(10000), listAllLots()
         ]);
-        return { parts, moves, priceHistory: hist };
+        return { parts, moves, priceHistory: hist, lots };
       }
 
       async function restoreAll(jsonDump){
         if(Array.isArray(jsonDump.parts)){
-          for(const p of jsonDump.parts){ await upsertPart(p); }
+          for(const p of jsonDump.parts){
+            await upsertPart(p);
+          }
         }
       }
 
@@ -847,7 +880,7 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ---- Métricas automáticas (CD e stock_min) ----
+      // ---- Recalcular métricas automáticas (CD e stock_min) ----
       async function recomputeMetrics(piezaId){
         const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
         const { data: outs, error } = await sb.from('movements')
@@ -870,10 +903,9 @@
       return {
         listParts, getPartById, upsertPart, deletePart,
         listMoves, applyMovement, undoLastMovement, undoMovementById,
-        listLots, listAllLots,
-        addPriceHistory, listPriceHistory,
+        listLots, listAllLots, addPriceHistory, listPriceHistory,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics
+        recomputeMetrics, getInventoryValuation
       };
     })();
     
@@ -908,7 +940,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* ignore aqui */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -960,24 +992,14 @@
     }
 
     async function renderDashboard(){
-      const [parts, moves, lots] = await Promise.all([
-        DB.listParts(),
-        DB.listMoves(5000),
-        DB.listAllLots()
-      ]);
-
-      // Valor do inventário por LOTE (∑ qty × costo_unit)
-      const valor = (lots||[]).reduce((s,l)=>{
-        const qty = Math.max(0, Number(l.qty||0));
-        const cost = Number(l.costo_unit||0);
-        return s + qty*cost;
-      }, 0);
+      const parts = await DB.listParts();
+      const moves = await DB.listMoves(5000);
+      const valor = await DB.getInventoryValuation(); // soma de (qty * costo_unit) por lote
 
       const bajos = parts.filter(p => Number(p.stock)<Number(p.stockMin)).length;
       const hoyKey = new Date().toDateString();
       const movHoy = moves.filter(m => new Date(m.fecha).toDateString()===hoyKey).length;
 
-      // Bruto/COGS por movimiento (preferindo custo/preço do movimento/lote)
       const partsMap = new Map(parts.map(p=>[p.id, p]));
       let bruto = 0, cogs = 0;
       for(const m of moves){
@@ -1005,12 +1027,7 @@
             <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(liquida)}</strong></div>
             <div class="card"><h3>Días de seguridad</h3><strong>${SAFETY_DAYS}</strong></div>
           </div>
-          <div class="card">
-            <p class="muted">
-              Valor inventario por <strong>lotes</strong> (∑ cantidad × costo_unit).
-              Ventas/COGS/ganancia usan <strong>precio/costo del movimiento</strong>; si falta, se usa el precio/costo actual de la pieza.
-            </p>
-          </div>
+          <div class="card"><p class="muted">Valor calculado por <strong>lotes</strong> (qty × costo lote). Bruto/COGS usan costo/precio por movimiento.</p></div>
         </section>`;
     }
 
@@ -1033,6 +1050,27 @@
       if(safety2) safety2.textContent = SAFETY_DAYS;
 
       let parts = await DB.listParts();
+      let allLots = await DB.listAllLots(); // todos lotes da org
+
+      function lotsByPartId(){
+        const m = new Map();
+        for(const l of allLots){
+          if(l.qty <= 0) continue;
+          if(!m.has(l.part_id)) m.set(l.part_id, []);
+          m.get(l.part_id).push(l);
+        }
+        // “FIFO”: ordenar por id (aproximação quando não há created_at)
+        for(const arr of m.values()){
+          arr.sort((a,b)=> String(a.id).localeCompare(String(b.id)));
+        }
+        return m;
+      }
+
+      function currentLotFor(partId){
+        const map = lotsByPartId();
+        const arr = map.get(partId) || [];
+        return arr.length ? arr[0] : null; // primeiro = “vigente”
+      }
 
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1067,10 +1105,36 @@
         return passQ && passA;
       }
 
+      function buildLotSubtableHtml(partId){
+        const map = lotsByPartId();
+        const arr = map.get(partId) || [];
+        if(!arr.length) return `<em class="muted">Sin lotes para esta pieza.</em>`;
+        const rows = arr.map((l,idx)=>`
+          <tr>
+            <td>Lote ${idx+1}</td>
+            <td class="num">${l.qty}</td>
+            <td class="num">${fmtMoney(l.costo_unit)}</td>
+            <td class="num">${fmtMoney(l.precio_unit)}</td>
+          </tr>
+        `).join('');
+        return `
+          <table class="lot-subtable">
+            <thead><tr><th>Lote</th><th class="num">Cant.</th><th class="num">Costo unit.</th><th class="num">Precio unit.</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      }
+
       function paint(){
         tbody.innerHTML = '';
+        const map = lotsByPartId();
+
         parts.filter(matchesFilters).forEach(p=>{
           const low = Number(p.stock) < Number(p.stockMin);
+          const lots = map.get(p.id) || [];
+          const curr = lots.length ? lots[0] : null;
+          const lotCost = curr ? fmtMoney(curr.costo_unit) : '—';
+          const lotPrice = curr ? fmtMoney(curr.precio_unit) : '—';
+
           const tr = document.createElement('tr');
           tr.innerHTML = `
             <td>${escapeHtml(p.codigo)}</td>
@@ -1082,6 +1146,11 @@
             <td class="num">${p.stockMin}</td>
             <td class="num">${fmtMoney(p.costo)}</td>
             <td class="num">${fmtMoney(p.precio)}</td>
+            <td class="num">${lotCost}</td>
+            <td class="num">${lotPrice}</td>
+            <td>
+              <button class="btn btn-ghost" data-act="toggle-lotes" data-id="${p.id}">Ver (${lots.length})</button>
+            </td>
             <td class="num">
               <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
               <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
@@ -1110,6 +1179,54 @@
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
+      // Toggle sub-tabela de lotes, editar e deletar
+      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button[data-act]'); if(!btn) return;
+        const id = btn.dataset.id; const act = btn.dataset.act;
+
+        if(act === 'toggle-lotes'){
+          const tr = btn.closest('tr');
+          const next = tr.nextElementSibling;
+          if(next && next.classList.contains('lot-subrow')){ next.remove(); return; }
+          // cria subrow
+          const sub = document.createElement('tr');
+          sub.className = 'lot-subrow';
+          const colSpan = tr.children.length;
+          sub.innerHTML = `<td colspan="${colSpan}">${buildLotSubtableHtml(id)}</td>`;
+          tr.after(sub);
+          return;
+        }
+
+        if(act === 'edit'){
+          const p = (await DB.getPartById(id)); if(!p) return;
+          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
+          form.querySelector('input[name="id"]').value = p.id;
+          form.querySelector('input[name="codigo"]').value = p.codigo;
+          form.querySelector('input[name="nombre"]').value = p.nombre;
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
+          form.querySelector('input[name="stock"]').value = p.stock;
+          form.querySelector('input[name="costo"]').value = p.costo;
+          form.querySelector('input[name="precio"]').value = p.precio;
+          return;
+        }
+
+        if(act === 'del'){
+          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts();
+            allLots = await DB.listAllLots();
+            buildFilters(); buildSuggestors(); paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+        }
+      });
+
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
@@ -1133,7 +1250,6 @@
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          // historial de precio si alterou base
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -1146,39 +1262,11 @@
           }
 
           parts = await DB.listParts();
+          allLots = await DB.listAllLots();
           buildFilters(); buildSuggestors(); paint();
 
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
-      });
-
-      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-act]'); if(!btn) return;
-        const id = btn.dataset.id; const act = btn.dataset.act;
-        if(act === 'edit'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
-          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
-          form.querySelector('input[name="id"]').value = p.id;
-          form.querySelector('input[name="codigo"]').value = p.codigo;
-          form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria || '';
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
-          form.querySelector('input[name="almacen"]').value = p.almacen || '';
-          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
-        }
-        if(act === 'del'){
-          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
-          try{
-            await DB.deletePart(id);
-            parts = await DB.listParts(); buildFilters(); buildSuggestors(); paint();
-          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
-        }
       });
 
       importCSV.addEventListener('change', ()=>{
@@ -1202,7 +1290,7 @@
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts(); buildFilters(); buildSuggestors(); paint();
+            parts = await DB.listParts(); allLots = await DB.listAllLots(); buildFilters(); buildSuggestors(); paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           document.getElementById('importCSV').value = '';
@@ -1264,7 +1352,7 @@
           return `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`;
         }).join('');
         const totalDisp = lots.reduce((s,x)=>s+Number(x.qty||0),0);
-        salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp}`;
+        salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp} | Sugerencia FIFO: Lote 1`;
       }
 
       function toggleMoveFields(){
@@ -1294,30 +1382,25 @@
             <td class="num">${m.cantidad}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
-            <td class="num">
-              <button class="btn btn-danger" data-act="undo" data-id="${m.id}">Deshacer</button>
-            </td>`;
+            <td class="num"><button class="btn btn-ghost" data-act="undo" data-id="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
       }
       paintMoves();
 
-      // ações da tabela (Deshacer por ID)
+      // Undo por linha
       tbody.addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-act="undo"]');
-        if(!btn) return;
-        const id = btn.dataset.id;
-        if(!id) return;
+        const b = e.target.closest('button[data-act="undo"]'); if(!b) return;
+        const id = b.dataset.id;
         if(!confirm('¿Deshacer este movimiento?')) return;
         try{
           await DB.undoMovementById(id);
-          parts = await DB.listParts();
-          moves = await DB.listMoves(2000);
+          parts = await DB.listParts(); moves = await DB.listMoves(2000);
           paintMoves();
-          // atualizar UI de salida (lotes)
-          if(tipoSel.value==='salida') fillMoveLots();
+          // Se for SALIDA, atualiza lista de lotes
+          if(tipoSel.value==='salida'){ await fillMoveLots(); }
           alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
+        }catch(err){ alert(err.message || 'No se pudo deshacer este movimiento'); }
       });
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
@@ -1366,7 +1449,6 @@
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       });
 
-      // Mantemos o atalho "Deshacer último"
       undoBtn.addEventListener('click', async ()=>{
         try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
