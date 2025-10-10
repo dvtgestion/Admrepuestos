@@ -98,14 +98,10 @@
     .kpis .card h3{margin:0 0 6px; font-size:14px; color:var(--muted)}
     .kpis .card strong{font-size:20px}
 
+    /* chips de sugestão */
     .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
-
-    /* Sub-tabela de lotes (inventario) */
-    .lot-subrow td { background:#fafafa; }
-    .lot-subtable{ width:100%; border-collapse:separate; border-spacing:0; margin-top:8px }
-    .lot-subtable th,.lot-subtable td{ padding:6px 8px; border-bottom:1px solid var(--border); font-size:13px }
 
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
@@ -121,6 +117,22 @@
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
+
+    /* ===== AJUSTES VISUAIS ADICIONADOS ===== */
+    /* Inventario mais compacto e alinhado */
+    #partsTable.table--compact{ font-size:14px; }
+    #partsTable.table--compact th,
+    #partsTable.table--compact td{ padding:6px 8px; }
+    #partsTable th, #partsTable td{ vertical-align:middle; }
+    #partsTable .num{ font-variant-numeric: tabular-nums; }
+    .col-code{ max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .col-name{ max-width:280px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .col-ubic{ max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .col-actions{ white-space:nowrap; }
+    .btn-xs{ height:28px; padding:4px 8px; font-size:12px; border-radius:8px; }
+    .lot-subrow td{ background:#f9fafb; }
+    .lot-subtable{ width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
+    .lot-subtable th,.lot-subtable td{ padding:6px 8px; border-bottom:1px solid var(--border); }
   </style>
 </head>
 <body>
@@ -243,9 +255,8 @@
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
               <th class="num">Stock</th><th class="num">Mín</th>
               <th class="num">Costo (Bs)</th><th class="num">Precio (Bs)</th>
-              <th class="num">Costo lote (vigente)</th><th class="num">Precio lote (vigente)</th>
-              <th>Lotes</th>
-              <th></th>
+              <th class="num">Costo lote</th><th class="num">Precio lote</th>
+              <th>Lotes</th><th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
           </table>
@@ -260,7 +271,7 @@
         <div class="left"><h2>Movimientos</h2><p class="muted">Entradas y salidas que afectan el stock.</p></div>
         <div class="right">
           <select id="moveAlmacenFilter" class="input" title="Filtrar piezas por almacén"></select>
-          <button id="undoLast" class="btn">Deshacer último</button>
+          <button id="undoLast" class="btn btn-danger">Deshacer último</button>
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
         </div>
       </header>
@@ -397,7 +408,7 @@
 
     // Parâmetros do cálculo automático
     const CD_WINDOW_DAYS = 30;
-    const SAFETY_DAYS   = 2; // buffer de seguridad além do lead time
+    const SAFETY_DAYS   = 2; // días de seguridad (buffer além do lead time)
 
     /* ===== Utils ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
@@ -479,8 +490,8 @@
 
       return { get, set, myOrgs, ensureCurrent };
     })();
-
-    /* ===== DB (Supabase) ===== */
+    
+        /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
@@ -533,18 +544,22 @@
           .select('id, qty, costo_unit, precio_unit')
           .eq('org_id', orgId())
           .eq('part_id', partId)
-          .gt('qty', 0)
           .order('id', {ascending:true});
         if(error) throw error;
-        return data||[];
+        return (data||[]).filter(l => Number(l.qty||0) > 0);
       }
 
       async function listAllLots(){
         const { data, error } = await sb.from('part_lots')
-          .select('id, org_id, part_id, qty, costo_unit, precio_unit')
+          .select('part_id, qty, costo_unit, precio_unit')
           .eq('org_id', orgId());
         if(error) throw error;
         return data||[];
+      }
+
+      async function inventoryValueFromLots(){
+        const lots = await listAllLots();
+        return lots.reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
       }
 
       async function createLot({ partId, qty, costo_unit, precio_unit }){
@@ -628,7 +643,7 @@
           const initialQty = Number(part.stock || 0);
           const rowInsert = {
             ...base,
-            stock: 0,
+            stock: 0,                 // começa zerado; lote inicial ajusta
             consumo_diario: 0,
             stock_min: 0,
           };
@@ -652,7 +667,7 @@
       }
 
       async function deletePart(id){
-        // Remove movimentos e lotes para evitar FKs pendentes, depois a peça
+        // Deleta movimentos e lotes antes para evitar problemas de FK
         await sb.from('movements').delete().eq('org_id', orgId()).eq('pieza_id', id);
         await sb.from('part_lots').delete().eq('org_id', orgId()).eq('part_id', id);
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
@@ -734,76 +749,67 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ---- Desfazer último movimento (compatibilidade) ----
+      // ---- Desfazer último movimento (retrocompatível) ----
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
-          .select('id')
+          .select('id, pieza_id, tipo, cantidad, lote_id')
           .eq('org_id', orgId())
           .order('fecha',{ascending:false})
           .limit(1).maybeSingle();
         if(error) throw error;
         if(!last) throw new Error('Sin movimientos');
-        await undoMovementById(last.id);
+        await deleteMovementById(last.id);
       }
 
-      // ---- Desfazer QUALQUER movimento por ID ----
-      async function undoMovementById(movId){
+      // ---- Deshacer QUALQUER movimento pelo ID ----
+      async function deleteMovementById(moveId){
         const { data: m, error } = await sb.from('movements')
           .select('id, pieza_id, tipo, cantidad, lote_id')
-          .eq('org_id', orgId())
-          .eq('id', movId).maybeSingle();
+          .eq('org_id', orgId()).eq('id', moveId).maybeSingle();
         if(error) throw error;
         if(!m) throw new Error('Movimiento no encontrado');
 
         const q = Number(m.cantidad||0);
-        if(!m.pieza_id){
-          // movimento antigo sem peça vinculada: apenas apagar
-          await sb.from('movements').delete().eq('org_id', orgId()).eq('id', movId);
-          return;
-        }
 
         const { data: p, error: ep } = await sb.from('parts')
           .select('id, stock').eq('id', m.pieza_id).eq('org_id', orgId()).maybeSingle();
         if(ep) throw ep;
-        if(!p) throw new Error('Pieza no encontrada');
+        if(!p) throw new Error('Pieza no encontrada para el movimiento');
 
         if(m.tipo === 'entrada'){
-          // Se entrada criou lote, só é possível desfazer se o lote ainda tiver >= q
+          // Para deshacer entrada: precisamos que o lote ainda tenha pelo menos q disponível
           if(m.lote_id){
             const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('org_id', orgId()).eq('id', m.lote_id).maybeSingle();
+              .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
             if(el) throw el;
-            if(!lot) throw new Error('Lote no encontrado para esta entrada');
-            if(Number(lot.qty||0) < q){
-              throw new Error('No se puede deshacer: ya hubo salidas de este lote.');
-            }
-            // reduzir lote
+            if(!lot) throw new Error('Lote de la entrada no encontrado');
+            if(Number(lot.qty||0) < q) throw new Error('No se puede deshacer: parte del lote ya se consumió');
+            // reduzir lote e estoque
             const { error: upLot } = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) - q })
               .eq('id', lot.id).eq('org_id', orgId());
             if(upLot) throw upLot;
           }
-          // reduzir stock da peça
-          const newStock = Number(p.stock||0) - q;
-          if(newStock < 0) throw new Error('No se puede deshacer: stock actual es menor que la entrada.');
+          // reduzir estoque da peça
+          if(Number(p.stock||0) < q) throw new Error('No se puede deshacer: stock actual es menor que la entrada');
           const { error: upP } = await sb.from('parts')
-            .update({ stock: newStock })
+            .update({ stock: Number(p.stock||0) - q })
             .eq('id', p.id).eq('org_id', orgId());
           if(upP) throw upP;
-
-        }else{ // SALIDA
-          // devolver ao lote, se houver
+        }else{ // salida
+          // devolver ao lote se existir
           if(m.lote_id){
             const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty').eq('org_id', orgId()).eq('id', m.lote_id).maybeSingle();
+              .select('id, qty').eq('id', m.lote_id).eq('org_id', orgId()).maybeSingle();
             if(el) throw el;
-            if(!lot) throw new Error('Lote no encontrado para esta salida');
-            const { error: upLot } = await sb.from('part_lots')
-              .update({ qty: Number(lot.qty||0) + q })
-              .eq('id', lot.id).eq('org_id', orgId());
-            if(upLot) throw upLot;
+            if(lot){
+              const { error: upLot } = await sb.from('part_lots')
+                .update({ qty: Number(lot.qty||0) + q })
+                .eq('id', lot.id).eq('org_id', orgId());
+              if(upLot) throw upLot;
+            }
           }
-          // somar ao estoque da peça
+          // somar no estoque da peça
           const { error: upP } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) + q })
             .eq('id', p.id).eq('org_id', orgId());
@@ -815,7 +821,7 @@
           .delete().eq('id', m.id).eq('org_id', orgId());
         if(delErr) throw delErr;
 
-        await recomputeMetrics(p.id);
+        await recomputeMetrics(m.pieza_id);
       }
 
       // ---- Historial de precios ----
@@ -846,22 +852,12 @@
         if(error) throw error;
       }
 
-      // ---- Valorização do inventário por lotes ----
-      async function getInventoryValuation(){
-        const { data, error } = await sb.from('part_lots')
-          .select('qty, costo_unit')
-          .eq('org_id', orgId());
-        if(error) throw error;
-        const total = (data||[]).reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
-        return total;
-      }
-
       // ---- Backup simples ----
       async function backupAll(){
-        const [parts, moves, hist, lots] = await Promise.all([
-          listParts(), listMoves(10000), listPriceHistory(10000), listAllLots()
+        const [parts, moves, hist] = await Promise.all([
+          listParts(), listMoves(10000), listPriceHistory(10000)
         ]);
-        return { parts, moves, priceHistory: hist, lots };
+        return { parts, moves, priceHistory: hist };
       }
 
       async function restoreAll(jsonDump){
@@ -902,14 +898,14 @@
 
       return {
         listParts, getPartById, upsertPart, deletePart,
-        listMoves, applyMovement, undoLastMovement, undoMovementById,
+        listMoves, applyMovement, undoLastMovement, deleteMovementById,
         listLots, listAllLots, addPriceHistory, listPriceHistory,
-        backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics, getInventoryValuation
+        backupAll, restoreAll, wipeCurrentOrg, inventoryValueFromLots,
+        recomputeMetrics
       };
     })();
-    
-        /* ===== App / Navegação ===== */
+
+    /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -940,7 +936,7 @@
       const authed = Auth.isAuthed();
 
       if(authed){
-        try { await Org.ensureCurrent(); } catch(e){ /* ignore aqui */ }
+        try { await Org.ensureCurrent(); } catch(e){ /* ignore */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
@@ -992,9 +988,8 @@
     }
 
     async function renderDashboard(){
-      const parts = await DB.listParts();
-      const moves = await DB.listMoves(5000);
-      const valor = await DB.getInventoryValuation(); // soma de (qty * costo_unit) por lote
+      const [parts, moves] = await Promise.all([DB.listParts(), DB.listMoves(5000)]);
+      const valor = await DB.inventoryValueFromLots(); // **valor correto baseado nos lotes**
 
       const bajos = parts.filter(p => Number(p.stock)<Number(p.stockMin)).length;
       const hoyKey = new Date().toDateString();
@@ -1027,13 +1022,16 @@
             <div class="card"><h3>Ganancia líquida</h3><strong>${fmtMoney(liquida)}</strong></div>
             <div class="card"><h3>Días de seguridad</h3><strong>${SAFETY_DAYS}</strong></div>
           </div>
-          <div class="card"><p class="muted">Valor calculado por <strong>lotes</strong> (qty × costo lote). Bruto/COGS usan costo/precio por movimiento.</p></div>
+          <div class="card"><p class="muted">Los totales usan <strong>costo/precio por movimiento</strong> (lote). Si faltan, se usa el costo/precio actual de la pieza. El valor de inventario es la suma de (qty × costo del lote).</p></div>
         </section>`;
     }
 
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
+
+      const table = document.getElementById('partsTable');
+      table.classList.add('table--compact'); // visual mais ajustado
 
       const tbody = document.getElementById('partsTbody');
       const search = document.getElementById('searchParts');
@@ -1050,27 +1048,6 @@
       if(safety2) safety2.textContent = SAFETY_DAYS;
 
       let parts = await DB.listParts();
-      let allLots = await DB.listAllLots(); // todos lotes da org
-
-      function lotsByPartId(){
-        const m = new Map();
-        for(const l of allLots){
-          if(l.qty <= 0) continue;
-          if(!m.has(l.part_id)) m.set(l.part_id, []);
-          m.get(l.part_id).push(l);
-        }
-        // “FIFO”: ordenar por id (aproximação quando não há created_at)
-        for(const arr of m.values()){
-          arr.sort((a,b)=> String(a.id).localeCompare(String(b.id)));
-        }
-        return m;
-      }
-
-      function currentLotFor(partId){
-        const map = lotsByPartId();
-        const arr = map.get(partId) || [];
-        return arr.length ? arr[0] : null; // primeiro = “vigente”
-      }
 
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1105,58 +1082,78 @@
         return passQ && passA;
       }
 
-      function buildLotSubtableHtml(partId){
-        const map = lotsByPartId();
-        const arr = map.get(partId) || [];
-        if(!arr.length) return `<em class="muted">Sin lotes para esta pieza.</em>`;
-        const rows = arr.map((l,idx)=>`
-          <tr>
-            <td>Lote ${idx+1}</td>
+      async function computeLotRange(partId){
+        const lots = await DB.listLots(partId);
+        if(!lots.length) return { costoTxt:'—', precioTxt:'—', lots:[] };
+        const cmin = Math.min(...lots.map(l=>Number(l.costo_unit||0)));
+        const cmax = Math.max(...lots.map(l=>Number(l.costo_unit||0)));
+        const pmin = Math.min(...lots.map(l=>Number(l.precio_unit||0)));
+        const pmax = Math.max(...lots.map(l=>Number(l.precio_unit||0)));
+        const costoTxt = (cmin===cmax)? fmtMoney(cmin) : `${fmtMoney(cmin)}–${fmtMoney(cmax)}`;
+        const precioTxt= (pmin===pmax)? fmtMoney(pmin): `${fmtMoney(pmin)}–${fmtMoney(pmax)}`;
+        return { costoTxt, precioTxt, lots };
+      }
+
+      function renderLotSubtable(lots){
+        if(!lots.length){
+          return `<div class="muted xs">Sin lotes disponibles.</div>`;
+        }
+        const rows = lots.map((l,i)=>{
+          const val = Number(l.qty||0)*Number(l.costo_unit||0);
+          return `<tr>
+            <td>#${i+1}</td>
             <td class="num">${l.qty}</td>
             <td class="num">${fmtMoney(l.costo_unit)}</td>
             <td class="num">${fmtMoney(l.precio_unit)}</td>
-          </tr>
-        `).join('');
-        return `
-          <table class="lot-subtable">
-            <thead><tr><th>Lote</th><th class="num">Cant.</th><th class="num">Costo unit.</th><th class="num">Precio unit.</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>`;
+            <td class="num">${fmtMoney(val)}</td>
+          </tr>`;
+        }).join('');
+        const totalQty = lots.reduce((s,l)=> s+Number(l.qty||0),0);
+        const totalVal = lots.reduce((s,l)=> s+Number(l.qty||0)*Number(l.costo_unit||0),0);
+        return `<table class="lot-subtable">
+          <thead><tr><th>Lote</th><th class="num">Disp.</th><th class="num">Costo</th><th class="num">Precio</th><th class="num">Valor</th></tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><th>Total</th><th class="num">${totalQty}</th><th></th><th></th><th class="num">${fmtMoney(totalVal)}</th></tr></tfoot>
+        </table>`;
       }
 
-      function paint(){
+      async function paint(){
         tbody.innerHTML = '';
-        const map = lotsByPartId();
-
-        parts.filter(matchesFilters).forEach(p=>{
+        const rows = parts.filter(matchesFilters);
+        for(const p of rows){
           const low = Number(p.stock) < Number(p.stockMin);
-          const lots = map.get(p.id) || [];
-          const curr = lots.length ? lots[0] : null;
-          const lotCost = curr ? fmtMoney(curr.costo_unit) : '—';
-          const lotPrice = curr ? fmtMoney(curr.precio_unit) : '—';
-
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${escapeHtml(p.codigo)}</td>
-            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+            <td class="col-code">${escapeHtml(p.codigo)}</td>
+            <td class="col-name">${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
             <td>${escapeHtml(p.categoria||'')}</td>
             <td>${escapeHtml(p.almacen||'')}</td>
-            <td>${escapeHtml(p.ubicacion||'')}</td>
+            <td class="col-ubic">${escapeHtml(p.ubicacion||'')}</td>
             <td class="num">${p.stock}</td>
             <td class="num">${p.stockMin}</td>
             <td class="num">${fmtMoney(p.costo)}</td>
             <td class="num">${fmtMoney(p.precio)}</td>
-            <td class="num">${lotCost}</td>
-            <td class="num">${lotPrice}</td>
-            <td>
-              <button class="btn btn-ghost" data-act="toggle-lotes" data-id="${p.id}">Ver (${lots.length})</button>
+            <td class="num" data-col="costoLote">…</td>
+            <td class="num" data-col="precioLote">…</td>
+            <td class="col-actions">
+              <button class="btn btn-xs" data-act="toggleLots" data-id="${p.id}">Ver lotes</button>
             </td>
-            <td class="num">
-              <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
-              <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
+            <td class="col-actions">
+              <button class="btn btn-ghost btn-xs" data-act="edit" data-id="${p.id}">Editar</button>
+              <button class="btn btn-danger btn-xs" data-act="del" data-id="${p.id}">Eliminar</button>
             </td>`;
           tbody.appendChild(tr);
-        });
+
+          // Preencher range de lotes assíncrono
+          (async ()=>{
+            const { costoTxt, precioTxt } = await computeLotRange(p.id);
+            const row = tr;
+            const cCell = row.querySelector('[data-col="costoLote"]');
+            const pCell = row.querySelector('[data-col="precioLote"]');
+            if(cCell) cCell.textContent = costoTxt;
+            if(pCell) pCell.textContent = precioTxt;
+          })();
+        }
       }
 
       buildFilters();
@@ -1179,54 +1176,23 @@
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
-      // Toggle sub-tabela de lotes, editar e deletar
-      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-act]'); if(!btn) return;
-        const id = btn.dataset.id; const act = btn.dataset.act;
-
-        if(act === 'toggle-lotes'){
-          const tr = btn.closest('tr');
-          const next = tr.nextElementSibling;
-          if(next && next.classList.contains('lot-subrow')){ next.remove(); return; }
-          // cria subrow
-          const sub = document.createElement('tr');
-          sub.className = 'lot-subrow';
-          const colSpan = tr.children.length;
-          sub.innerHTML = `<td colspan="${colSpan}">${buildLotSubtableHtml(id)}</td>`;
-          tr.after(sub);
-          return;
-        }
-
-        if(act === 'edit'){
-          const p = (await DB.getPartById(id)); if(!p) return;
-          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
-          form.querySelector('input[name="id"]').value = p.id;
-          form.querySelector('input[name="codigo"]').value = p.codigo;
-          form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria || '';
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
-          form.querySelector('input[name="almacen"]').value = p.almacen || '';
-          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
-          return;
-        }
-
-        if(act === 'del'){
-          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
-          try{
-            await DB.deletePart(id);
-            parts = await DB.listParts();
-            allLots = await DB.listAllLots();
-            buildFilters(); buildSuggestors(); paint();
-          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
-        }
+      // Toggle lotes (sub-fila)
+      tbody.addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button[data-act="toggleLots"]');
+        if(!btn) return;
+        const tr = btn.closest('tr');
+        const next = tr.nextElementSibling;
+        if(next && next.classList.contains('lot-subrow')){ next.remove(); return; }
+        const id = btn.dataset.id;
+        const lots = await DB.listLots(id);
+        const sub = document.createElement('tr');
+        sub.className = 'lot-subrow';
+        const cols = tr.children.length;
+        sub.innerHTML = `<td colspan="${cols}">${renderLotSubtable(lots)}</td>`;
+        tr.after(sub);
       });
 
+      // Submit do form
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
@@ -1250,6 +1216,7 @@
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
+          // historial de precio si alterou base (edição)
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -1262,11 +1229,40 @@
           }
 
           parts = await DB.listParts();
-          allLots = await DB.listAllLots();
-          buildFilters(); buildSuggestors(); paint();
+          buildFilters(); buildSuggestors(); await paint();
 
           form.reset(); form.querySelector('input[name="id"]').value = ''; summary.textContent = 'Nueva pieza'; formWrap.open = false;
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
+      });
+
+      // Ações de linha (editar/deletar)
+      tbody.addEventListener('click', async (e)=>{
+        const btn = e.target.closest('button[data-act]'); if(!btn) return;
+        const id = btn.dataset.id; const act = btn.dataset.act;
+        if(act === 'edit'){
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
+          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
+          form.querySelector('input[name="id"]').value = p.id;
+          form.querySelector('input[name="codigo"]').value = p.codigo;
+          form.querySelector('input[name="nombre"]').value = p.nombre;
+          form.querySelector('input[name="categoria"]').value = p.categoria || '';
+          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+          form.querySelector('input[name="almacen"]').value = p.almacen || '';
+          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
+          form.querySelector('input[name="stock"]').value = p.stock;
+          form.querySelector('input[name="costo"]').value = p.costo;
+          form.querySelector('input[name="precio"]').value = p.precio;
+        }
+        if(act === 'del'){
+          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
+          try{
+            await DB.deletePart(id);
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+        }
       });
 
       importCSV.addEventListener('change', ()=>{
@@ -1290,7 +1286,7 @@
               };
               await DB.upsertPart(part);
             }
-            parts = await DB.listParts(); allLots = await DB.listAllLots(); buildFilters(); buildSuggestors(); paint();
+            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
             alert('Importación completa');
           }catch(e){ alert(e.message || 'Error al importar'); }
           document.getElementById('importCSV').value = '';
@@ -1352,7 +1348,7 @@
           return `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`;
         }).join('');
         const totalDisp = lots.reduce((s,x)=>s+Number(x.qty||0),0);
-        salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp} | Sugerencia FIFO: Lote 1`;
+        salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp}`;
       }
 
       function toggleMoveFields(){
@@ -1382,26 +1378,11 @@
             <td class="num">${m.cantidad}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
-            <td class="num"><button class="btn btn-ghost" data-act="undo" data-id="${m.id}">Deshacer</button></td>`;
+            <td class="col-actions"><button class="btn btn-danger btn-xs" data-act="undo" data-id="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
       }
       paintMoves();
-
-      // Undo por linha
-      tbody.addEventListener('click', async (e)=>{
-        const b = e.target.closest('button[data-act="undo"]'); if(!b) return;
-        const id = b.dataset.id;
-        if(!confirm('¿Deshacer este movimiento?')) return;
-        try{
-          await DB.undoMovementById(id);
-          parts = await DB.listParts(); moves = await DB.listMoves(2000);
-          paintMoves();
-          // Se for SALIDA, atualiza lista de lotes
-          if(tipoSel.value==='salida'){ await fillMoveLots(); }
-          alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer este movimiento'); }
-      });
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
       partSel.addEventListener('change', ()=>{ if(tipoSel.value==='salida') fillMoveLots(); });
@@ -1433,6 +1414,24 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
+      // Deshacer último (botão vermelho já aplicado no template)
+      undoBtn.addEventListener('click', async ()=>{
+        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
+        catch(e){ alert(e.message || 'No se pudo deshacer'); }
+      });
+
+      // Deshacer qualquer movimento (linha)
+      tbody.addEventListener('click', async (e)=>{
+        const b = e.target.closest('button[data-act="undo"]'); if(!b) return;
+        const id = Number(b.dataset.id);
+        if(!confirm('¿Deshacer este movimiento?')) return;
+        try{
+          await DB.deleteMovementById(id);
+          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
+          alert('Movimiento deshecho');
+        }catch(err){ alert(err.message || 'No se pudo deshacer este movimiento'); }
+      });
+
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
@@ -1447,11 +1446,6 @@
         const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
         a.href = url; a.download = `inventario_${stamp}.csv`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      });
-
-      undoBtn.addEventListener('click', async ()=>{
-        try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); toggleMoveFields(); }
-        catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
     }
 
@@ -1617,3 +1611,4 @@
   </script>
 </body>
 </html>
+
