@@ -55,7 +55,7 @@
 
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
-    .field input, .field select, .input{
+    .field input, .field select, .input, .field textarea{
       border:1px solid var(--border);
       border-radius:10px;
       padding:10px 12px;
@@ -64,8 +64,9 @@
       height:44px;
       font-size:16px;
     }
+    .field textarea{ height:auto; min-height:72px; resize:vertical }
     .field input[readonly]{ background:#f8fafc; }
-    .field input:focus, .field select:focus, .input:focus{outline:2px solid rgba(31,111,235,.25)}
+    .field input:focus, .field select:focus, .input:focus, .field textarea:focus{outline:2px solid rgba(31,111,235,.25)}
 
     .btn{
       border:1px solid var(--border);
@@ -81,7 +82,7 @@
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
 
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
-    .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
+    .toolbar .right{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
     .stack{display:flex; flex-direction:column; gap:12px}
 
     .table-wrap{width:100%; overflow:auto}
@@ -107,7 +108,7 @@
     .chip { border:1px solid var(--border); background:#fff; border-radius:999px; padding:4px 10px; font-size:12px; cursor:pointer; }
     .chip:hover { border-color:#d1d5db }
 
-    /* Inventario: linha compacta + drawer de lotes */
+    /* Inventario: fila compacta + drawer de lotes */
     .table.compact th, .table.compact td { padding:8px 10px; font-size:14px; }
     details.inline { display:block; }
     details.inline > summary {
@@ -126,7 +127,10 @@
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
 
-    /* Charts mais compactos */
+    /* miniatura de imagen */
+    .thumb { width:28px; height:28px; object-fit:cover; border-radius:6px; border:1px solid var(--border); margin-right:6px; vertical-align:middle }
+
+    /* Charts compactos */
     .charts-compact canvas { max-height: 180px; }
 
     /* Responsivo */
@@ -141,7 +145,7 @@
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
       .kpis{grid-template-columns:1fr;}
-      .toolbar .right{gap:6px}
+      .toolbar .right{gap:8px}
       .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
     }
 
@@ -160,7 +164,7 @@
         <button class="nav-btn" data-route="inventario">Inventario</button>
         <button class="nav-btn" data-route="movimientos">Movimientos</button>
         <button class="nav-btn" data-route="sugerencias">Sugerencias</button>
-        <button class="nav-btn" data-route="historial">Historial precios</button>
+        <button class="nav-btn" data-route="historial">Historial de precios</button>
         <button class="nav-btn" data-route="ajustes">Ajustes</button>
       </nav>
       <div class="sidebar-foot">
@@ -185,8 +189,6 @@
             <input type="password" name="password" placeholder="********" required autocomplete="current-password" />
           </label>
           <button class="btn btn-primary" type="submit">Entrar</button>
-          <p class="muted xs" style="text-align:center">Cree usuarios en Supabase → Auth → Users</p>
-          <button id="clearCacheBtn" type="button" class="btn" title="Limpia empresa seleccionada y cierra sesión">Limpiar caché local</button>
         </form>
       </div>
     </section>
@@ -199,15 +201,15 @@
           <h2>Reportes</h2>
           <p class="muted">Ventas, inventario y período filtrable.</p>
         </div>
-        <div class="right" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
-          <label class="field" style="min-width:160px">
+        <div class="right">
+          <div class="field" style="min-width:170px">
             <span class="xs muted">Desde</span>
             <input type="date" id="repDesde" class="input" />
-          </label>
-          <label class="field" style="min-width:160px">
-            <span class="xs muted">Até</span>
+          </div>
+          <div class="field" style="min-width:170px">
+            <span class="xs muted">Hasta</span>
             <input type="date" id="repHasta" class="input" />
-          </label>
+          </div>
           <button id="repAplicar" class="btn btn-primary">Aplicar</button>
         </div>
       </header>
@@ -215,12 +217,12 @@
       <div class="kpis">
         <div class="card"><h3>Ventas brutas</h3><strong id="kpiBruto">—</strong></div>
         <div class="card"><h3>COGS</h3><strong id="kpiCogs">—</strong></div>
-        <div class="card"><h3>Ganancia líquida</h3><strong id="kpiLiquida">—</strong></div>
+        <div class="card"><h3>Ganancia neta</h3><strong id="kpiLiquida">—</strong></div>
         <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
       </div>
 
       <div class="kpis">
-        <div class="card"><h3>Valor del inventario (por lotes)</h3><strong id="kpiInvVal">—</strong></div>
+        <div class="card"><h3>Valor del inventario (lotes)</h3><strong id="kpiInvVal">—</strong></div>
         <div class="card"><h3>Días de seguridad</h3><strong id="kpiSafety">—</strong></div>
         <div class="card"><h3>SKUs</h3><strong id="kpiSkus">—</strong></div>
         <div class="card"><h3>Movimientos (período)</h3><strong id="kpiMovs">—</strong></div>
@@ -228,7 +230,7 @@
 
       <div class="charts-compact" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px">
         <div class="card">
-          <h3 style="margin:0 0 8px">Top 10 vendidas (unid.)</h3>
+          <h3 style="margin:0 0 8px">Top 10 más vendidas (unid.)</h3>
           <canvas id="chartTop" height="150"></canvas>
         </div>
         <div class="card">
@@ -271,7 +273,7 @@
             <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
             <datalist id="dlAlmacenes"></datalist>
             <div class="chips" id="almacenChips"></div>
-            <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
+            <span class="xs muted">Tip: escribe o haz clic en un chip.</span>
           </label>
 
           <!-- Proveedor con datalist + chips -->
@@ -295,10 +297,17 @@
               title="ceil(CD × días de seguridad)" />
           </label>
 
-          <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
+          <label class="field"><span>Stock inicial</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
-          <div class="row-actions">
+
+          <!-- Imagen opcional -->
+          <label class="field" style="grid-column: span 2;"><span>Imagen (opcional)</span>
+            <input type="file" name="imagen" accept="image/*" />
+            <span class="xs muted">Se guardará en Supabase Storage si está disponible.</span>
+          </label>
+
+          <div class="row-actions" style="grid-column: 1 / -1">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
           </div>
@@ -324,8 +333,8 @@
       </div>
     </section>
   </template>
-
-  <template id="tpl-movimientos">
+  
+    <template id="tpl-movimientos">
     <section class="stack">
       <header class="toolbar">
         <div class="left"><h2>Movimientos</h2><p class="muted">Entradas y salidas que afectan el stock.</p></div>
@@ -364,7 +373,7 @@
                 <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio de este lote" />
               </label>
             </div>
-            <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
+            <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que entra y no cambian el precio/costo base de la pieza.</span>
           </div>
 
           <!-- CAMPOS EXTRAS PARA SALIDA -->
@@ -419,7 +428,7 @@
   <template id="tpl-ajustes">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, backup y restauración.</p></div>
+        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, copias y restauración.</p></div>
         <div class="right">
           <button id="backupBtn" class="btn">Backup JSON</button>
           <label class="btn" for="restoreFile">Restaurar JSON</label>
@@ -462,24 +471,25 @@
 
   <script>
     /* =======================
-       CONFIG SUPABASE
+       CONFIGURACIÓN SUPABASE
     ======================= */
     const SUPABASE_URL = 'https://zbqshivafjhbghksuhkz.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Parâmetros do cálculo automático
+    // Parámetros de cálculos automáticos
     const CD_WINDOW_DAYS = 30;
-    const SAFETY_DAYS   = 2; // días de seguridad (buffer além do lead time)
+    const SAFETY_DAYS   = 2;
 
-    /* ===== Utils ===== */
+    /* ===== Utilidades ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
     const fmtDate  = (d)=> new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
+    const slug = (t)=> String(t||'img').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
 
-    /* ===== Auth ===== */
+    /* ===== Autenticación ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
       function set(user){
@@ -506,7 +516,7 @@
       return { init, isAuthed, currentUser, login, logout };
     })();
 
-    /* ===== Org ===== */
+    /* ===== Organización ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
@@ -553,15 +563,45 @@
       return { get, set, myOrgs, ensureCurrent };
     })();
 
-    /* ===== DB (Supabase) ===== */
+    /* ===== Servicio de Imágenes (Storage) ===== */
+    const ImageSvc = (() => {
+      async function uploadPartImage(file, partId, codeHint='pieza'){
+        try{
+          const b = sb.storage.from('part_images');
+          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+          const path = `${Org.get().id}/${partId}_${slug(codeHint)}_${Date.now()}.${ext}`;
+          const { error: upErr } = await b.upload(path, file, { upsert: true, contentType: file.type || 'image/*' });
+          if(upErr) throw upErr;
+          const { data: pub } = b.getPublicUrl(path);
+          const url = pub?.publicUrl || null;
+          if(url){
+            // intenta actualizar columna imagen_url; si no existe, ignora
+            const { error: updErr } = await sb.from('parts')
+              .update({ imagen_url: url })
+              .eq('id', partId)
+              .eq('org_id', Org.get().id);
+            if(updErr && !String(updErr.message||'').toLowerCase().includes('column "imagen_url"')) {
+              console.warn('No se pudo actualizar imagen_url:', updErr.message);
+            }
+          }
+          return url;
+        }catch(e){
+          alert('No se pudo subir la imagen (bucket "part_images" ausente o permisos insuficientes).');
+          return null;
+        }
+      }
+      return { uploadPartImage };
+    })();
+
+    /* ===== BD (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // ---- Parts ----
+      // ---- Piezas ----
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, imagen_url')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
@@ -570,13 +610,14 @@
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
-          costo:Number(r.costo||0), precio:Number(r.precio||0)
+          costo:Number(r.costo||0), precio:Number(r.precio||0),
+          imagenUrl: r.imagen_url || ''
         }));
       }
 
       async function getPartById(id){
         const { data, error } = await sb.from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, imagen_url')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
@@ -585,7 +626,8 @@
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
           leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
           stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
-          costo:Number(data.costo||0), precio:Number(data.precio||0)
+          costo:Number(data.costo||0), precio:Number(data.precio||0),
+          imagenUrl: data.imagen_url || ''
         };
       }
 
@@ -627,7 +669,7 @@
         return data;
       }
 
-      // Cria lote + movimento de ENTRADA para peça recém-criada (estoque inicial)
+      // Lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
         const q = Number(qty || 0);
         const c = Number(costo || 0);
@@ -672,7 +714,7 @@
         if (e3) throw e3;
       }
 
-      // Insert com lote-inicial; Update normal
+      // Insert con lote inicial; Update normal
       async function upsertPart(part){
         const base = {
           org_id: orgId(),
@@ -721,7 +763,7 @@
         if(error) throw error;
       }
 
-      // ---- Movements ----
+      // ---- Movimientos ----
       async function listMoves(limit=2000){
         const { data, error } = await sb.from('movements')
           .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
@@ -732,7 +774,6 @@
         return data||[];
       }
 
-      // aplicar movimento com LOTES
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
@@ -747,16 +788,13 @@
           const c = (costoUnit != null) ? Number(costoUnit) : Number(p.costo||0);
           const pr = (precioUnit != null) ? Number(precioUnit) : Number(p.precio||0);
 
-          // cria novo lote com este custo/preço
           const lot = await createLot({ partId: p.id, qty: q, costo_unit: c, precio_unit: pr });
 
-          // atualiza saldo da peça
           const { error: upErr } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) + q })
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
 
-          // registra o movimento
           const { error: insErr } = await sb.from('movements').insert({
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
@@ -768,7 +806,6 @@
 
         }else{ // SALIDA
           if(!loteId) throw new Error('Seleccione el lote para la salida');
-          // buscar lote
           const { data: lot, error: el } = await sb.from('part_lots')
             .select('id, qty, costo_unit, precio_unit')
             .eq('org_id', orgId())
@@ -778,20 +815,17 @@
           if(!lot) throw new Error('Lote no encontrado');
           if(Number(lot.qty||0) < q) throw new Error('Cantidad supera el disponible del lote');
 
-          // decrementa lote
           const { error: updLot } = await sb.from('part_lots')
             .update({ qty: Number(lot.qty||0) - q })
             .eq('id', lot.id).eq('org_id', orgId());
           if(updLot) throw updLot;
 
-          // atualiza saldo da peça
           if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
           const { error: upErr2 } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) - q })
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr2) throw upErr2;
 
-          // registra o movimento (com custo/preço do lote)
           const { error: insErr2 } = await sb.from('movements').insert({
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
@@ -806,203 +840,183 @@
 
         await recomputeMetrics(piezaId);
       }
-      
-                  // fim de applyMovement
 
-        // ==== DESHACER POR ID (seguro com lotes) ====
-        async function undoMovementById(movId){
-          // carrega o movimento
-          const { data: m, error: e0 } = await sb.from('movements')
-            .select('id, tipo, cantidad, pieza_id, lote_id')
-            .eq('org_id', orgId())
-            .eq('id', movId)
-            .maybeSingle();
-          if(e0) throw e0;
-          if(!m) throw new Error('Movimiento no encontrado');
+      // Deshacer por ID (seguro con lotes)
+      async function undoMovementById(movId){
+        const { data: m, error: e0 } = await sb.from('movements')
+          .select('id, tipo, cantidad, pieza_id, lote_id')
+          .eq('org_id', orgId())
+          .eq('id', movId)
+          .maybeSingle();
+        if(e0) throw e0;
+        if(!m) throw new Error('Movimiento no encontrado');
 
-          const q = Number(m.cantidad||0);
-          if(!(q>0)) throw new Error('Cantidad inválida');
+        const q = Number(m.cantidad||0);
+        if(!(q>0)) throw new Error('Cantidad inválida');
 
-          // peça atual
-          const { data: p, error: ep } = await sb.from('parts')
-            .select('id, stock')
-            .eq('org_id', orgId())
-            .eq('id', m.pieza_id)
-            .maybeSingle();
-          if(ep) throw ep;
-          if(!p) throw new Error('Pieza no encontrada (borrada?)');
+        const { data: p, error: ep } = await sb.from('parts')
+          .select('id, stock')
+          .eq('org_id', orgId())
+          .eq('id', m.pieza_id)
+          .maybeSingle();
+        if(ep) throw ep;
+        if(!p) throw new Error('Pieza no encontrada (¿borrada?)');
 
-          if(m.tipo === 'entrada'){
-            // Regras: só podemos deshacer uma entrada se:
-            // - o stock atual da peça >= q
-            // - se houver lote vinculado, o lote ainda tenha pelo menos q (ninguém vendeu desse lote)
-            if(Number(p.stock||0) < q){
-              throw new Error('No se puede deshacer: stock actual es menor que la entrada.');
-            }
-            if(m.lote_id){
-              const { data: lot, error: el } = await sb.from('part_lots')
-                .select('id, qty')
-                .eq('org_id', orgId())
-                .eq('id', m.lote_id)
-                .maybeSingle();
-              if(el) throw el;
-              // Se o lote não existe mais ou já foi consumido parcialmente, não dá para reverter com segurança
-              if(!lot || Number(lot.qty||0) < q){
-                throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
-              }
-
-              // 1) reduzir lote
-              const { error: upLot } = await sb.from('part_lots')
-                .update({ qty: Number(lot.qty||0) - q })
-                .eq('org_id', orgId())
-                .eq('id', lot.id);
-              if(upLot) throw upLot;
-            }
-
-            // 2) reduzir stock peça
-            const { error: upP } = await sb.from('parts')
-              .update({ stock: Math.max(0, Number(p.stock||0) - q) })
-              .eq('org_id', orgId())
-              .eq('id', p.id);
-            if(upP) throw upP;
-
-          }else{ // SALIDA
-            // Regras: se houver lote vinculado, devolvemos q ao lote
-            if(m.lote_id){
-              const { data: lot, error: el } = await sb.from('part_lots')
-                .select('id, qty')
-                .eq('org_id', orgId())
-                .eq('id', m.lote_id)
-                .maybeSingle();
-              if(el) throw el;
-              if(!lot){
-                // lote foi apagado — não podemos desfazer com consistência
-                throw new Error('No se puede deshacer: el lote original no existe.');
-              }
-              const { error: upLot } = await sb.from('part_lots')
-                .update({ qty: Number(lot.qty||0) + q })
-                .eq('org_id', orgId())
-                .eq('id', lot.id);
-              if(upLot) throw upLot;
-            }else{
-              // saída antiga sem lote -> não dá pra reverter (não sabemos de qual lote saiu)
-              throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
-            }
-
-            // somar de volta no estoque da peça
-            const { error: upP } = await sb.from('parts')
-              .update({ stock: Number(p.stock||0) + q })
-              .eq('org_id', orgId())
-              .eq('id', p.id);
-            if(upP) throw upP;
+        if(m.tipo === 'entrada'){
+          if(Number(p.stock||0) < q){
+            throw new Error('No se puede deshacer: el stock actual es menor que la entrada.');
           }
-
-          // remover o movimento
-          const { error: del } = await sb.from('movements')
-            .delete()
-            .eq('org_id', orgId())
-            .eq('id', m.id);
-          if(del) throw del;
-
-          // métricas
-          await recomputeMetrics(m.pieza_id);
-        }
-
-        // Deshacer último (atalho)
-        async function undoLastMovement(){
-          const { data: last, error } = await sb.from('movements')
-            .select('id')
-            .eq('org_id', orgId())
-            .order('fecha',{ascending:false})
-            .limit(1).maybeSingle();
-          if(error) throw error;
-          if(!last) throw new Error('Sin movimientos');
-          await undoMovementById(last.id);
-        }
-
-        // ---- Historial de precios ----
-        async function listPriceHistory(limit=500){
-          const { data, error } = await sb.from('price_history')
-            .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
-            .eq('org_id', orgId())
-            .order('fecha',{ascending:false})
-            .limit(limit);
-          if(error) throw error;
-          return (data||[]).map(h=>({
-            fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
-            costoAntes:h.costo_antes, costoDespues:h.costo_despues,
-            precioAntes:h.precio_antes, precioDespues:h.precio_despues,
-            usuario:h.usuario
-          }));
-        }
-
-        async function addPriceHistory(entry){
-          const row = {
-            org_id: orgId(),
-            pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
-            costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
-            precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
-            usuario: entry.usuario || ''
-          };
-          const { error } = await sb.from('price_history').insert(row);
-          if(error) throw error;
-        }
-
-        // ---- Backup simples (mantém como antes) ----
-        async function backupAll(){
-          const [parts, moves, hist] = await Promise.all([
-            listParts(), listMoves(10000), listPriceHistory(10000)
-          ]);
-          return { parts, moves, priceHistory: hist };
-        }
-
-        async function restoreAll(jsonDump){
-          if(Array.isArray(jsonDump.parts)){
-            for(const p of jsonDump.parts){
-              await upsertPart(p);
+          if(m.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty')
+              .eq('org_id', orgId())
+              .eq('id', m.lote_id)
+              .maybeSingle();
+            if(el) throw el;
+            if(!lot || Number(lot.qty||0) < q){
+              throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
             }
+            const { error: upLot } = await sb.from('part_lots')
+              .update({ qty: Number(lot.qty||0) - q })
+              .eq('org_id', orgId())
+              .eq('id', lot.id);
+            if(upLot) throw upLot;
           }
-        }
-
-        async function wipeCurrentOrg(){
-          const oid = orgId();
-          await sb.from('price_history').delete().eq('org_id', oid);
-          await sb.from('movements').delete().eq('org_id', oid);
-          await sb.from('part_lots').delete().eq('org_id', oid);
-          await sb.from('parts').delete().eq('org_id', oid);
-        }
-
-        // ---- Recalcular métricas automáticas (CD e stock_min) ----
-        async function recomputeMetrics(piezaId){
-          const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
-          const { data: outs, error } = await sb.from('movements')
-            .select('cantidad')
+          const { error: upP } = await sb.from('parts')
+            .update({ stock: Math.max(0, Number(p.stock||0) - q) })
             .eq('org_id', orgId())
-            .eq('pieza_id', piezaId)
-            .eq('tipo','salida')
-            .gte('fecha', since);
-          if(error) throw error;
-          const totalOut = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
-          const cd = totalOut / CD_WINDOW_DAYS;
-          const stockMin = Math.ceil(cd * SAFETY_DAYS);
+            .eq('id', p.id);
+          if(upP) throw upP;
 
-          const { error: upErr } = await sb.from('parts')
-            .update({ consumo_diario: cd, stock_min: stockMin })
-            .eq('id', piezaId).eq('org_id', orgId());
-          if(upErr) throw upErr;
+        }else{ // salida
+          if(m.lote_id){
+            const { data: lot, error: el } = await sb.from('part_lots')
+              .select('id, qty')
+              .eq('org_id', orgId())
+              .eq('id', m.lote_id)
+              .maybeSingle();
+            if(el) throw el;
+            if(!lot){
+              throw new Error('No se puede deshacer: el lote original no existe.');
+            }
+            const { error: upLot } = await sb.from('part_lots')
+              .update({ qty: Number(lot.qty||0) + q })
+              .eq('org_id', orgId())
+              .eq('id', lot.id);
+            if(upLot) throw upLot;
+          }else{
+            throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+          }
+          const { error: upP } = await sb.from('parts')
+            .update({ stock: Number(p.stock||0) + q })
+            .eq('org_id', orgId())
+            .eq('id', p.id);
+          if(upP) throw upP;
         }
 
-        return {
-          listParts, getPartById, upsertPart, deletePart,
-          listMoves, applyMovement, undoLastMovement, undoMovementById,
-          listLots, listAllLots, getInventoryValueByLots,
-          addPriceHistory, listPriceHistory,
-          backupAll, restoreAll, wipeCurrentOrg,
-          recomputeMetrics
+        const { error: del } = await sb.from('movements')
+          .delete()
+          .eq('org_id', orgId())
+          .eq('id', m.id);
+        if(del) throw del;
+
+        await recomputeMetrics(m.pieza_id);
+      }
+
+      async function undoLastMovement(){
+        const { data: last, error } = await sb.from('movements')
+          .select('id')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(1).maybeSingle();
+        if(error) throw error;
+        if(!last) throw new Error('Sin movimientos');
+        await undoMovementById(last.id);
+      }
+
+      // ---- Historial de precios ----
+      async function listPriceHistory(limit=500){
+        const { data, error } = await sb.from('price_history')
+          .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(limit);
+        if(error) throw error;
+        return (data||[]).map(h=>({
+          fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
+          costoAntes:h.costo_antes, costoDespues:h.costo_despues,
+          precioAntes:h.precio_antes, precioDespues:h.precio_despues,
+          usuario:h.usuario
+        }));
+      }
+
+      async function addPriceHistory(entry){
+        const row = {
+          org_id: orgId(),
+          pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
+          costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
+          precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
+          usuario: entry.usuario || ''
         };
+        const { error } = await sb.from('price_history').insert(row);
+        if(error) throw error;
+      }
+
+      // ---- Copia / restauración ----
+      async function backupAll(){
+        const [parts, moves, hist] = await Promise.all([
+          listParts(), listMoves(10000), listPriceHistory(10000)
+        ]);
+        return { parts, moves, priceHistory: hist };
+      }
+
+      async function restoreAll(jsonDump){
+        if(Array.isArray(jsonDump.parts)){
+          for(const p of jsonDump.parts){
+            await upsertPart(p);
+          }
+        }
+      }
+
+      async function wipeCurrentOrg(){
+        const oid = orgId();
+        await sb.from('price_history').delete().eq('org_id', oid);
+        await sb.from('movements').delete().eq('org_id', oid);
+        await sb.from('part_lots').delete().eq('org_id', oid);
+        await sb.from('parts').delete().eq('org_id', oid);
+      }
+
+      // ---- Recalcular métricas (CD y stock_min) ----
+      async function recomputeMetrics(piezaId){
+        const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
+        const { data: outs, error } = await sb.from('movements')
+          .select('cantidad')
+          .eq('org_id', orgId())
+          .eq('pieza_id', piezaId)
+          .eq('tipo','salida')
+          .gte('fecha', since);
+        if(error) throw error;
+        const totalOut = (outs||[]).reduce((s,m)=> s + Number(m.cantidad||0), 0);
+        const cd = totalOut / CD_WINDOW_DAYS;
+        const stockMin = Math.ceil(cd * SAFETY_DAYS);
+
+        const { error: upErr } = await sb.from('parts')
+          .update({ consumo_diario: cd, stock_min: stockMin })
+          .eq('id', piezaId).eq('org_id', orgId());
+        if(upErr) throw upErr;
+      }
+
+      return {
+        listParts, getPartById, upsertPart, deletePart,
+        listMoves, applyMovement, undoLastMovement, undoMovementById,
+        listLots, listAllLots, getInventoryValueByLots,
+        addPriceHistory, listPriceHistory,
+        backupAll, restoreAll, wipeCurrentOrg,
+        recomputeMetrics
+      };
     })();
 
-    /* ===== App / Navegação ===== */
+    /* ===== App / Navegación ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -1066,8 +1080,6 @@
       view.innerHTML = ''; view.appendChild(tpl);
 
       const form = document.getElementById('loginForm');
-      const clearBtn = document.getElementById('clearCacheBtn');
-
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
@@ -1075,14 +1087,6 @@
         const res = await Auth.login(email, password);
         if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
         location.hash = '#/reportes'; await route();
-      });
-
-      clearBtn.addEventListener('click', async ()=>{
-        localStorage.removeItem('currentOrgId');
-        localStorage.removeItem('currentOrgName');
-        await Auth.logout();
-        alert('Caché local limpiada. Inicie sesión nuevamente.');
-        location.hash = '#/login'; await route();
       });
     }
 
@@ -1092,7 +1096,6 @@
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      // datas padrão: últimos 30 dias
       const repDesde = document.getElementById('repDesde');
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
@@ -1113,16 +1116,14 @@
         const parts = await DB.listParts();
         const moves = await DB.listMoves(10000);
 
-        // filtro por período
         const dFrom = new Date(repDesde.value + 'T00:00:00');
         const dTo   = new Date(repHasta.value + 'T23:59:59');
 
-        // Mapa de peças
         const pmap = new Map(parts.map(p=>[p.id, p]));
 
         let bruto=0, cogs=0, units=0, movs=0;
-        const byCode = new Map(); // codigo -> unidades
-        const byDay  = new Map(); // yyyy-mm-dd -> receita
+        const byCode = new Map();
+        const byDay  = new Map();
 
         for(const m of moves){
           const dt = new Date(m.fecha);
@@ -1146,7 +1147,6 @@
         }
         const liq = bruto - cogs;
 
-        // KPIs
         elBruto.textContent = fmtMoney(bruto);
         elCogs.textContent  = fmtMoney(cogs);
         elLiq.textContent   = fmtMoney(liq);
@@ -1155,25 +1155,19 @@
         elSkus.textContent  = String(parts.length);
         elMovs.textContent  = String(movs);
 
-        // valor de inventário por lotes
         const invVal = await DB.getInventoryValueByLots();
         elInv.textContent = fmtMoney(invVal);
 
-        // Top 10
-        const topArr = Array.from(byCode.entries())
-          .sort((a,b)=>b[1]-a[1]).slice(0,10);
+        const topArr = Array.from(byCode.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
         const topLabels = topArr.map(x=>x[0]);
         const topData   = topArr.map(x=>x[1]);
 
-        // Receita por dia (ordem cronológica)
         const days = Array.from(byDay.keys()).sort();
         const revs = days.map(d=> byDay.get(d));
 
-        // Destruir gráficos anteriores se houver
         if(chartTop) chartTop.destroy();
         if(chartDia) chartDia.destroy();
 
-        // Top 10
         const ctxTop = document.getElementById('chartTop');
         chartTop = new Chart(ctxTop, {
           type: 'bar',
@@ -1186,7 +1180,6 @@
           }
         });
 
-        // Receita por dia
         const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
           type: 'line',
@@ -1259,7 +1252,6 @@
       }
 
       function makeLotsDrawerCell(p){
-        // célula com <details> (seta) que carrega lotes sob demanda
         const cell = document.createElement('td');
         const det = document.createElement('details');
         det.className = 'inline';
@@ -1291,9 +1283,10 @@
           const low = Number(p.stock) < Number(p.stockMin);
           const tr = document.createElement('tr');
 
+          const img = p.imagenUrl ? `<img class="thumb" src="${escapeHtml(p.imagenUrl)}" alt="">` : '';
           const htmlLeft = `
             <td>${escapeHtml(p.codigo)}</td>
-            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+            <td>${img}${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
             <td>${escapeHtml(p.categoria||'')}</td>
             <td>${escapeHtml(p.almacen||'')}</td>
             <td>${escapeHtml(p.ubicacion||'')}</td>
@@ -1304,10 +1297,8 @@
           `;
 
           tr.innerHTML = htmlLeft;
-          // coluna LOTES com drawer
           tr.appendChild(makeLotsDrawerCell(p));
 
-          // ações
           const tdAct = document.createElement('td');
           tdAct.className = 'num';
           tdAct.innerHTML = `
@@ -1343,6 +1334,8 @@
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
+        const file = form.querySelector('input[name="imagen"]').files[0] || null;
+
         const part = {
           id: fd.get('id') || undefined,
           codigo: String(fd.get('codigo')).trim(),
@@ -1352,7 +1345,7 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0), // estoque inicial -> lote inicial
+          stock: Number(fd.get('stock')||0),
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -1362,6 +1355,10 @@
         try{
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
+
+          if(file){
+            await ImageSvc.uploadPartImage(file, finalId, part.codigo || part.nombre || 'pieza');
+          }
 
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
@@ -1425,7 +1422,7 @@
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
                 leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0), // vira lote inicial
+                stock: Number(obj.stock||0),
                 costo: Number(obj.costo_Bs||obj.costo||0),
                 precio: Number(obj.precio_Bs||obj.precio||0)
               };
@@ -1543,7 +1540,7 @@
           if(tipo==='entrada'){
             payload.costoUnit = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
             payload.precioUnit = (entradaPrecio.value !== '') ? Number(entradaPrecio.value) : null;
-          }else{ // salida
+          }else{
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
             payload.loteId = loteId;
@@ -1556,7 +1553,7 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // Deshacer por linha
+      // Deshacer por línea
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
@@ -1689,7 +1686,7 @@
           const dump = await DB.backupAll();
           const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
-        }catch(e){ alert(e.message || 'No se pudo hacer backup'); }
+        }catch(e){ alert(e.message || 'No se pudo hacer copia'); }
       });
 
       restoreFile.addEventListener('change', async ()=>{
@@ -1698,7 +1695,7 @@
           const data = JSON.parse(await f.text());
           await DB.restoreAll(data);
           alert('Restauración completa'); location.hash = '#/reportes'; await route();
-        }catch(e){ alert('Archivo inválido / restauración falló'); }
+        }catch(e){ alert('Archivo inválido / la restauración falló'); }
         finally{ restoreFile.value = ''; }
       });
 
