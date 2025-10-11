@@ -197,7 +197,7 @@
       <header class="toolbar">
         <div class="left">
           <h2>Reportes</h2>
-          <p class="muted">Vendas, inventario e período filtrável.</p>
+          <p class="muted">Ventas, inventario y período filtrable.</p>
         </div>
         <div class="right" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap">
           <label class="field" style="min-width:160px">
@@ -213,7 +213,7 @@
       </header>
 
       <div class="kpis">
-        <div class="card"><h3>Vendas brutas</h3><strong id="kpiBruto">—</strong></div>
+        <div class="card"><h3>Ventas brutas</h3><strong id="kpiBruto">—</strong></div>
         <div class="card"><h3>COGS</h3><strong id="kpiCogs">—</strong></div>
         <div class="card"><h3>Ganancia líquida</h3><strong id="kpiLiquida">—</strong></div>
         <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
@@ -232,7 +232,7 @@
           <canvas id="chartTop" height="150"></canvas>
         </div>
         <div class="card">
-          <h3 style="margin:0 0 8px">Receita por dia</h3>
+          <h3 style="margin:0 0 8px">Ingresos por día</h3>
           <canvas id="chartDia" height="150"></canvas>
         </div>
       </div>
@@ -358,10 +358,10 @@
           <div id="entradaFields" class="field" style="grid-column: span 2; display:none">
             <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px">
               <label class="field"><span>Costo unitario (Bs)</span>
-                <input id="entradaCosto" type="number" step="0.01" min="0" placeholder="Costo deste lote" />
+                <input id="entradaCosto" type="number" step="0.01" min="0" placeholder="Costo de este lote" />
               </label>
               <label class="field"><span>Precio unitario (Bs)</span>
-                <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio deste lote" />
+                <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio de este lote" />
               </label>
             </div>
             <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
@@ -1190,7 +1190,7 @@
         const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
           type: 'line',
-          data: { labels: days, datasets: [{ label: 'Receita', data: revs }] },
+          data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
           options: {
             responsive: true,
             maintainAspectRatio: false,
@@ -1277,7 +1277,7 @@
             const lots = await DB.listLots(p.id);
             box.innerHTML = lots.length
               ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
-              : '<span class="muted xs">Sem lotes disponíveis</span>';
+              : '<span class="muted xs">Sin lotes disponibles</span>';
             loaded = true;
           }
         });
