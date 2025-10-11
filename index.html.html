@@ -55,7 +55,7 @@
 
     .form{display:flex; flex-direction:column; gap:12px}
     .field{display:flex; flex-direction:column; gap:6px}
-    .field input, .field select, .input, .field textarea{
+    .field input, .field select, .input{
       border:1px solid var(--border);
       border-radius:10px;
       padding:10px 12px;
@@ -64,9 +64,8 @@
       height:44px;
       font-size:16px;
     }
-    .field textarea{ height:auto; min-height:72px; resize:vertical }
     .field input[readonly]{ background:#f8fafc; }
-    .field input:focus, .field select:focus, .input:focus, .field textarea:focus{outline:2px solid rgba(31,111,235,.25)}
+    .field input:focus, .field select:focus, .input:focus{outline:2px solid rgba(31,111,235,.25)}
 
     .btn{
       border:1px solid var(--border);
@@ -82,7 +81,7 @@
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
 
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
-    .toolbar .right{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end}
+    .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
     .stack{display:flex; flex-direction:column; gap:12px}
 
     .table-wrap{width:100%; overflow:auto}
@@ -127,11 +126,12 @@
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
 
-    /* miniatura de imagen */
-    .thumb { width:28px; height:28px; object-fit:cover; border-radius:6px; border:1px solid var(--border); margin-right:6px; vertical-align:middle }
-
     /* Charts compactos */
     .charts-compact canvas { max-height: 180px; }
+
+    /* Grupo de filtros (Reportes) com maior separação visual */
+    .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
+    .filter-group .field{ margin:0 }
 
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
@@ -145,7 +145,7 @@
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
       .kpis{grid-template-columns:1fr;}
-      .toolbar .right{gap:8px}
+      .toolbar .right{gap:6px}
       .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
     }
 
@@ -164,7 +164,7 @@
         <button class="nav-btn" data-route="inventario">Inventario</button>
         <button class="nav-btn" data-route="movimientos">Movimientos</button>
         <button class="nav-btn" data-route="sugerencias">Sugerencias</button>
-        <button class="nav-btn" data-route="historial">Historial de precios</button>
+        <button class="nav-btn" data-route="historial">Historial precios</button>
         <button class="nav-btn" data-route="ajustes">Ajustes</button>
       </nav>
       <div class="sidebar-foot">
@@ -202,15 +202,17 @@
           <p class="muted">Ventas, inventario y período filtrable.</p>
         </div>
         <div class="right">
-          <div class="field" style="min-width:170px">
-            <span class="xs muted">Desde</span>
-            <input type="date" id="repDesde" class="input" />
+          <div class="filter-group">
+            <label class="field" style="min-width:160px">
+              <span class="xs muted">Desde</span>
+              <input type="date" id="repDesde" class="input" />
+            </label>
+            <label class="field" style="min-width:160px">
+              <span class="xs muted">Hasta</span>
+              <input type="date" id="repHasta" class="input" />
+            </label>
+            <button id="repAplicar" class="btn btn-primary">Aplicar</button>
           </div>
-          <div class="field" style="min-width:170px">
-            <span class="xs muted">Hasta</span>
-            <input type="date" id="repHasta" class="input" />
-          </div>
-          <button id="repAplicar" class="btn btn-primary">Aplicar</button>
         </div>
       </header>
 
@@ -222,7 +224,7 @@
       </div>
 
       <div class="kpis">
-        <div class="card"><h3>Valor del inventario (lotes)</h3><strong id="kpiInvVal">—</strong></div>
+        <div class="card"><h3>Valor del inventario (por lotes)</h3><strong id="kpiInvVal">—</strong></div>
         <div class="card"><h3>Días de seguridad</h3><strong id="kpiSafety">—</strong></div>
         <div class="card"><h3>SKUs</h3><strong id="kpiSkus">—</strong></div>
         <div class="card"><h3>Movimientos (período)</h3><strong id="kpiMovs">—</strong></div>
@@ -230,7 +232,7 @@
 
       <div class="charts-compact" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px">
         <div class="card">
-          <h3 style="margin:0 0 8px">Top 10 más vendidas (unid.)</h3>
+          <h3 style="margin:0 0 8px">Top 10 vendidas (unid.)</h3>
           <canvas id="chartTop" height="150"></canvas>
         </div>
         <div class="card">
@@ -273,7 +275,7 @@
             <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
             <datalist id="dlAlmacenes"></datalist>
             <div class="chips" id="almacenChips"></div>
-            <span class="xs muted">Tip: escribe o haz clic en un chip.</span>
+            <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
           </label>
 
           <!-- Proveedor con datalist + chips -->
@@ -283,7 +285,7 @@
             <div class="chips" id="proveedorChips"></div>
           </label>
 
-          <label class="field"><span>Lead time (días)</span>
+          <label class="field"><span>Tiempo de reposición (días)</span>
             <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
           </label>
 
@@ -297,24 +299,17 @@
               title="ceil(CD × días de seguridad)" />
           </label>
 
-          <label class="field"><span>Stock inicial</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
+          <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
-          <label class="field"><span>Precio venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
-
-          <!-- Imagen opcional -->
-          <label class="field" style="grid-column: span 2;"><span>Imagen (opcional)</span>
-            <input type="file" name="imagen" accept="image/*" />
-            <span class="xs muted">Se guardará en Supabase Storage si está disponible.</span>
-          </label>
-
-          <div class="row-actions" style="grid-column: 1 / -1">
+          <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
+          <div class="row-actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
           </div>
         </form>
         <p class="muted xs">
           Cálculo: CD = salidas/30d. Stock mínimo = ceil(CD × <span id="safetyDaysHint"></span>).
-          ROP = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).
+          Punto de pedido (ROP) = ceil(CD × (LT + <span id="safetyDaysHint2"></span>)).
         </p>
       </details>
 
@@ -333,8 +328,8 @@
       </div>
     </section>
   </template>
-  
-    <template id="tpl-movimientos">
+
+  <template id="tpl-movimientos">
     <section class="stack">
       <header class="toolbar">
         <div class="left"><h2>Movimientos</h2><p class="muted">Entradas y salidas que afectan el stock.</p></div>
@@ -373,7 +368,7 @@
                 <input id="entradaPrecio" type="number" step="0.01" min="0" placeholder="Precio de este lote" />
               </label>
             </div>
-            <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que entra y no cambian el precio/costo base de la pieza.</span>
+            <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
           </div>
 
           <!-- CAMPOS EXTRAS PARA SALIDA -->
@@ -428,7 +423,7 @@
   <template id="tpl-ajustes">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, copias y restauración.</p></div>
+        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, backup y restauración.</p></div>
         <div class="right">
           <button id="backupBtn" class="btn">Backup JSON</button>
           <label class="btn" for="restoreFile">Restaurar JSON</label>
@@ -471,25 +466,24 @@
 
   <script>
     /* =======================
-       CONFIGURACIÓN SUPABASE
+       CONFIG SUPABASE
     ======================= */
     const SUPABASE_URL = 'https://zbqshivafjhbghksuhkz.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpicXNoaXZhZmpoYmdoa3N1aGt6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3MjAzMTEsImV4cCI6MjA3NTI5NjMxMX0.t89MkdRDYHTSs8-pk7gzglZMNlXxGG-VKIQl7Hu8vtE';
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Parámetros de cálculos automáticos
+    // Parámetros para cálculos automáticos
     const CD_WINDOW_DAYS = 30;
-    const SAFETY_DAYS   = 2;
+    const SAFETY_DAYS   = 2; // días de seguridad (buffer)
 
-    /* ===== Utilidades ===== */
+    /* ===== Utils ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
     const fmtDate  = (d)=> new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
-    const slug = (t)=> String(t||'img').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'');
 
-    /* ===== Autenticación ===== */
+    /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
       function set(user){
@@ -516,7 +510,7 @@
       return { init, isAuthed, currentUser, login, logout };
     })();
 
-    /* ===== Organización ===== */
+    /* ===== Org ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
@@ -563,45 +557,15 @@
       return { get, set, myOrgs, ensureCurrent };
     })();
 
-    /* ===== Servicio de Imágenes (Storage) ===== */
-    const ImageSvc = (() => {
-      async function uploadPartImage(file, partId, codeHint='pieza'){
-        try{
-          const b = sb.storage.from('part_images');
-          const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-          const path = `${Org.get().id}/${partId}_${slug(codeHint)}_${Date.now()}.${ext}`;
-          const { error: upErr } = await b.upload(path, file, { upsert: true, contentType: file.type || 'image/*' });
-          if(upErr) throw upErr;
-          const { data: pub } = b.getPublicUrl(path);
-          const url = pub?.publicUrl || null;
-          if(url){
-            // intenta actualizar columna imagen_url; si no existe, ignora
-            const { error: updErr } = await sb.from('parts')
-              .update({ imagen_url: url })
-              .eq('id', partId)
-              .eq('org_id', Org.get().id);
-            if(updErr && !String(updErr.message||'').toLowerCase().includes('column "imagen_url"')) {
-              console.warn('No se pudo actualizar imagen_url:', updErr.message);
-            }
-          }
-          return url;
-        }catch(e){
-          alert('No se pudo subir la imagen (bucket "part_images" ausente o permisos insuficientes).');
-          return null;
-        }
-      }
-      return { uploadPartImage };
-    })();
-
-    /* ===== BD (Supabase) ===== */
+    /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // ---- Piezas ----
+      // ---- Partes ----
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, imagen_url')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
@@ -610,14 +574,14 @@
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
-          costo:Number(r.costo||0), precio:Number(r.precio||0),
-          imagenUrl: r.imagen_url || ''
+          costo:Number(r.costo||0), precio:Number(r.precio||0)
         }));
       }
 
       async function getPartById(id){
+        if(!id) return null;
         const { data, error } = await sb.from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, imagen_url')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
@@ -626,13 +590,13 @@
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
           leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
           stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
-          costo:Number(data.costo||0), precio:Number(data.precio||0),
-          imagenUrl: data.imagen_url || ''
+          costo:Number(data.costo||0), precio:Number(data.precio||0)
         };
       }
 
       // ---- Lotes ----
       async function listLots(partId){
+        if(!partId) return [];
         const { data, error } = await sb.from('part_lots')
           .select('id, qty, costo_unit, precio_unit')
           .eq('org_id', orgId())
@@ -669,7 +633,7 @@
         return data;
       }
 
-      // Lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
+      // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
         const q = Number(qty || 0);
         const c = Number(costo || 0);
@@ -714,7 +678,7 @@
         if (e3) throw e3;
       }
 
-      // Insert con lote inicial; Update normal
+      // Upsert de piezas
       async function upsertPart(part){
         const base = {
           org_id: orgId(),
@@ -774,6 +738,7 @@
         return data||[];
       }
 
+      // Aplicar movimiento con LOTES
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
@@ -788,13 +753,16 @@
           const c = (costoUnit != null) ? Number(costoUnit) : Number(p.costo||0);
           const pr = (precioUnit != null) ? Number(precioUnit) : Number(p.precio||0);
 
+          // crear nuevo lote con este costo/precio
           const lot = await createLot({ partId: p.id, qty: q, costo_unit: c, precio_unit: pr });
 
+          // actualizar saldo de la pieza
           const { error: upErr } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) + q })
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
 
+          // registrar el movimiento
           const { error: insErr } = await sb.from('movements').insert({
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
@@ -806,6 +774,7 @@
 
         }else{ // SALIDA
           if(!loteId) throw new Error('Seleccione el lote para la salida');
+          // buscar lote
           const { data: lot, error: el } = await sb.from('part_lots')
             .select('id, qty, costo_unit, precio_unit')
             .eq('org_id', orgId())
@@ -815,17 +784,20 @@
           if(!lot) throw new Error('Lote no encontrado');
           if(Number(lot.qty||0) < q) throw new Error('Cantidad supera el disponible del lote');
 
+          // decrementar lote
           const { error: updLot } = await sb.from('part_lots')
             .update({ qty: Number(lot.qty||0) - q })
             .eq('id', lot.id).eq('org_id', orgId());
           if(updLot) throw updLot;
 
+          // actualizar saldo de la pieza
           if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
           const { error: upErr2 } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) - q })
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr2) throw upErr2;
 
+          // registrar el movimiento (con costo/precio del lote)
           const { error: insErr2 } = await sb.from('movements').insert({
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
@@ -840,9 +812,11 @@
 
         await recomputeMetrics(piezaId);
       }
+            } // <- fim de applyMovement
 
-      // Deshacer por ID (seguro con lotes)
+      // ==== DESHACER POR ID (seguro con lotes y tolerante a registros huérfanos) ====
       async function undoMovementById(movId){
+        // 1) cargar movimiento
         const { data: m, error: e0 } = await sb.from('movements')
           .select('id, tipo, cantidad, pieza_id, lote_id')
           .eq('org_id', orgId())
@@ -854,75 +828,97 @@
         const q = Number(m.cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
 
-        const { data: p, error: ep } = await sb.from('parts')
-          .select('id, stock')
-          .eq('org_id', orgId())
-          .eq('id', m.pieza_id)
-          .maybeSingle();
-        if(ep) throw ep;
-        if(!p) throw new Error('Pieza no encontrada (¿borrada?)');
+        // 2) intentar resolver pieza y lote (aunque vengan nulos)
+        let lot = null;
+        if(m.lote_id){
+          const lr = await sb.from('part_lots')
+            .select('id, qty, costo_unit, precio_unit, part_id')
+            .eq('org_id', orgId())
+            .eq('id', m.lote_id)
+            .maybeSingle();
+          if(lr.error) throw lr.error;
+          lot = lr.data || null;
+        }
 
+        let piezaId = m.pieza_id || (lot?.part_id ?? null);
+
+        // 3) cargar pieza si existe
+        let p = null;
+        if(piezaId){
+          const pr = await sb.from('parts')
+            .select('id, stock')
+            .eq('org_id', orgId())
+            .eq('id', piezaId)
+            .maybeSingle();
+          if(pr.error) throw pr.error;
+          p = pr.data || null;
+        }
+
+        // 4) aplicar reversión según tipo, pero solo si tenemos datos suficientes
         if(m.tipo === 'entrada'){
-          if(Number(p.stock||0) < q){
-            throw new Error('No se puede deshacer: el stock actual es menor que la entrada.');
-          }
-          if(m.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty')
-              .eq('org_id', orgId())
-              .eq('id', m.lote_id)
-              .maybeSingle();
-            if(el) throw el;
-            if(!lot || Number(lot.qty||0) < q){
+          // Reglas seguras: necesitamos poder bajar stock de la pieza y bajar qty del lote
+          if(p && lot){
+            if(Number(p.stock||0) < q){
+              throw new Error('No se puede deshacer: el stock actual es menor que la entrada.');
+            }
+            if(Number(lot.qty||0) < q){
               throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
             }
-            const { error: upLot } = await sb.from('part_lots')
+
+            const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) - q })
               .eq('org_id', orgId())
               .eq('id', lot.id);
-            if(upLot) throw upLot;
-          }
-          const { error: upP } = await sb.from('parts')
-            .update({ stock: Math.max(0, Number(p.stock||0) - q) })
-            .eq('org_id', orgId())
-            .eq('id', p.id);
-          if(upP) throw upP;
+            if(upLot.error) throw upLot.error;
 
-        }else{ // salida
-          if(m.lote_id){
-            const { data: lot, error: el } = await sb.from('part_lots')
-              .select('id, qty')
+            const upP = await sb.from('parts')
+              .update({ stock: Math.max(0, Number(p.stock||0) - q) })
               .eq('org_id', orgId())
-              .eq('id', m.lote_id)
-              .maybeSingle();
-            if(el) throw el;
-            if(!lot){
-              throw new Error('No se puede deshacer: el lote original no existe.');
-            }
-            const { error: upLot } = await sb.from('part_lots')
+              .eq('id', p.id);
+            if(upP.error) throw upP.error;
+
+          }else{
+            // Caso huérfano: no tenemos pieza y/o lote. Permitimos borrar el movimiento
+            // para limpiar el historial sin tocar inventario (no hay de dónde restar).
+          }
+        }else{ // SALIDA
+          // Para revertir salida: sumamos al lote y a la pieza si existen
+          if(lot){
+            const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) + q })
               .eq('org_id', orgId())
               .eq('id', lot.id);
-            if(upLot) throw upLot;
+            if(upLot.error) throw upLot.error;
           }else{
-            throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+            // Salida antigua sin lote asociado -> no sabemos a qué lote devolver.
+            // Permitimos borrar solo si tampoco hay pieza; si hay pieza sin lote,
+            // no podemos garantizar consistencia del costo por lote.
+            if(p){
+              throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+            }
           }
-          const { error: upP } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) + q })
-            .eq('org_id', orgId())
-            .eq('id', p.id);
-          if(upP) throw upP;
+
+          if(p){
+            const upP = await sb.from('parts')
+              .update({ stock: Number(p.stock||0) + q })
+              .eq('org_id', orgId())
+              .eq('id', p.id);
+            if(upP.error) throw upP.error;
+          }
         }
 
-        const { error: del } = await sb.from('movements')
+        // 5) eliminar movimiento (siempre)
+        const del = await sb.from('movements')
           .delete()
           .eq('org_id', orgId())
           .eq('id', m.id);
-        if(del) throw del;
+        if(del.error) throw del.error;
 
-        await recomputeMetrics(m.pieza_id);
+        // 6) métricas (solo si tenemos pieza válida)
+        if(piezaId){ await recomputeMetrics(piezaId); }
       }
 
+      // Deshacer último (atajo)
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
           .select('id')
@@ -962,7 +958,7 @@
         if(error) throw error;
       }
 
-      // ---- Copia / restauración ----
+      // ---- Backup simple ----
       async function backupAll(){
         const [parts, moves, hist] = await Promise.all([
           listParts(), listMoves(10000), listPriceHistory(10000)
@@ -986,8 +982,11 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ---- Recalcular métricas (CD y stock_min) ----
+      // ---- Recalcular métricas automáticas (CD y stock_min) ----
       async function recomputeMetrics(piezaId){
+        // Parche anti-UUID null: si no hay piezaId, no consultamos
+        if(!piezaId) return;
+
         const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
         const { data: outs, error } = await sb.from('movements')
           .select('cantidad')
@@ -1080,6 +1079,7 @@
       view.innerHTML = ''; view.appendChild(tpl);
 
       const form = document.getElementById('loginForm');
+
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
@@ -1096,6 +1096,7 @@
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
+      // Fechas por defecto: últimos 30 días
       const repDesde = document.getElementById('repDesde');
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
@@ -1116,14 +1117,16 @@
         const parts = await DB.listParts();
         const moves = await DB.listMoves(10000);
 
+        // Filtro por período
         const dFrom = new Date(repDesde.value + 'T00:00:00');
         const dTo   = new Date(repHasta.value + 'T23:59:59');
 
+        // Mapa de piezas
         const pmap = new Map(parts.map(p=>[p.id, p]));
 
         let bruto=0, cogs=0, units=0, movs=0;
-        const byCode = new Map();
-        const byDay  = new Map();
+        const byCode = new Map(); // codigo -> unidades
+        const byDay  = new Map(); // yyyy-mm-dd -> ingresos
 
         for(const m of moves){
           const dt = new Date(m.fecha);
@@ -1147,6 +1150,7 @@
         }
         const liq = bruto - cogs;
 
+        // KPIs
         elBruto.textContent = fmtMoney(bruto);
         elCogs.textContent  = fmtMoney(cogs);
         elLiq.textContent   = fmtMoney(liq);
@@ -1155,19 +1159,25 @@
         elSkus.textContent  = String(parts.length);
         elMovs.textContent  = String(movs);
 
+        // Valor de inventario por lotes
         const invVal = await DB.getInventoryValueByLots();
         elInv.textContent = fmtMoney(invVal);
 
-        const topArr = Array.from(byCode.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        // Top 10
+        const topArr = Array.from(byCode.entries())
+          .sort((a,b)=>b[1]-a[1]).slice(0,10);
         const topLabels = topArr.map(x=>x[0]);
         const topData   = topArr.map(x=>x[1]);
 
+        // Ingresos por día (orden cronológico)
         const days = Array.from(byDay.keys()).sort();
         const revs = days.map(d=> byDay.get(d));
 
+        // Destruir gráficos anteriores si existen
         if(chartTop) chartTop.destroy();
         if(chartDia) chartDia.destroy();
 
+        // Top 10
         const ctxTop = document.getElementById('chartTop');
         chartTop = new Chart(ctxTop, {
           type: 'bar',
@@ -1180,6 +1190,7 @@
           }
         });
 
+        // Ingresos por día
         const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
           type: 'line',
@@ -1252,6 +1263,7 @@
       }
 
       function makeLotsDrawerCell(p){
+        // celda con <details> (flecha) que carga lotes bajo demanda
         const cell = document.createElement('td');
         const det = document.createElement('details');
         det.className = 'inline';
@@ -1283,10 +1295,9 @@
           const low = Number(p.stock) < Number(p.stockMin);
           const tr = document.createElement('tr');
 
-          const img = p.imagenUrl ? `<img class="thumb" src="${escapeHtml(p.imagenUrl)}" alt="">` : '';
           const htmlLeft = `
             <td>${escapeHtml(p.codigo)}</td>
-            <td>${img}${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
+            <td>${escapeHtml(p.nombre)} ${low ? '<span class="badge low">Bajo stock</span>' : ''}</td>
             <td>${escapeHtml(p.categoria||'')}</td>
             <td>${escapeHtml(p.almacen||'')}</td>
             <td>${escapeHtml(p.ubicacion||'')}</td>
@@ -1297,8 +1308,10 @@
           `;
 
           tr.innerHTML = htmlLeft;
+          // columna LOTES con drawer
           tr.appendChild(makeLotsDrawerCell(p));
 
+          // acciones
           const tdAct = document.createElement('td');
           tdAct.className = 'num';
           tdAct.innerHTML = `
@@ -1334,8 +1347,6 @@
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
-        const file = form.querySelector('input[name="imagen"]').files[0] || null;
-
         const part = {
           id: fd.get('id') || undefined,
           codigo: String(fd.get('codigo')).trim(),
@@ -1345,7 +1356,7 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0),
+          stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -1355,10 +1366,6 @@
         try{
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
-
-          if(file){
-            await ImageSvc.uploadPartImage(file, finalId, part.codigo || part.nombre || 'pieza');
-          }
 
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
@@ -1422,7 +1429,7 @@
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
                 leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0),
+                stock: Number(obj.stock||0), // se convierte en lote inicial
                 costo: Number(obj.costo_Bs||obj.costo||0),
                 precio: Number(obj.precio_Bs||obj.precio||0)
               };
@@ -1540,7 +1547,7 @@
           if(tipo==='entrada'){
             payload.costoUnit = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
             payload.precioUnit = (entradaPrecio.value !== '') ? Number(entradaPrecio.value) : null;
-          }else{
+          }else{ // salida
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
             payload.loteId = loteId;
@@ -1553,7 +1560,7 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // Deshacer por línea
+      // Deshacer por fila
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
@@ -1686,7 +1693,7 @@
           const dump = await DB.backupAll();
           const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
-        }catch(e){ alert(e.message || 'No se pudo hacer copia'); }
+        }catch(e){ alert(e.message || 'No se pudo hacer backup'); }
       });
 
       restoreFile.addEventListener('change', async ()=>{
@@ -1695,7 +1702,7 @@
           const data = JSON.parse(await f.text());
           await DB.restoreAll(data);
           alert('Restauración completa'); location.hash = '#/reportes'; await route();
-        }catch(e){ alert('Archivo inválido / la restauración falló'); }
+        }catch(e){ alert('Archivo inválido / restauración falló'); }
         finally{ restoreFile.value = ''; }
       });
 
@@ -1754,3 +1761,4 @@
   </script>
 </body>
 </html>
+      
