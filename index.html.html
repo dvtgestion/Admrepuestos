@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
@@ -126,13 +126,16 @@
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
 
-    /* Miniatura en la tabla */
-    .thumb{ width:28px; height:28px; object-fit:cover; border-radius:6px; vertical-align:middle; margin-right:6px; border:1px solid var(--border); background:#fff; }
+    /* Miniatura da peça na tabela */
+    .table .thumb{
+      width:32px; height:32px; object-fit:cover; border-radius:6px;
+      border:1px solid var(--border); margin-right:8px; vertical-align:middle;
+    }
 
     /* Charts compactos */
     .charts-compact canvas { max-height: 180px; }
 
-    /* Grupo de filtros (Reportes) con mayor separación visual */
+    /* Grupo de filtros (Reportes) com maior separação visual */
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
@@ -305,17 +308,6 @@
           <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
-
-          <!-- Imagen opcional -->
-          <label class="field"><span>Imagen (opcional)</span>
-            <input id="partImage" type="file" accept="image/*" />
-            <div style="display:flex; align-items:center; gap:8px; margin-top:6px">
-              <img id="partImagePreview" alt="Previsualización" style="width:64px;height:64px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:none" />
-              <button type="button" id="removeImageBtn" class="btn">Quitar imagen</button>
-            </div>
-            <span class="xs muted">Formatos: JPG, PNG, WEBP. Máx ~5MB.</span>
-          </label>
-
           <div class="row-actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
@@ -475,6 +467,9 @@
     </section>
   </template>
 
+  <!-- Picker global para imagen -->
+  <input id="imagePicker" type="file" accept="image/*" style="display:none" />
+
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -575,57 +570,38 @@
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // Helpers: lectura de parts con/ sin columnas de imagen (compatibilidad)
-      async function _selectPartsList(withImg=true){
-        const base = 'id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio';
-        const cols = withImg ? base + ', image_url, image_path' : base;
+      // ---- Partes ----
+      async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          .select(cols)
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
-        return data||[];
-      }
-      async function _selectPartById(id, withImg=true){
-        const base = 'id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio';
-        const cols = withImg ? base + ', image_url, image_path' : base;
-        const { data, error } = await sb
-          .from('parts')
-          .select(cols)
-          .eq('id', id).eq('org_id', orgId()).maybeSingle();
-        if(error) throw error;
-        return data||null;
-      }
-
-      // ---- Partes ----
-      async function listParts(){
-        let data;
-        try{ data = await _selectPartsList(true); }
-        catch(e){ if(e?.code==='42703'){ data = await _selectPartsList(false); } else { throw e; } }
-        return data.map(r => ({
+        return (data||[]).map(r => ({
           id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
           costo:Number(r.costo||0), precio:Number(r.precio||0),
-          imageUrl:r.image_url || null, imagePath:r.image_path || null
+          imageUrl: r.image_url || null, imagePath: r.image_path || null
         }));
       }
 
       async function getPartById(id){
         if(!id) return null;
-        let row;
-        try{ row = await _selectPartById(id, true); }
-        catch(e){ if(e?.code==='42703'){ row = await _selectPartById(id, false); } else { throw e; } }
-        if(!row) return null;
+        const { data, error } = await sb.from('parts')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          .eq('id', id).eq('org_id', orgId()).maybeSingle();
+        if(error) throw error;
+        if(!data) return null;
         return {
-          id:row.id, codigo:row.codigo, nombre:row.nombre, categoria:row.categoria||'',
-          ubicacion:row.ubicacion||'', almacen:row.almacen||'', proveedor:row.proveedor||'',
-          leadTimeDias:Number(row.lead_time_dias||0), consumoDiario:Number(row.consumo_diario||0),
-          stock:Number(row.stock||0), stockMin:Number(row.stock_min||0),
-          costo:Number(row.costo||0), precio:Number(row.precio||0),
-          imageUrl:row.image_url || null, imagePath:row.image_path || null
+          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria||'',
+          ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
+          leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
+          stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
+          costo:Number(data.costo||0), precio:Number(data.precio||0),
+          imageUrl:data.image_url || null, imagePath:data.image_path || null
         };
       }
 
@@ -713,7 +689,7 @@
         if (e3) throw e3;
       }
 
-      // Upsert de piezas (sin imagen en la base para compatibilidad)
+      // Upsert de piezas
       async function upsertPart(part){
         const base = {
           org_id: orgId(),
@@ -759,30 +735,6 @@
 
       async function deletePart(id){
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
-        if(error) throw error;
-      }
-
-      /* ====== IMÁGENES (Storage) ====== */
-      async function uploadPartImage(partId, file){
-        const ext = (file?.name?.split('.').pop() || 'jpg').toLowerCase();
-        const safeName = (file?.name || 'img').replace(/[^a-zA-Z0-9._-]/g,'_');
-        const path = `${orgId()}/${partId}/${Date.now()}_${safeName}`;
-        const { error } = await sb.storage.from('part_images').upload(path, file, { upsert:true, cacheControl: '3600' });
-        if(error) throw error;
-        const { data } = sb.storage.from('part_images').getPublicUrl(path);
-        return { path, url: data.publicUrl };
-      }
-      async function deletePartImage(path){
-        if(!path) return;
-        const { error } = await sb.storage.from('part_images').remove([path]);
-        if(error) throw error;
-      }
-      async function trySetPartImage(partId, url, path){
-        // Intentar actualizar columnas opcionales image_url/ image_path; ignorar si no existen
-        const { error } = await sb.from('parts')
-          .update({ image_url: url, image_path: path })
-          .eq('id', partId).eq('org_id', orgId());
-        if(error && error.code === '42703'){ return; } // columnas no existen -> ignorar
         if(error) throw error;
       }
 
@@ -872,7 +824,7 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ==== DESHACER POR ID (tolerante a registros huérfanos) ====
+      // ==== DESHACER POR ID ====
       async function undoMovementById(movId){
         const { data: m, error: e0 } = await sb.from('movements')
           .select('id, tipo, cantidad, pieza_id, lote_id')
@@ -895,6 +847,7 @@
           if(lr.error) throw lr.error;
           lot = lr.data || null;
         }
+
         let piezaId = m.pieza_id || (lot?.part_id ?? null);
 
         let p = null;
@@ -910,8 +863,12 @@
 
         if(m.tipo === 'entrada'){
           if(p && lot){
-            if(Number(p.stock||0) < q){ throw new Error('No se puede deshacer: el stock actual es menor que la entrada.'); }
-            if(Number(lot.qty||0) < q){ throw new Error('No se puede deshacer: ya hubo salidas desde este lote.'); }
+            if(Number(p.stock||0) < q){
+              throw new Error('No se puede deshacer: el stock actual es menor que la entrada.');
+            }
+            if(Number(lot.qty||0) < q){
+              throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
+            }
 
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) - q })
@@ -924,18 +881,23 @@
               .eq('org_id', orgId())
               .eq('id', p.id);
             if(upP.error) throw upP.error;
+
+          }else{
+            // huérfano: solo borrar el movimiento
           }
-          // si no hay pieza/lote válidos, solo limpiamos el movimiento
-        }else{
+        }else{ // SALIDA
           if(lot){
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) + q })
               .eq('org_id', orgId())
               .eq('id', lot.id);
             if(upLot.error) throw upLot.error;
-          }else if(p){
-            throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+          }else{
+            if(p){
+              throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
+            }
           }
+
           if(p){
             const upP = await sb.from('parts')
               .update({ stock: Number(p.stock||0) + q })
@@ -954,7 +916,6 @@
         if(piezaId){ await recomputeMetrics(piezaId); }
       }
 
-      // Deshacer último (atajo)
       async function undoLastMovement(){
         const { data: last, error } = await sb.from('movements')
           .select('id')
@@ -994,7 +955,34 @@
         if(error) throw error;
       }
 
-      // ---- Backup simple ----
+      // ---- Imagen de pieza (Storage) ----
+      async function uploadPartImage(partId, file){
+        const oid = orgId();
+        const ext = (file.name||'').split('.').pop() || 'jpg';
+        const safeName = (file.name||'foto').replace(/[^\w.\-]+/g,'_');
+        const path = `${oid}/${partId}/${Date.now()}_${safeName}`;
+        const { error: upErr } = await sb.storage.from('part_images').upload(path, file, {
+          cacheControl: '3600', upsert: true, contentType: file.type || 'image/*'
+        });
+        if(upErr) throw upErr;
+        const { data } = sb.storage.from('part_images').getPublicUrl(path);
+        return { path, url: data.publicUrl };
+      }
+
+      async function deletePartImage(path){
+        if(!path) return;
+        await sb.storage.from('part_images').remove([path]);
+      }
+
+      async function trySetPartImage(partId, url, path){
+        const { error } = await sb.from('parts')
+          .update({ image_url: url, image_path: path })
+          .eq('org_id', orgId())
+          .eq('id', partId);
+        if(error) throw error;
+      }
+
+      // ---- Backup / Restore / Wipe ----
       async function backupAll(){
         const [parts, moves, hist] = await Promise.all([
           listParts(), listMoves(10000), listPriceHistory(10000)
@@ -1018,10 +1006,9 @@
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
-      // ---- Recalcular métricas automáticas (CD y stock_min) ----
+      // ---- Recalcular métricas ----
       async function recomputeMetrics(piezaId){
-        if(!piezaId) return; // anti UUID null
-
+        if(!piezaId) return;
         const since = new Date(Date.now() - CD_WINDOW_DAYS*24*3600*1000).toISOString();
         const { data: outs, error } = await sb.from('movements')
           .select('cantidad')
@@ -1045,10 +1032,9 @@
         listMoves, applyMovement, undoLastMovement, undoMovementById,
         listLots, listAllLots, getInventoryValueByLots,
         addPriceHistory, listPriceHistory,
+        uploadPartImage, deletePartImage, trySetPartImage,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics,
-        // imágenes
-        uploadPartImage, deletePartImage, trySetPartImage
+        recomputeMetrics
       };
     })();
     
@@ -1210,34 +1196,21 @@
         const days = Array.from(byDay.keys()).sort();
         const revs = days.map(d=> byDay.get(d));
 
-        // Destruir gráficos anteriores si existen
         if(chartTop) chartTop.destroy();
         if(chartDia) chartDia.destroy();
 
-        // Top 10
         const ctxTop = document.getElementById('chartTop');
         chartTop = new Chart(ctxTop, {
           type: 'bar',
           data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display:false } },
-            scales: { x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } }
-          }
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
         });
 
-        // Ingresos por día
         const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
           type: 'line',
           data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display:false } },
-            scales: { y:{ beginAtZero:true, grace:'10%' } }
-          }
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
         });
       }
 
@@ -1245,7 +1218,7 @@
       await run();
     }
 
-    // ---- Inventario (con imagen opcional) ----
+    // ---- Inventario (botón Imagen por fila) ----
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1264,13 +1237,8 @@
       if(safety1) safety1.textContent = SAFETY_DAYS;
       if(safety2) safety2.textContent = SAFETY_DAYS;
 
-      // Imagen UI
-      const imgInput = document.getElementById('partImage');
-      const imgPreview = document.getElementById('partImagePreview');
-      const imgRemoveBtn = document.getElementById('removeImageBtn');
-      let selectedImageFile = null;
-      let removeExistingImage = false;
-      let currentEditing = null; // pieza completa al editar
+      const imagePicker = document.getElementById('imagePicker');
+      let imageTargetPart = null;
 
       let parts = await DB.listParts();
 
@@ -1363,8 +1331,11 @@
           const tdAct = document.createElement('td');
           tdAct.className = 'num';
           tdAct.innerHTML = `
-            <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
-            <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
+            <div class="row-actions" style="justify-content:flex-end">
+              <button class="btn" data-act="img" data-id="${p.id}">Imagen</button>
+              <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
+              <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
+            </div>
           `;
           tr.appendChild(tdAct);
 
@@ -1379,43 +1350,10 @@
       search.addEventListener('input', paint);
       filterAlm.addEventListener('change', paint);
 
-      // ---- Imagen: handlers
-      imgInput.addEventListener('change', ()=>{
-        const f = imgInput.files?.[0] || null;
-        selectedImageFile = f;
-        removeExistingImage = false;
-        if(f){
-          const url = URL.createObjectURL(f);
-          imgPreview.src = url;
-          imgPreview.style.display = '';
-        }else{
-          imgPreview.src = '';
-          imgPreview.style.display = 'none';
-        }
-      });
-      imgRemoveBtn.addEventListener('click', ()=>{
-        // Marca para eliminar imagen existente (ou cancelar imagem selecionada)
-        removeExistingImage = true;
-        selectedImageFile = null;
-        imgInput.value = '';
-        imgPreview.src = '';
-        imgPreview.style.display = 'none';
-      });
-
-      function resetImageState(){
-        selectedImageFile = null;
-        removeExistingImage = false;
-        currentEditing = null;
-        imgInput.value = '';
-        imgPreview.src = '';
-        imgPreview.style.display = 'none';
-      }
-
       const resetFormToNew = ()=>{
         form.reset();
         form.querySelector('input[name="id"]').value = '';
         summary.textContent = 'Nueva pieza';
-        resetImageState();
       };
 
       addBtn.addEventListener('click', ()=>{
@@ -1446,14 +1384,11 @@
         };
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
-        let prev = null; 
-        if(part.id){ prev = parts.find(x=>x.id===part.id) || await DB.getPartById(part.id); }
-
+        let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id) || await DB.getPartById(part.id); }
         try{
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          // Historial de precio/costo si cambió (edición)
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
             const u = Auth.currentUser();
             await DB.addPriceHistory({
@@ -1465,29 +1400,6 @@
             });
           }
 
-          // === Imagen ===
-          // 1) Se solicitou remover imagem existente?
-          if(prev && removeExistingImage && prev.imagePath){
-            try{
-              await DB.deletePartImage(prev.imagePath);
-            }catch(e){}
-            try{
-              await DB.trySetPartImage(finalId, null, null); // ignora se coluna não existir
-            }catch(e){}
-          }
-
-          // 2) Nova imagem selecionada?
-          if(selectedImageFile){
-            // upload
-            const up = await DB.uploadPartImage(finalId, selectedImageFile);
-            // gravar url/path (ignorar se coluna não existir)
-            try{ await DB.trySetPartImage(finalId, up.url, up.path); }catch(e){}
-            // apagar a anterior, se houver e não foi marcada remoção (substituição)
-            if(prev?.imagePath && !removeExistingImage){
-              try{ await DB.deletePartImage(prev.imagePath); }catch(e){}
-            }
-          }
-
           parts = await DB.listParts();
           buildFilters(); buildSuggestors(); await paint();
 
@@ -1497,9 +1409,19 @@
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
+      // Acciones por fila (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
+
+        if(act === 'img'){
+          imageTargetPart = parts.find(x => x.id === id) || await DB.getPartById(id);
+          if(!imageTargetPart){ alert('Pieza no encontrada'); return; }
+          imagePicker.value = '';
+          imagePicker.click();
+          return;
+        }
+
         if(act === 'edit'){
           const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
@@ -1516,20 +1438,12 @@
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
-
-          // Imagen existente (preview)
-          resetImageState();
-          currentEditing = p;
-          if(p.imageUrl){
-            imgPreview.src = p.imageUrl;
-            imgPreview.style.display = '';
-          }
         }
+
         if(act === 'del'){
           const p = parts.find(x => x.id === id);
           if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
           try{
-            // tentar apagar imagem associada (se houver)
             if(p?.imagePath){ try{ await DB.deletePartImage(p.imagePath); }catch(e){} }
             await DB.deletePart(id);
             parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
@@ -1537,6 +1451,30 @@
         }
       });
 
+      // Upload real quando escolher arquivo
+      imagePicker.addEventListener('change', async ()=>{
+        const f = imagePicker.files?.[0];
+        if(!f){ return; }
+        if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
+        try{
+          const up = await DB.uploadPartImage(imageTargetPart.id, f);
+          await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
+          // se tinha anterior, substituir (apagar antigo)
+          if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
+            try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
+          }
+          parts = await DB.listParts();
+          await paint();
+          alert('Imagen actualizada');
+        }catch(e){
+          alert(e.message || 'No se pudo subir la imagen');
+        }finally{
+          imageTargetPart = null;
+          imagePicker.value = '';
+        }
+      });
+
+      // Importador CSV
       importCSV.addEventListener('change', ()=>{
         const f = document.getElementById('importCSV').files[0]; if(!f) return;
         const reader = new FileReader();
@@ -1552,7 +1490,7 @@
                 codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
                 ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
                 leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0), // se convierte en lote inicial
+                stock: Number(obj.stock||0),
                 costo: Number(obj.costo_Bs||obj.costo||0),
                 precio: Number(obj.precio_Bs||obj.precio||0)
               };
@@ -1683,7 +1621,6 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // Deshacer por fila
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
@@ -1697,7 +1634,6 @@
         }catch(err){ alert(err.message || 'No se pudo deshacer'); }
       });
 
-      // Deshacer último
       undoBtn.addEventListener('click', async ()=>{
         try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
@@ -1884,3 +1820,4 @@
   </script>
 </body>
 </html>
+    
