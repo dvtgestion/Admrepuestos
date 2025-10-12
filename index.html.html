@@ -139,6 +139,19 @@
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
+    /* === Visor de imagens (modal) === */
+    .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
+    .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
+    .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
+    .modal header h3{margin:0; font-size:16px}
+    .modal .actions{display:flex; gap:8px; flex-wrap:wrap}
+    .img-grid{padding:12px; display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:12px; overflow:auto}
+    .img-card{border:1px solid var(--border); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:8px}
+    .img-card img{width:100%; height:130px; object-fit:cover; border-radius:8px; border:1px solid var(--border)}
+    .img-card .row{display:flex; gap:6px; flex-wrap:wrap}
+    .modal footer{display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border)}
+    .badge-primary{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#eef2ff; color:#1f6feb}
+
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
@@ -258,8 +271,7 @@
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
           <label class="btn" for="importCSV">Importar CSV</label>
           <input id="importCSV" type="file" accept=".csv" style="display:none" />
-          <!-- AJUSTE: type="button" para evitar submit/reload -->
-          <button id="addPartBtn" class="btn btn-primary" type="button">Añadir pieza</button>
+          <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
         </div>
       </header>
       <details id="partFormWrap" class="card">
@@ -473,8 +485,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-    <script>
+
+  <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -571,43 +583,39 @@
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      const PART_FIELDS_BASE =
-        'id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio';
-      const PART_FIELDS_WITH_IMG = PART_FIELDS_BASE + ', image_url, image_path';
-
-      // Helpers para mapear pieza
-      function mapPartRow(r){
-        return {
+      // ---- Partes ----
+      async function listParts(){
+        const { data, error } = await sb
+          .from('parts')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          .eq('org_id', orgId())
+          .order('nombre',{ascending:true});
+        if(error) throw error;
+        return (data||[]).map(r => ({
           id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
           costo:Number(r.costo||0), precio:Number(r.precio||0),
           imageUrl: r.image_url || null, imagePath: r.image_path || null
-        };
-      }
-
-      // ---- Partes (com fallback si columnas de imagen aún no existen) ----
-      async function listParts(){
-        // intento 1: con columnas de imagen
-        let resp = await sb.from('parts').select(PART_FIELDS_WITH_IMG).eq('org_id', orgId()).order('nombre', {ascending:true});
-        if(resp.error){
-          // intento 2: sin columnas de imagen (db antigua)
-          resp = await sb.from('parts').select(PART_FIELDS_BASE).eq('org_id', orgId()).order('nombre', {ascending:true});
-        }
-        if(resp.error) throw resp.error;
-        return (resp.data||[]).map(mapPartRow);
+        }));
       }
 
       async function getPartById(id){
         if(!id) return null;
-        let resp = await sb.from('parts').select(PART_FIELDS_WITH_IMG).eq('id', id).eq('org_id', orgId()).maybeSingle();
-        if(resp.error){
-          resp = await sb.from('parts').select(PART_FIELDS_BASE).eq('id', id).eq('org_id', orgId()).maybeSingle();
-        }
-        if(resp.error) throw resp.error;
-        if(!resp.data) return null;
-        return mapPartRow(resp.data);
+        const { data, error } = await sb.from('parts')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          .eq('id', id).eq('org_id', orgId()).maybeSingle();
+        if(error) throw error;
+        if(!data) return null;
+        return {
+          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria||'',
+          ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
+          leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
+          stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
+          costo:Number(data.costo||0), precio:Number(data.precio||0),
+          imageUrl:data.image_url || null, imagePath:data.image_path || null
+        };
       }
 
       // ---- Lotes ----
@@ -761,8 +769,8 @@
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
-
-        const q = Number(cantidad||0);
+        
+                const q = Number(cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
@@ -829,7 +837,7 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ==== DESHACER POR ID (tolerante a huérfanos) ====
+      // ==== DESHACER POR ID ====
       async function undoMovementById(movId){
         const { data: m, error: e0 } = await sb.from('movements')
           .select('id, tipo, cantidad, pieza_id, lote_id')
@@ -852,6 +860,7 @@
           if(lr.error) throw lr.error;
           lot = lr.data || null;
         }
+
         let piezaId = m.pieza_id || (lot?.part_id ?? null);
 
         let p = null;
@@ -873,6 +882,7 @@
             if(Number(lot.qty||0) < q){
               throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
             }
+
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) - q })
               .eq('org_id', orgId())
@@ -884,9 +894,11 @@
               .eq('org_id', orgId())
               .eq('id', p.id);
             if(upP.error) throw upP.error;
+
+          }else{
+            // huérfano: solo borrar el movimiento
           }
-          // si es huérfano: sólo borrar el movimiento
-        }else{
+        }else{ // SALIDA
           if(lot){
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) + q })
@@ -898,6 +910,7 @@
               throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
             }
           }
+
           if(p){
             const upP = await sb.from('parts')
               .update({ stock: Number(p.stock||0) + q })
@@ -958,6 +971,7 @@
       // ---- Imagen de pieza (Storage) ----
       async function uploadPartImage(partId, file){
         const oid = orgId();
+        const ext = (file.name||'').split('.').pop() || 'jpg';
         const safeName = (file.name||'foto').replace(/[^\w.\-]+/g,'_');
         const path = `${oid}/${partId}/${Date.now()}_${safeName}`;
         const { error: upErr } = await sb.storage.from('part_images').upload(path, file, {
@@ -979,6 +993,24 @@
           .eq('org_id', orgId())
           .eq('id', partId);
         if(error) throw error;
+      }
+
+      // Lista todas as imagens da peça
+      async function listPartImages(partId){
+        const oid = orgId();
+        const folder = `${oid}/${partId}`;
+        const { data: files, error } = await sb
+          .storage.from('part_images')
+          .list(folder, { limit: 100, sortBy: { column: 'name', order: 'desc' } });
+        if(error && error.message && !String(error.message).includes('not found')){
+          throw error;
+        }
+        const rows = Array.isArray(files) ? files : [];
+        return rows.map(f => {
+          const path = `${folder}/${f.name}`;
+          const { data } = sb.storage.from('part_images').getPublicUrl(path);
+          return { name: f.name, path, url: data.publicUrl };
+        });
       }
 
       // ---- Backup / Restore / Wipe ----
@@ -1031,12 +1063,12 @@
         listMoves, applyMovement, undoLastMovement, undoMovementById,
         listLots, listAllLots, getInventoryValueByLots,
         addPriceHistory, listPriceHistory,
-        uploadPartImage, deletePartImage, trySetPartImage,
+        uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
         backupAll, restoreAll, wipeCurrentOrg,
         recomputeMetrics
       };
     })();
-
+    
     /* ===== App / Navegación ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
@@ -1217,14 +1249,14 @@
       await run();
     }
 
-    // ---- Inventario (botón Imagen por fila) ----
+    // ---- Inventario (botón Imagen por fila con visor) ----
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
       const tbody = document.getElementById('partsTbody');
       const search = document.getElementById('searchParts');
-      const addBtn = document.getElementById('addPartBtn'); // já é type="button"
+      const addBtn = document.getElementById('addPartBtn');
       const formWrap = document.getElementById('partFormWrap');
       const form = document.getElementById('partForm');
       const summary = document.getElementById('partFormSummary');
@@ -1346,8 +1378,8 @@
       buildSuggestors();
       await paint();
 
-      document.getElementById('searchParts').addEventListener('input', paint);
-      document.getElementById('filterAlmacen').addEventListener('change', paint);
+      search.addEventListener('input', paint);
+      filterAlm.addEventListener('change', paint);
 
       const resetFormToNew = ()=>{
         form.reset();
@@ -1355,15 +1387,114 @@
         summary.textContent = 'Nueva pieza';
       };
 
-      document.getElementById('addPartBtn').addEventListener('click', ()=>{
+      addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
       });
-      document.getElementById('cancelEdit').addEventListener('click', ()=>{
+      cancelBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = false;
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
+
+      // ===== Visor de imágenes =====
+      async function openImageModal(part){
+        const overlay = document.createElement('div');
+        overlay.className = 'modal';
+        overlay.innerHTML = `
+          <div class="box">
+            <header>
+              <h3>Imágenes de: ${escapeHtml(part.nombre)}</h3>
+              <div class="actions">
+                <button class="btn" data-upload>Subir imagen</button>
+                <a class="btn" target="_blank" rel="noopener" href="${part.imageUrl || '#'}" data-ver-principal ${part.imageUrl ? '' : 'style="display:none"'}>Ver principal</a>
+                <button class="btn btn-ghost" data-close>Cerrar</button>
+              </div>
+            </header>
+            <div class="img-grid" id="imgGrid"><div class="muted" style="padding:8px">Cargando…</div></div>
+            <footer>
+              <button class="btn" data-close2>Cerrar</button>
+            </footer>
+          </div>
+        `;
+        document.body.appendChild(overlay);
+
+        const grid = overlay.querySelector('#imgGrid');
+        const btnClose = overlay.querySelector('[data-close]');
+        const btnClose2 = overlay.querySelector('[data-close2]');
+        const btnUpload = overlay.querySelector('[data-upload]');
+        const linkVerPrincipal = overlay.querySelector('[data-ver-principal]');
+        const close = ()=> overlay.remove();
+
+        btnClose.onclick = close; btnClose2.onclick = close;
+        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+
+        async function renderList(){
+          const imgs = await DB.listPartImages(part.id);
+          if(!imgs.length){
+            grid.innerHTML = `<div class="muted" style="padding:8px">Sin imágenes todavía. Use “Subir imagen”.</div>`;
+            return;
+          }
+          grid.innerHTML = '';
+          imgs.forEach(it=>{
+            const isMain = (part.imagePath === it.path);
+            const card = document.createElement('div');
+            card.className = 'img-card';
+            card.innerHTML = `
+               <img src="${escapeHtml(it.url)}" alt="">
+               <div class="row">
+                 ${isMain ? '<span class="badge-primary">Principal</span>'
+                          : `<button class="btn" data-set="${escapeHtml(it.path)}" data-url="${escapeHtml(it.url)}">Usar como principal</button>`}
+                 <a class="btn" target="_blank" rel="noopener" href="${escapeHtml(it.url)}">Ver</a>
+                 <button class="btn btn-danger" data-del="${escapeHtml(it.path)}">Eliminar</button>
+               </div>
+            `;
+            grid.appendChild(card);
+          });
+        }
+
+        grid.addEventListener('click', async (e)=>{
+          const setBtn = e.target.closest('button[data-set]');
+          const delBtn = e.target.closest('button[data-del]');
+          if(setBtn){
+            const path = setBtn.getAttribute('data-set');
+            const url  = setBtn.getAttribute('data-url');
+            try{
+              await DB.trySetPartImage(part.id, url, path);
+              part.imageUrl = url;
+              part.imagePath = path;
+              if(linkVerPrincipal){ linkVerPrincipal.href = url; linkVerPrincipal.style.display=''; }
+              await renderList();
+              parts = await DB.listParts();
+              await paint();
+            }catch(err){ alert(err.message || 'No se pudo cambiar la imagen principal'); }
+          }
+          if(delBtn){
+            const path = delBtn.getAttribute('data-del');
+            if(!confirm('¿Eliminar esta imagen del Storage?')) return;
+            try{
+              await DB.deletePartImage(path);
+              if(part.imagePath === path){
+                await DB.trySetPartImage(part.id, null, null);
+                part.imageUrl = null; part.imagePath = null;
+                if(linkVerPrincipal){ linkVerPrincipal.style.display='none'; }
+              }
+              await renderList();
+              parts = await DB.listParts();
+              await paint();
+            }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+          }
+        });
+
+        btnUpload.addEventListener('click', ()=>{
+          imageTargetPart = part;
+          window.__imgModalRefresh = renderList;
+          imagePicker.value = '';
+          imagePicker.click();
+        });
+
+        await renderList();
+      }
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
@@ -1414,10 +1545,9 @@
         const id = btn.dataset.id; const act = btn.dataset.act;
 
         if(act === 'img'){
-          imageTargetPart = parts.find(x => x.id === id) || await DB.getPartById(id);
-          if(!imageTargetPart){ alert('Pieza no encontrada'); return; }
-          imagePicker.value = '';
-          imagePicker.click();
+          const p = parts.find(x => x.id === id) || await DB.getPartById(id);
+          if(!p){ alert('Pieza no encontrada'); return; }
+          await openImageModal(p);
           return;
         }
 
@@ -1450,7 +1580,7 @@
         }
       });
 
-      // Upload real cuando se elige archivo
+      // Upload real quando escolher arquivo (também atualiza o modal se aberto)
       imagePicker.addEventListener('change', async ()=>{
         const f = imagePicker.files?.[0];
         if(!f){ return; }
@@ -1463,12 +1593,14 @@
           }
           parts = await DB.listParts();
           await paint();
+          if (typeof window.__imgModalRefresh === 'function') { await window.__imgModalRefresh(); }
           alert('Imagen actualizada');
         }catch(e){
           alert(e.message || 'No se pudo subir la imagen');
         }finally{
           imageTargetPart = null;
           imagePicker.value = '';
+          window.__imgModalRefresh = null;
         }
       });
 
@@ -1619,7 +1751,6 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
-      // Deshacer por fila
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
@@ -1633,13 +1764,11 @@
         }catch(err){ alert(err.message || 'No se pudo deshacer'); }
       });
 
-      // Deshacer último
       undoBtn.addEventListener('click', async ()=>{
         try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
 
-      // Exportar CSV
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
