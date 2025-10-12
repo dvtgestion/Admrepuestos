@@ -258,7 +258,8 @@
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
           <label class="btn" for="importCSV">Importar CSV</label>
           <input id="importCSV" type="file" accept=".csv" style="display:none" />
-          <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
+          <!-- AJUSTE: type="button" para evitar submit/reload -->
+          <button id="addPartBtn" class="btn btn-primary" type="button">Añadir pieza</button>
         </div>
       </header>
       <details id="partFormWrap" class="card">
@@ -472,8 +473,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -570,39 +571,43 @@
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // ---- Partes ----
-      async function listParts(){
-        const { data, error } = await sb
-          .from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
-          .eq('org_id', orgId())
-          .order('nombre',{ascending:true});
-        if(error) throw error;
-        return (data||[]).map(r => ({
+      const PART_FIELDS_BASE =
+        'id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio';
+      const PART_FIELDS_WITH_IMG = PART_FIELDS_BASE + ', image_url, image_path';
+
+      // Helpers para mapear pieza
+      function mapPartRow(r){
+        return {
           id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
           costo:Number(r.costo||0), precio:Number(r.precio||0),
           imageUrl: r.image_url || null, imagePath: r.image_path || null
-        }));
+        };
+      }
+
+      // ---- Partes (com fallback si columnas de imagen aún no existen) ----
+      async function listParts(){
+        // intento 1: con columnas de imagen
+        let resp = await sb.from('parts').select(PART_FIELDS_WITH_IMG).eq('org_id', orgId()).order('nombre', {ascending:true});
+        if(resp.error){
+          // intento 2: sin columnas de imagen (db antigua)
+          resp = await sb.from('parts').select(PART_FIELDS_BASE).eq('org_id', orgId()).order('nombre', {ascending:true});
+        }
+        if(resp.error) throw resp.error;
+        return (resp.data||[]).map(mapPartRow);
       }
 
       async function getPartById(id){
         if(!id) return null;
-        const { data, error } = await sb.from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
-          .eq('id', id).eq('org_id', orgId()).maybeSingle();
-        if(error) throw error;
-        if(!data) return null;
-        return {
-          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria||'',
-          ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
-          leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
-          stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
-          costo:Number(data.costo||0), precio:Number(data.precio||0),
-          imageUrl:data.image_url || null, imagePath:data.image_path || null
-        };
+        let resp = await sb.from('parts').select(PART_FIELDS_WITH_IMG).eq('id', id).eq('org_id', orgId()).maybeSingle();
+        if(resp.error){
+          resp = await sb.from('parts').select(PART_FIELDS_BASE).eq('id', id).eq('org_id', orgId()).maybeSingle();
+        }
+        if(resp.error) throw resp.error;
+        if(!resp.data) return null;
+        return mapPartRow(resp.data);
       }
 
       // ---- Lotes ----
@@ -824,7 +829,7 @@
         await recomputeMetrics(piezaId);
       }
 
-      // ==== DESHACER POR ID ====
+      // ==== DESHACER POR ID (tolerante a huérfanos) ====
       async function undoMovementById(movId){
         const { data: m, error: e0 } = await sb.from('movements')
           .select('id, tipo, cantidad, pieza_id, lote_id')
@@ -847,7 +852,6 @@
           if(lr.error) throw lr.error;
           lot = lr.data || null;
         }
-
         let piezaId = m.pieza_id || (lot?.part_id ?? null);
 
         let p = null;
@@ -869,7 +873,6 @@
             if(Number(lot.qty||0) < q){
               throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
             }
-
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) - q })
               .eq('org_id', orgId())
@@ -881,11 +884,9 @@
               .eq('org_id', orgId())
               .eq('id', p.id);
             if(upP.error) throw upP.error;
-
-          }else{
-            // huérfano: solo borrar el movimiento
           }
-        }else{ // SALIDA
+          // si es huérfano: sólo borrar el movimiento
+        }else{
           if(lot){
             const upLot = await sb.from('part_lots')
               .update({ qty: Number(lot.qty||0) + q })
@@ -897,7 +898,6 @@
               throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
             }
           }
-
           if(p){
             const upP = await sb.from('parts')
               .update({ stock: Number(p.stock||0) + q })
@@ -958,7 +958,6 @@
       // ---- Imagen de pieza (Storage) ----
       async function uploadPartImage(partId, file){
         const oid = orgId();
-        const ext = (file.name||'').split('.').pop() || 'jpg';
         const safeName = (file.name||'foto').replace(/[^\w.\-]+/g,'_');
         const path = `${oid}/${partId}/${Date.now()}_${safeName}`;
         const { error: upErr } = await sb.storage.from('part_images').upload(path, file, {
@@ -1037,8 +1036,8 @@
         recomputeMetrics
       };
     })();
-    
-        /* ===== App / Navegación ===== */
+
+    /* ===== App / Navegación ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -1225,7 +1224,7 @@
 
       const tbody = document.getElementById('partsTbody');
       const search = document.getElementById('searchParts');
-      const addBtn = document.getElementById('addPartBtn');
+      const addBtn = document.getElementById('addPartBtn'); // já é type="button"
       const formWrap = document.getElementById('partFormWrap');
       const form = document.getElementById('partForm');
       const summary = document.getElementById('partFormSummary');
@@ -1347,8 +1346,8 @@
       buildSuggestors();
       await paint();
 
-      search.addEventListener('input', paint);
-      filterAlm.addEventListener('change', paint);
+      document.getElementById('searchParts').addEventListener('input', paint);
+      document.getElementById('filterAlmacen').addEventListener('change', paint);
 
       const resetFormToNew = ()=>{
         form.reset();
@@ -1356,11 +1355,11 @@
         summary.textContent = 'Nueva pieza';
       };
 
-      addBtn.addEventListener('click', ()=>{
+      document.getElementById('addPartBtn').addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
       });
-      cancelBtn.addEventListener('click', ()=>{
+      document.getElementById('cancelEdit').addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = false;
       });
@@ -1451,7 +1450,7 @@
         }
       });
 
-      // Upload real quando escolher arquivo
+      // Upload real cuando se elige archivo
       imagePicker.addEventListener('change', async ()=>{
         const f = imagePicker.files?.[0];
         if(!f){ return; }
@@ -1459,7 +1458,6 @@
         try{
           const up = await DB.uploadPartImage(imageTargetPart.id, f);
           await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
-          // se tinha anterior, substituir (apagar antigo)
           if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
             try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
           }
@@ -1621,6 +1619,7 @@
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
+      // Deshacer por fila
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
@@ -1634,11 +1633,13 @@
         }catch(err){ alert(err.message || 'No se pudo deshacer'); }
       });
 
+      // Deshacer último
       undoBtn.addEventListener('click', async ()=>{
         try{ await DB.undoLastMovement(); moves = await DB.listMoves(2000); paintMoves(); alert('Movimiento deshecho'); }
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
 
+      // Exportar CSV
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
@@ -1820,4 +1821,3 @@
   </script>
 </body>
 </html>
-    
