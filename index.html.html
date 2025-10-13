@@ -139,7 +139,7 @@
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
-    /* === Visor de imagens (modal) === */
+    /* === Visor de imágenes (modal) === */
     .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
@@ -485,8 +485,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -700,6 +700,19 @@
           .eq('id', partRow.id)
           .eq('org_id', orgId());
         if (e3) throw e3;
+      }
+
+      // === NOVO: sincroniza custo/preço dos LOTES ABERTOS com os valores atuais da peça ===
+      async function syncOpenLotsWithPartPrices(partId, costo, precio){
+        const c = Number(costo||0);
+        const p = Number(precio||0);
+        const { error } = await sb
+          .from('part_lots')
+          .update({ costo_unit: c, precio_unit: p })
+          .eq('org_id', orgId())
+          .eq('part_id', partId)
+          .gt('qty', 0); // só lotes com quantidade > 0 (abertos)
+        if(error) throw error;
       }
 
       // Upsert de piezas
@@ -1065,7 +1078,9 @@
         addPriceHistory, listPriceHistory,
         uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics
+        recomputeMetrics,
+        // NOVO:
+        syncOpenLotsWithPartPrices
       };
     })();
     
@@ -1528,6 +1543,11 @@
               precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
               usuario: u ? u.email : ''
             });
+          }
+
+          // NOVO: ao alterar custo/preço da peça, atualizar também os lotes abertos
+          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
+            await DB.syncOpenLotsWithPartPrices(finalId, part.costo, part.precio);
           }
 
           parts = await DB.listParts();
