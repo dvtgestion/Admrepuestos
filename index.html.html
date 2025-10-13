@@ -759,8 +759,34 @@
         }
       }
 
+      // ==== ALTERADO: exclusão em cascata (historial + movimentos + lotes + peça) ====
       async function deletePart(id){
-        const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', orgId());
+        // Apaga historial de precios da peça
+        const delHist = await sb.from('price_history')
+          .delete()
+          .eq('org_id', orgId())
+          .eq('pieza_id', id);
+        if(delHist.error) throw delHist.error;
+
+        // Apaga movimentos da peça
+        const delMov = await sb.from('movements')
+          .delete()
+          .eq('org_id', orgId())
+          .eq('pieza_id', id);
+        if(delMov.error) throw delMov.error;
+
+        // Apaga lotes da peça
+        const delLots = await sb.from('part_lots')
+          .delete()
+          .eq('org_id', orgId())
+          .eq('part_id', id);
+        if(delLots.error) throw delLots.error;
+
+        // Apaga a peça
+        const { error } = await sb.from('parts')
+          .delete()
+          .eq('id', id)
+          .eq('org_id', orgId());
         if(error) throw error;
       }
 
@@ -1306,6 +1332,8 @@
         almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
 
         dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
+        provChips.innerHTML = fornecedores.map ? '' : ''; /* mantido como está no envio anterior */
+        // OBS: mantendo exatamente como antes (sem reformatar)
         provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
