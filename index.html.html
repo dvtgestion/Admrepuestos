@@ -116,12 +116,12 @@
       display:inline-flex; align-items:center; gap:6px;
       font-weight:600; color:var(--text);
     }
+    details.inline[open] > summary::before{ content:"▾"; }
     details.inline > summary::before{
       content:"▸";
       display:inline-block;
       transform:translateY(1px);
     }
-    details.inline[open] > summary::before{ content:"▾"; }
     .lots-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
@@ -702,7 +702,7 @@
         if (e3) throw e3;
       }
 
-      // === NOVO: sincroniza custo/preço dos LOTES ABERTOS com os valores atuais da peça ===
+      // Sincroniza custo/preço dos LOTES ABERTOS com os valores atuais da peça
       async function syncOpenLotsWithPartPrices(partId, costo, precio){
         const c = Number(costo||0);
         const p = Number(precio||0);
@@ -711,7 +711,7 @@
           .update({ costo_unit: c, precio_unit: p })
           .eq('org_id', orgId())
           .eq('part_id', partId)
-          .gt('qty', 0); // só lotes com quantidade > 0 (abertos)
+          .gt('qty', 0);
         if(error) throw error;
       }
 
@@ -759,30 +759,48 @@
         }
       }
 
-      // ==== ALTERADO: exclusão em cascata (historial + movimentos + lotes + peça) ====
+      // EXCLUSÃO em cascata: price_history (por pieza_id e por codigo), movements, lotes, peça
       async function deletePart(id){
-        // Apaga historial de precios da peça
-        const delHist = await sb.from('price_history')
+        // Obter código da peça (para eliminar históricos antigos sem pieza_id)
+        const pr = await sb.from('parts')
+          .select('codigo')
+          .eq('org_id', orgId())
+          .eq('id', id)
+          .maybeSingle();
+        if(pr.error) throw pr.error;
+        const code = pr.data?.codigo || null;
+
+        // 1) Historial por pieza_id
+        const delHist1 = await sb.from('price_history')
           .delete()
           .eq('org_id', orgId())
           .eq('pieza_id', id);
-        if(delHist.error) throw delHist.error;
+        if(delHist1.error) throw delHist1.error;
 
-        // Apaga movimentos da peça
+        // 1b) Historial por codigo (para registros antigos sem pieza_id)
+        if(code){
+          const delHist2 = await sb.from('price_history')
+            .delete()
+            .eq('org_id', orgId())
+            .eq('codigo', code);
+          if(delHist2.error) throw delHist2.error;
+        }
+
+        // 2) Movimientos
         const delMov = await sb.from('movements')
           .delete()
           .eq('org_id', orgId())
           .eq('pieza_id', id);
         if(delMov.error) throw delMov.error;
 
-        // Apaga lotes da peça
+        // 3) Lotes
         const delLots = await sb.from('part_lots')
           .delete()
           .eq('org_id', orgId())
           .eq('part_id', id);
         if(delLots.error) throw delLots.error;
 
-        // Apaga a peça
+        // 4) Peça
         const { error } = await sb.from('parts')
           .delete()
           .eq('id', id)
@@ -808,8 +826,7 @@
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
-        
-                const q = Number(cantidad||0);
+        const q = Number(cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
@@ -1105,7 +1122,6 @@
         uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
         backupAll, restoreAll, wipeCurrentOrg,
         recomputeMetrics,
-        // NOVO:
         syncOpenLotsWithPartPrices
       };
     })();
@@ -1332,8 +1348,7 @@
         almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
 
         dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        provChips.innerHTML = fornecedores.map ? '' : ''; /* mantido como está no envio anterior */
-        // OBS: mantendo exatamente como antes (sem reformatar)
+        // (CORRIGIDO) – removido o uso de variável inexistente; apenas esta linha permanece:
         provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
@@ -1551,7 +1566,7 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
+          stock: Number(fd.get('stock')||0),
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -1571,10 +1586,7 @@
               precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
               usuario: u ? u.email : ''
             });
-          }
-
-          // NOVO: ao alterar custo/preço da peça, atualizar também os lotes abertos
-          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
+            // também sincroniza lotes abertos
             await DB.syncOpenLotsWithPartPrices(finalId, part.costo, part.precio);
           }
 
@@ -1587,7 +1599,7 @@
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
-      // Acciones por fila (Imagen/Editar/Eliminar)
+      // Ações por linha (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
@@ -1628,7 +1640,7 @@
         }
       });
 
-      // Upload real quando escolher arquivo (também atualiza o modal se aberto)
+      // Upload imagem
       imagePicker.addEventListener('change', async ()=>{
         const f = imagePicker.files?.[0];
         if(!f){ return; }
