@@ -116,12 +116,12 @@
       display:inline-flex; align-items:center; gap:6px;
       font-weight:600; color:var(--text);
     }
-    details.inline[open] > summary::before{ content:"▾"; }
     details.inline > summary::before{
       content:"▸";
       display:inline-block;
       transform:translateY(1px);
     }
+    details.inline[open] > summary::before{ content:"▾"; }
     .lots-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
@@ -485,8 +485,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-    <script>
+
+  <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -657,6 +657,19 @@
         return data;
       }
 
+      // >>> NOVO: atualizar um lote específico (para edição direcionada)
+      async function updateLot({ id, costo_unit, precio_unit }){
+        if(!id) throw new Error('ID de lote inválido');
+        const row = {};
+        if(costo_unit != null) row.costo_unit = Number(costo_unit);
+        if(precio_unit != null) row.precio_unit = Number(precio_unit);
+        const { error } = await sb.from('part_lots')
+          .update(row)
+          .eq('org_id', orgId())
+          .eq('id', id);
+        if(error) throw error;
+      }
+
       // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
         const q = Number(qty || 0);
@@ -700,19 +713,6 @@
           .eq('id', partRow.id)
           .eq('org_id', orgId());
         if (e3) throw e3;
-      }
-
-      // Sincroniza custo/preço dos LOTES ABERTOS com os valores atuais da peça
-      async function syncOpenLotsWithPartPrices(partId, costo, precio){
-        const c = Number(costo||0);
-        const p = Number(precio||0);
-        const { error } = await sb
-          .from('part_lots')
-          .update({ costo_unit: c, precio_unit: p })
-          .eq('org_id', orgId())
-          .eq('part_id', partId)
-          .gt('qty', 0);
-        if(error) throw error;
       }
 
       // Upsert de piezas
@@ -759,52 +759,29 @@
         }
       }
 
-      // EXCLUSÃO em cascata: price_history (por pieza_id e por codigo), movements, lotes, peça
       async function deletePart(id){
-        // Obter código da peça (para eliminar históricos antigos sem pieza_id)
-        const pr = await sb.from('parts')
-          .select('codigo')
-          .eq('org_id', orgId())
-          .eq('id', id)
-          .maybeSingle();
-        if(pr.error) throw pr.error;
-        const code = pr.data?.codigo || null;
-
-        // 1) Historial por pieza_id
-        const delHist1 = await sb.from('price_history')
-          .delete()
-          .eq('org_id', orgId())
-          .eq('pieza_id', id);
-        if(delHist1.error) throw delHist1.error;
-
-        // 1b) Historial por codigo (para registros antigos sem pieza_id)
-        if(code){
-          const delHist2 = await sb.from('price_history')
-            .delete()
-            .eq('org_id', orgId())
-            .eq('codigo', code);
-          if(delHist2.error) throw delHist2.error;
-        }
-
-        // 2) Movimientos
-        const delMov = await sb.from('movements')
-          .delete()
-          .eq('org_id', orgId())
-          .eq('pieza_id', id);
-        if(delMov.error) throw delMov.error;
-
-        // 3) Lotes
-        const delLots = await sb.from('part_lots')
-          .delete()
-          .eq('org_id', orgId())
-          .eq('part_id', id);
-        if(delLots.error) throw delLots.error;
-
-        // 4) Peça
-        const { error } = await sb.from('parts')
-          .delete()
-          .eq('id', id)
-          .eq('org_id', orgId());
+        // >>> AJUSTE: ao apagar a peça, também apaga movimentos, lotes e price_history (inclui registros antigos por código)
+        const oid = orgId();
+        // obter código da peça (para limpar históricos antigos que talvez não tenham pieza_id)
+        let codigo = null;
+        try{
+          const { data: p } = await sb.from('parts')
+            .select('codigo')
+            .eq('org_id', oid)
+            .eq('id', id)
+            .maybeSingle();
+          codigo = p?.codigo || null;
+        }catch(e){}
+        // apaga price_history por pieza_id
+        try{ await sb.from('price_history').delete().eq('org_id', oid).eq('pieza_id', id); }catch(e){}
+        // apaga price_history por código (legado)
+        if(codigo){ try{ await sb.from('price_history').delete().eq('org_id', oid).eq('codigo', codigo); }catch(e){} }
+        // apaga movimentos vinculados
+        try{ await sb.from('movements').delete().eq('org_id', oid).eq('pieza_id', id); }catch(e){}
+        // apaga lotes vinculados
+        try{ await sb.from('part_lots').delete().eq('org_id', oid).eq('part_id', id); }catch(e){}
+        // por fim, apaga a peça
+        const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', oid);
         if(error) throw error;
       }
 
@@ -819,14 +796,15 @@
         return data||[];
       }
 
-      // Aplicar movimiento con LOTES
+      // Aplicar movimiento com LOTES
       async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
-        const q = Number(cantidad||0);
+        
+                const q = Number(cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
@@ -890,7 +868,7 @@
           if(insErr2) throw insErr2;
         }
 
-        await recomputeMetrics(piezaId);
+                await recomputeMetrics(piezaId);
       }
 
       // ==== DESHACER POR ID ====
@@ -1122,7 +1100,7 @@
         uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
         backupAll, restoreAll, wipeCurrentOrg,
         recomputeMetrics,
-        syncOpenLotsWithPartPrices
+        updateLot // ⬅️ mantém exposto o novo método
       };
     })();
     
@@ -1330,6 +1308,32 @@
 
       let parts = await DB.listParts();
 
+      // >>> NOVO: caixa de edição de lote (opcional) anexada ao form
+      const lotEditBox = document.createElement('div');
+      lotEditBox.id = 'lotEditBox';
+      lotEditBox.className = 'card';
+      lotEditBox.style.display = 'none';
+      lotEditBox.style.marginTop = '12px';
+      lotEditBox.innerHTML = `
+        <h3 style="margin-top:0">Editar lote (opcional)</h3>
+        <div class="grid" style="grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px">
+          <label class="field"><span>Seleccionar lote</span>
+            <select id="lotSelect"></select>
+          </label>
+          <label class="field"><span>Costo unitario del lote (Bs)</span>
+            <input id="lotCosto" type="number" step="0.01" min="0" />
+          </label>
+          <label class="field"><span>Precio unitario del lote (Bs)</span>
+            <input id="lotPrecio" type="number" step="0.01" min="0" />
+          </label>
+        </div>
+        <div class="row-actions" style="justify-content:flex-end">
+          <button type="button" id="saveLotBtn" class="btn btn-primary">Guardar lote</button>
+        </div>
+        <p class="muted xs">Este cambio afecta <strong>sólo</strong> al lote seleccionado. No modifica el costo/precio base de la pieza ni otros lotes.</p>
+      `;
+      formWrap.appendChild(lotEditBox);
+
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
         filterAlm.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
@@ -1348,7 +1352,6 @@
         almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
 
         dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        // (CORRIGIDO) – removido o uso de variável inexistente; apenas esta linha permanece:
         provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
@@ -1448,10 +1451,15 @@
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
+        // ao criar nova peça, esconder editor de lote
+        const box = document.getElementById('lotEditBox');
+        if(box) box.style.display = 'none';
       });
       cancelBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = false;
+        const box = document.getElementById('lotEditBox');
+        if(box) box.style.display = 'none';
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
@@ -1566,7 +1574,7 @@
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0),
+          stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -1586,8 +1594,6 @@
               precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
               usuario: u ? u.email : ''
             });
-            // também sincroniza lotes abertos
-            await DB.syncOpenLotsWithPartPrices(finalId, part.costo, part.precio);
           }
 
           parts = await DB.listParts();
@@ -1595,11 +1601,49 @@
 
           resetFormToNew();
           formWrap.open = false;
+          const box = document.getElementById('lotEditBox');
+          if(box) box.style.display = 'none';
           alert('Pieza guardada');
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
-      // Ações por linha (Imagen/Editar/Eliminar)
+      // Handlers do bloco de lote
+      lotEditBox.addEventListener('change', (e)=>{
+        if(e.target && e.target.id === 'lotSelect'){
+          const id = e.target.value;
+          const lote = (window.__currentEditLots||[]).find(l=> String(l.id)===String(id));
+          if(lote){
+            lotEditBox.querySelector('#lotCosto').value  = Number(lote.costo_unit||0);
+            lotEditBox.querySelector('#lotPrecio').value = Number(lote.precio_unit||0);
+          }
+        }
+      });
+      lotEditBox.addEventListener('click', async (e)=>{
+        if(e.target && e.target.id === 'saveLotBtn'){
+          const id = lotEditBox.querySelector('#lotSelect').value;
+          if(!id){ alert('Seleccione un lote'); return; }
+          const costo  = Number(lotEditBox.querySelector('#lotCosto').value || 0);
+          const precio = Number(lotEditBox.querySelector('#lotPrecio').value || 0);
+          try{
+            await DB.updateLot({ id, costo_unit:costo, precio_unit:precio });
+            alert('Lote actualizado');
+
+            // refrescar chips de lotes se a gaveta estiver aberta
+            const curPartId = form.querySelector('input[name="id"]').value;
+            const box = document.getElementById(`lots-${curPartId}`);
+            if(box){
+              const lots = await DB.listLots(curPartId);
+              box.innerHTML = lots.length
+                ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
+                : '<span class="muted xs">Sin lotes disponibles</span>';
+            }
+          }catch(err){
+            alert(err.message || 'No se pudo actualizar el lote');
+          }
+        }
+      });
+
+      // Acciones por fila (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
@@ -1627,6 +1671,27 @@
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
+
+          // >>> NOVO: carregar e exibir lotes para edição específica
+          try{
+            const lots = await DB.listLots(p.id);
+            if(lots.length){
+              window.__currentEditLots = lots;
+              const sel = document.getElementById('lotSelect');
+              sel.innerHTML = lots.map((l,idx)=>(
+                `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`
+              )).join('');
+              document.getElementById('lotCosto').value  = Number(lots[0].costo_unit||0);
+              document.getElementById('lotPrecio').value = Number(lots[0].precio_unit||0);
+              document.getElementById('lotEditBox').style.display = '';
+            }else{
+              window.__currentEditLots = null;
+              document.getElementById('lotEditBox').style.display = 'none';
+            }
+          }catch(e){
+            window.__currentEditLots = null;
+            document.getElementById('lotEditBox').style.display = 'none';
+          }
         }
 
         if(act === 'del'){
@@ -1636,15 +1701,18 @@
             if(p?.imagePath){ try{ await DB.deletePartImage(p.imagePath); }catch(e){} }
             await DB.deletePart(id);
             parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
+            // ao excluir, esconder editor de lote se aberto
+            const box = document.getElementById('lotEditBox');
+            if(box) box.style.display = 'none';
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
 
-      // Upload imagem
-      imagePicker.addEventListener('change', async ()=>{
+      // Upload real quando escolher arquivo (sem listeners duplicados)
+      imagePicker.onchange = async ()=>{
         const f = imagePicker.files?.[0];
         if(!f){ return; }
-        if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
+        if(!imageTargetPart){ alert('Pieza no seleccionada'); imagePicker.value=''; return; }
         try{
           const up = await DB.uploadPartImage(imageTargetPart.id, f);
           await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
@@ -1662,7 +1730,7 @@
           imagePicker.value = '';
           window.__imgModalRefresh = null;
         }
-      });
+      };
 
       // Importador CSV
       importCSV.addEventListener('change', ()=>{
