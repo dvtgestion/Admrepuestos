@@ -139,7 +139,7 @@
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
-    /* === Visor de imágenes (modal) === */
+    /* === Visor de imagens (modal) === */
     .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
@@ -180,6 +180,8 @@
       </div>
       <nav class="nav" aria-label="Navegación principal">
         <button class="nav-btn" data-route="reportes">Reportes</button>
+        <!-- NOVO: botón Finanzas -->
+        <button class="nav-btn" data-route="finanzas">Finanzas</button>
         <button class="nav-btn" data-route="inventario">Inventario</button>
         <button class="nav-btn" data-route="movimientos">Movimientos</button>
         <button class="nav-btn" data-route="sugerencias">Sugerencias</button>
@@ -257,6 +259,81 @@
         <div class="card">
           <h3 style="margin:0 0 8px">Ingresos por día</h3>
           <canvas id="chartDia" height="150"></canvas>
+        </div>
+      </div>
+    </section>
+  </template>
+
+  <!-- NOVO: Template Finanzas -->
+  <template id="tpl-finanzas">
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, otros ingresos y capital.</p></div>
+        <div class="right">
+          <div class="filter-group">
+            <label class="field" style="min-width:160px">
+              <span class="xs muted">Desde</span>
+              <input type="date" id="finDesde" class="input" />
+            </label>
+            <label class="field" style="min-width:160px">
+              <span class="xs muted">Hasta</span>
+              <input type="date" id="finHasta" class="input" />
+            </label>
+            <select id="finTipoFilter" class="input" title="Filtrar por tipo">
+              <option value="(Todos)">(Todos)</option>
+              <option value="gasto">Gasto</option>
+              <option value="ingreso">Ingreso</option>
+              <option value="capital">Capital</option>
+            </select>
+            <input id="finCatFilter" class="input" placeholder="Filtrar por categoría…" />
+            <button id="finAplicar" class="btn btn-primary">Aplicar</button>
+          </div>
+        </div>
+      </header>
+
+      <details id="finFormWrap" class="card">
+        <summary id="finFormSummary">Nuevo lanzamiento financiero</summary>
+        <form id="finForm" class="grid">
+          <input type="hidden" name="id" />
+          <label class="field"><span>Tipo</span>
+            <select name="tipo" required>
+              <option value="gasto">Gasto (OPEX)</option>
+              <option value="ingreso">Ingreso (no ventas)</option>
+              <option value="capital">Capital (no afecta lucro)</option>
+            </select>
+          </label>
+          <label class="field"><span>Fecha</span>
+            <input type="date" name="fecha" required />
+          </label>
+          <label class="field"><span>Categoría</span>
+            <input name="categoria" placeholder="Alquiler, Luz, Marketing…" list="dlFinCats" />
+            <datalist id="dlFinCats"></datalist>
+          </label>
+          <label class="field"><span>Descripción</span>
+            <input name="descripcion" placeholder="Detalle del lanzamiento" />
+          </label>
+          <label class="field"><span>Monto (Bs)</span>
+            <input name="monto" type="number" step="0.01" min="0" required />
+          </label>
+          <div class="row-actions" style="grid-column:1/-1">
+            <button class="btn btn-primary" type="submit">Guardar</button>
+            <button class="btn btn-ghost" type="button" id="finCancelEdit">Cancelar</button>
+          </div>
+        </form>
+        <p class="muted xs">
+          <strong>Reglas:</strong> “Gasto” afecta OPEX; “Ingreso” soma como otros ingresos; “Capital” no afecta la ganancia neta (sólo caja).
+          No registre compras de stock aquí: use Entradas en Movimientos.
+        </p>
+      </details>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table compact" id="finTable">
+            <thead><tr>
+              <th>Fecha</th><th>Tipo</th><th>Categoría</th><th>Descripción</th><th class="num">Monto</th><th>Usuario</th><th></th>
+            </tr></thead>
+            <tbody id="finTbody"></tbody>
+          </table>
         </div>
       </div>
     </section>
@@ -657,14 +734,14 @@
         return data;
       }
 
-      // >>> NOVO: atualizar um lote específico (para edição direcionada)
-      async function updateLot({ id, costo_unit, precio_unit }){
-        if(!id) throw new Error('ID de lote inválido');
-        const row = {};
-        if(costo_unit != null) row.costo_unit = Number(costo_unit);
-        if(precio_unit != null) row.precio_unit = Number(precio_unit);
+      // Criado em versões anteriores: atualizar lote específico
+      async function updateLot({ id, qty, costo_unit, precio_unit }){
+        const patch = {};
+        if(qty != null) patch.qty = Number(qty);
+        if(costo_unit != null) patch.costo_unit = Number(costo_unit);
+        if(precio_unit != null) patch.precio_unit = Number(precio_unit);
         const { error } = await sb.from('part_lots')
-          .update(row)
+          .update(patch)
           .eq('org_id', orgId())
           .eq('id', id);
         if(error) throw error;
@@ -759,28 +836,14 @@
         }
       }
 
+      // >>> AJUSTADO para apagar também lotes, movimentos e historial de precios da peça
       async function deletePart(id){
-        // >>> AJUSTE: ao apagar a peça, também apaga movimentos, lotes e price_history (inclui registros antigos por código)
         const oid = orgId();
-        // obter código da peça (para limpar históricos antigos que talvez não tenham pieza_id)
-        let codigo = null;
-        try{
-          const { data: p } = await sb.from('parts')
-            .select('codigo')
-            .eq('org_id', oid)
-            .eq('id', id)
-            .maybeSingle();
-          codigo = p?.codigo || null;
-        }catch(e){}
-        // apaga price_history por pieza_id
-        try{ await sb.from('price_history').delete().eq('org_id', oid).eq('pieza_id', id); }catch(e){}
-        // apaga price_history por código (legado)
-        if(codigo){ try{ await sb.from('price_history').delete().eq('org_id', oid).eq('codigo', codigo); }catch(e){} }
-        // apaga movimentos vinculados
-        try{ await sb.from('movements').delete().eq('org_id', oid).eq('pieza_id', id); }catch(e){}
-        // apaga lotes vinculados
-        try{ await sb.from('part_lots').delete().eq('org_id', oid).eq('part_id', id); }catch(e){}
-        // por fim, apaga a peça
+        // borrar dependentes primeiro
+        await sb.from('price_history').delete().eq('org_id', oid).eq('pieza_id', id);
+        await sb.from('movements').delete().eq('org_id', oid).eq('pieza_id', id);
+        await sb.from('part_lots').delete().eq('org_id', oid).eq('part_id', id);
+        // por último a peça
         const { error } = await sb.from('parts').delete().eq('id', id).eq('org_id', oid);
         if(error) throw error;
       }
@@ -795,16 +858,15 @@
         if(error) throw error;
         return data||[];
       }
-
-      // Aplicar movimiento com LOTES
-      async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
+      
+            async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
         if(e1) throw e1;
         if(!p) throw new Error('Pieza no encontrada');
         
-                const q = Number(cantidad||0);
+        const q = Number(cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
 
         if(tipo === 'entrada'){
@@ -868,7 +930,7 @@
           if(insErr2) throw insErr2;
         }
 
-                await recomputeMetrics(piezaId);
+        await recomputeMetrics(piezaId);
       }
 
       // ==== DESHACER POR ID ====
@@ -1029,7 +1091,6 @@
         if(error) throw error;
       }
 
-      // Lista todas as imagens da peça
       async function listPartImages(partId){
         const oid = orgId();
         const folder = `${oid}/${partId}`;
@@ -1047,18 +1108,109 @@
         });
       }
 
+      // ---- Finanzas (fin_entries) ----
+      async function listFinEntries(limit=2000){
+        const { data, error } = await sb.from('fin_entries')
+          .select('id, fecha, tipo, categoria, descripcion, monto, usuario')
+          .eq('org_id', orgId())
+          .order('fecha',{ascending:false})
+          .limit(limit);
+        if(error) throw error;
+        return data||[];
+      }
+
+      async function upsertFinEntry(entry){
+        const base = {
+          org_id: orgId(),
+          fecha: entry.fecha,
+          tipo: entry.tipo,
+          categoria: entry.categoria || null,
+          descripcion: entry.descripcion || null,
+          monto: Number(entry.monto||0),
+          usuario: entry.usuario || ''
+        };
+        if(entry.id){
+          const { error } = await sb.from('fin_entries')
+            .update(base)
+            .eq('org_id', orgId())
+            .eq('id', entry.id);
+          if(error) throw error;
+          return entry.id;
+        }else{
+          const { data, error } = await sb.from('fin_entries')
+            .insert(base)
+            .select('id')
+            .maybeSingle();
+          if(error) throw error;
+          return data.id;
+        }
+      }
+
+      async function deleteFinEntry(id){
+        const { error } = await sb.from('fin_entries')
+          .delete()
+          .eq('org_id', orgId())
+          .eq('id', id);
+        if(error) throw error;
+      }
+
+      // sumas por tipo en un rango de fechas
+      async function sumFinByTipo({from, to}){
+        const desdeISO = from instanceof Date ? from.toISOString() : (from||null);
+        const hastaISO = to instanceof Date ? to.toISOString() : (to||null);
+        const base = sb.from('fin_entries')
+          .select('monto, tipo')
+          .eq('org_id', orgId());
+        if(desdeISO) base.gte('fecha', desdeISO);
+        if(hastaISO) base.lte('fecha', hastaISO);
+        const { data, error } = await base;
+        if(error) throw error;
+        let gasto = 0, ingreso = 0, capital = 0;
+        (data||[]).forEach(r=>{
+          const v = Number(r.monto||0);
+          if(r.tipo === 'gasto') gasto += v;
+          else if(r.tipo === 'ingreso') ingreso += v;
+          else if(r.tipo === 'capital') capital += v;
+        });
+        return { gasto, ingreso, capital };
+      }
+
+      async function listFinCategories(){
+        const { data, error } = await sb.from('fin_entries')
+          .select('categoria')
+          .eq('org_id', orgId());
+        if(error) throw error;
+        const set = new Set();
+        (data||[]).forEach(r=>{ const c=(r.categoria||'').trim(); if(c) set.add(c); });
+        return Array.from(set).sort();
+      }
+
       // ---- Backup / Restore / Wipe ----
       async function backupAll(){
-        const [parts, moves, hist] = await Promise.all([
-          listParts(), listMoves(10000), listPriceHistory(10000)
+        const [parts, moves, hist, fin] = await Promise.all([
+          listParts(), listMoves(10000), listPriceHistory(10000), listFinEntries(10000)
         ]);
-        return { parts, moves, priceHistory: hist };
+        return { parts, moves, priceHistory: hist, finanzas: fin };
       }
 
       async function restoreAll(jsonDump){
         if(Array.isArray(jsonDump.parts)){
           for(const p of jsonDump.parts){
             await upsertPart(p);
+          }
+        }
+        if(Array.isArray(jsonDump.finanzas)){
+          const u = Auth.currentUser();
+          for(const f of jsonDump.finanzas){
+            await upsertFinEntry({
+              id: f.id || undefined,
+              fecha: f.fecha,
+              tipo: f.tipo,
+              categoria: f.categoria,
+              descripcion: f.descripcion,
+              monto: f.monto,
+              usuario: u ? u.email : (f.usuario||'')
+            });
           }
         }
       }
@@ -1068,6 +1220,7 @@
         await sb.from('price_history').delete().eq('org_id', oid);
         await sb.from('movements').delete().eq('org_id', oid);
         await sb.from('part_lots').delete().eq('org_id', oid);
+        await sb.from('fin_entries').delete().eq('org_id', oid);
         await sb.from('parts').delete().eq('org_id', oid);
       }
 
@@ -1098,9 +1251,10 @@
         listLots, listAllLots, getInventoryValueByLots,
         addPriceHistory, listPriceHistory,
         uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
+        // Finanzas
+        listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics,
-        updateLot // ⬅️ mantém exposto o novo método
+        recomputeMetrics
       };
     })();
     
@@ -1148,6 +1302,7 @@
       switch(path){
         case 'login': await renderLogin(); break;
         case 'reportes': await renderReportes(); break;
+        case 'finanzas': await renderFinanzas(); break; // NUEVO
         case 'inventario': await renderInventario(); break;
         case 'movimientos': await renderMovimientos(); break;
         case 'sugerencias': await renderSugerencias(); break;
@@ -1179,7 +1334,7 @@
       });
     }
 
-    // ---- Reportes ----
+    // ---- Reportes (ajustado con Finanzas) ----
     let chartTop = null, chartDia = null;
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
@@ -1237,11 +1392,14 @@
             byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
           }
         }
-        const liq = bruto - cogs;
+        // Finanzas del período
+        const { gasto, ingreso, capital } = await DB.sumFinByTipo({ from: dFrom, to: dTo });
 
         // KPIs
         elBruto.textContent = fmtMoney(bruto);
         elCogs.textContent  = fmtMoney(cogs);
+        // Ganancia neta ajustada por Finanzas:
+        const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
         elLiq.textContent   = fmtMoney(liq);
         elUnits.textContent = String(units);
         elSaf.textContent   = String(SAFETY_DAYS);
@@ -1284,7 +1442,135 @@
       await run();
     }
 
-    // ---- Inventario (botón Imagen por fila con visor) ----
+    // ---- Finanzas (UI) ----
+    async function renderFinanzas(){
+      const tpl = document.getElementById('tpl-finanzas').content.cloneNode(true);
+      view.innerHTML = ''; view.appendChild(tpl);
+
+      const finDesde = document.getElementById('finDesde');
+      const finHasta = document.getElementById('finHasta');
+      const finTipoFilter = document.getElementById('finTipoFilter');
+      const finCatFilter = document.getElementById('finCatFilter');
+      const finAplicar = document.getElementById('finAplicar');
+      const finFormWrap = document.getElementById('finFormWrap');
+      const finForm = document.getElementById('finForm');
+      const finFormSummary = document.getElementById('finFormSummary');
+      const finCancelEdit = document.getElementById('finCancelEdit');
+      const finTbody = document.getElementById('finTbody');
+      const dlFinCats = document.getElementById('dlFinCats');
+
+      // Período default: últimos 30 dias
+      const today = new Date();
+      const d0 = new Date(Date.now() - 29*24*3600*1000);
+      finDesde.value = d0.toISOString().slice(0,10);
+      finHasta.value = today.toISOString().slice(0,10);
+
+      // Sugerir categorías
+      (async ()=>{
+        try{
+          const cats = await DB.listFinCategories();
+          dlFinCats.innerHTML = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+        }catch(e){}
+      })();
+
+      let rows = await DB.listFinEntries(2000);
+
+      function passesFilters(r){
+        const dFrom = new Date(finDesde.value + 'T00:00:00');
+        const dTo   = new Date(finHasta.value + 'T23:59:59');
+        const dt = new Date(r.fecha);
+        if(dt < dFrom || dt > dTo) return false;
+        const ty = finTipoFilter.value || '(Todos)';
+        if(ty !== '(Todos)' && r.tipo !== ty) return false;
+        const qcat = (finCatFilter.value||'').trim().toLowerCase();
+        if(qcat && !String(r.categoria||'').toLowerCase().includes(qcat)) return false;
+        return true;
+      }
+
+      function paint(){
+        finTbody.innerHTML = '';
+        rows.filter(passesFilters).forEach(r=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${fmtDate(r.fecha)}</td>
+            <td>${escapeHtml(r.tipo)}</td>
+            <td>${escapeHtml(r.categoria||'')}</td>
+            <td>${escapeHtml(r.descripcion||'')}</td>
+            <td class="num">${fmtMoney(r.monto)}</td>
+            <td>${escapeHtml(r.usuario||'')}</td>
+            <td class="num">
+              <div class="row-actions" style="justify-content:flex-end">
+                <button class="btn btn-ghost" data-edit="${r.id}">Editar</button>
+                <button class="btn btn-danger" data-del="${r.id}">Eliminar</button>
+              </div>
+            </td>`;
+          finTbody.appendChild(tr);
+        });
+      }
+      paint();
+
+      finAplicar.addEventListener('click', paint);
+
+      function resetForm(){
+        finForm.reset();
+        finForm.querySelector('input[name="id"]').value = '';
+        finFormSummary.textContent = 'Nuevo lanzamiento financiero';
+      }
+
+      finCancelEdit.addEventListener('click', ()=>{
+        resetForm();
+        finFormWrap.open = false;
+      });
+
+      finForm.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const fd = new FormData(finForm);
+        const id = fd.get('id') || undefined;
+        const tipo = fd.get('tipo');
+        const fecha = fd.get('fecha');
+        const categoria = String(fd.get('categoria')||'').trim();
+        const descripcion = String(fd.get('descripcion')||'').trim();
+        const monto = Number(fd.get('monto')||0);
+        if(!tipo || !fecha || !(monto>=0)){ alert('Complete los campos obligatorios'); return; }
+        try{
+          const u = Auth.currentUser();
+          await DB.upsertFinEntry({ id, tipo, fecha, categoria, descripcion, monto, usuario: u?u.email:'' });
+          rows = await DB.listFinEntries(2000);
+          resetForm(); finFormWrap.open = false; paint();
+          alert('Lanzamiento guardado');
+        }catch(err){ alert(err.message || 'No se pudo guardar'); }
+      });
+
+      finTbody.addEventListener('click', async (e)=>{
+        const bEdit = e.target.closest('button[data-edit]');
+        const bDel  = e.target.closest('button[data-del]');
+        if(bEdit){
+          const id = bEdit.getAttribute('data-edit');
+          const r = rows.find(x=>String(x.id)===String(id));
+          if(!r) return;
+          finFormWrap.open = true;
+          finFormSummary.textContent = 'Editar lanzamiento';
+          finForm.querySelector('input[name="id"]').value = r.id;
+          finForm.querySelector('select[name="tipo"]').value = r.tipo;
+          finForm.querySelector('input[name="fecha"]').value = String(r.fecha).slice(0,10);
+          finForm.querySelector('input[name="categoria"]').value = r.categoria || '';
+          finForm.querySelector('input[name="descripcion"]').value = r.descripcion || '';
+          finForm.querySelector('input[name="monto"]').value = r.monto;
+        }
+        if(bDel){
+          const id = bDel.getAttribute('data-del');
+          if(!confirm('¿Eliminar este lanzamiento?')) return;
+          try{
+            await DB.deleteFinEntry(id);
+            rows = await DB.listFinEntries(2000);
+            paint();
+            alert('Lanzamiento eliminado');
+          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+        }
+      });
+    }
+
+    // ---- Inventario (inclui visor/imagem, seletores, etc.) ----
     async function renderInventario(){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -1307,32 +1593,6 @@
       let imageTargetPart = null;
 
       let parts = await DB.listParts();
-
-      // >>> NOVO: caixa de edição de lote (opcional) anexada ao form
-      const lotEditBox = document.createElement('div');
-      lotEditBox.id = 'lotEditBox';
-      lotEditBox.className = 'card';
-      lotEditBox.style.display = 'none';
-      lotEditBox.style.marginTop = '12px';
-      lotEditBox.innerHTML = `
-        <h3 style="margin-top:0">Editar lote (opcional)</h3>
-        <div class="grid" style="grid-template-columns:repeat(3, minmax(0,1fr)); gap:12px">
-          <label class="field"><span>Seleccionar lote</span>
-            <select id="lotSelect"></select>
-          </label>
-          <label class="field"><span>Costo unitario del lote (Bs)</span>
-            <input id="lotCosto" type="number" step="0.01" min="0" />
-          </label>
-          <label class="field"><span>Precio unitario del lote (Bs)</span>
-            <input id="lotPrecio" type="number" step="0.01" min="0" />
-          </label>
-        </div>
-        <div class="row-actions" style="justify-content:flex-end">
-          <button type="button" id="saveLotBtn" class="btn btn-primary">Guardar lote</button>
-        </div>
-        <p class="muted xs">Este cambio afecta <strong>sólo</strong> al lote seleccionado. No modifica el costo/precio base de la pieza ni otros lotes.</p>
-      `;
-      formWrap.appendChild(lotEditBox);
 
       function buildFilters(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -1451,15 +1711,10 @@
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
-        // ao criar nova peça, esconder editor de lote
-        const box = document.getElementById('lotEditBox');
-        if(box) box.style.display = 'none';
       });
       cancelBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = false;
-        const box = document.getElementById('lotEditBox');
-        if(box) box.style.display = 'none';
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
@@ -1553,7 +1808,7 @@
         });
 
         btnUpload.addEventListener('click', ()=>{
-          imageTargetPart = part;
+          imageTargetPart = part; // garante que há peça alvo ANTES de abrir picker
           window.__imgModalRefresh = renderList;
           imagePicker.value = '';
           imagePicker.click();
@@ -1601,46 +1856,8 @@
 
           resetFormToNew();
           formWrap.open = false;
-          const box = document.getElementById('lotEditBox');
-          if(box) box.style.display = 'none';
           alert('Pieza guardada');
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
-      });
-
-      // Handlers do bloco de lote
-      lotEditBox.addEventListener('change', (e)=>{
-        if(e.target && e.target.id === 'lotSelect'){
-          const id = e.target.value;
-          const lote = (window.__currentEditLots||[]).find(l=> String(l.id)===String(id));
-          if(lote){
-            lotEditBox.querySelector('#lotCosto').value  = Number(lote.costo_unit||0);
-            lotEditBox.querySelector('#lotPrecio').value = Number(lote.precio_unit||0);
-          }
-        }
-      });
-      lotEditBox.addEventListener('click', async (e)=>{
-        if(e.target && e.target.id === 'saveLotBtn'){
-          const id = lotEditBox.querySelector('#lotSelect').value;
-          if(!id){ alert('Seleccione un lote'); return; }
-          const costo  = Number(lotEditBox.querySelector('#lotCosto').value || 0);
-          const precio = Number(lotEditBox.querySelector('#lotPrecio').value || 0);
-          try{
-            await DB.updateLot({ id, costo_unit:costo, precio_unit:precio });
-            alert('Lote actualizado');
-
-            // refrescar chips de lotes se a gaveta estiver aberta
-            const curPartId = form.querySelector('input[name="id"]').value;
-            const box = document.getElementById(`lots-${curPartId}`);
-            if(box){
-              const lots = await DB.listLots(curPartId);
-              box.innerHTML = lots.length
-                ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
-                : '<span class="muted xs">Sin lotes disponibles</span>';
-            }
-          }catch(err){
-            alert(err.message || 'No se pudo actualizar el lote');
-          }
-        }
       });
 
       // Acciones por fila (Imagen/Editar/Eliminar)
@@ -1671,27 +1888,6 @@
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
-
-          // >>> NOVO: carregar e exibir lotes para edição específica
-          try{
-            const lots = await DB.listLots(p.id);
-            if(lots.length){
-              window.__currentEditLots = lots;
-              const sel = document.getElementById('lotSelect');
-              sel.innerHTML = lots.map((l,idx)=>(
-                `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`
-              )).join('');
-              document.getElementById('lotCosto').value  = Number(lots[0].costo_unit||0);
-              document.getElementById('lotPrecio').value = Number(lots[0].precio_unit||0);
-              document.getElementById('lotEditBox').style.display = '';
-            }else{
-              window.__currentEditLots = null;
-              document.getElementById('lotEditBox').style.display = 'none';
-            }
-          }catch(e){
-            window.__currentEditLots = null;
-            document.getElementById('lotEditBox').style.display = 'none';
-          }
         }
 
         if(act === 'del'){
@@ -1701,18 +1897,15 @@
             if(p?.imagePath){ try{ await DB.deletePartImage(p.imagePath); }catch(e){} }
             await DB.deletePart(id);
             parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
-            // ao excluir, esconder editor de lote se aberto
-            const box = document.getElementById('lotEditBox');
-            if(box) box.style.display = 'none';
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
 
-      // Upload real quando escolher arquivo (sem listeners duplicados)
-      imagePicker.onchange = async ()=>{
+      // Upload real quando escolher arquivo (atualiza o modal se aberto)
+      imagePicker.addEventListener('change', async ()=>{
         const f = imagePicker.files?.[0];
         if(!f){ return; }
-        if(!imageTargetPart){ alert('Pieza no seleccionada'); imagePicker.value=''; return; }
+        if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
         try{
           const up = await DB.uploadPartImage(imageTargetPart.id, f);
           await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
@@ -1730,7 +1923,7 @@
           imagePicker.value = '';
           window.__imgModalRefresh = null;
         }
-      };
+      });
 
       // Importador CSV
       importCSV.addEventListener('change', ()=>{
@@ -2024,7 +2217,7 @@
       });
 
       resetBtn.addEventListener('click', async ()=>{
-        if(!confirm('Esto borrará TODAS las piezas, lotes, movimientos e historial de la EMPRESA ACTUAL. ¿Continuar?')) return;
+        if(!confirm('Esto borrará TODAS las piezas, lotes, movimientos, historial y finanzas de la EMPRESA ACTUAL. ¿Continuar?')) return;
         try{ await DB.wipeCurrentOrg(); alert('Datos borrados de la empresa actual'); location.hash = '#/reportes'; await route(); }
         catch(e){ alert(e.message || 'No se pudo borrar'); }
       });
@@ -2078,3 +2271,4 @@
   </script>
 </body>
 </html>
+
