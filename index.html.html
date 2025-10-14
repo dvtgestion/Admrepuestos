@@ -139,7 +139,7 @@
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
-    /* === Visor de imagens (modal) === */
+    /* === Visor de imágenes (modal) === */
     .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
@@ -611,6 +611,12 @@ const parseLocaleNumber = (raw)=>{
   return Number.isFinite(n) ? n : NaN;
 };
 
+// >>> NOVO: formatador só de data (dd/mm/aaaa)
+const fmtDateOnly = (s) => {
+  const [y,m,d] = String(s).slice(0,10).split('-');
+  return `${d}/${m}/${y}`;
+};
+
     /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
@@ -684,8 +690,8 @@ const parseLocaleNumber = (raw)=>{
 
       return { get, set, myOrgs, ensureCurrent };
     })();
-
-    /* ===== DB (Supabase) ===== */
+    
+        /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
@@ -936,14 +942,16 @@ const parseLocaleNumber = (raw)=>{
           // decrementar lote
           const { error: updLot } = await sb.from('part_lots')
             .update({ qty: Number(lot.qty||0) - q })
-            .eq('id', lot.id).eq('org_id', orgId());
+            .eq('org_id', orgId())
+            .eq('id', lot.id);
           if(updLot) throw updLot;
 
           // actualizar saldo de la pieza
           if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
           const { error: upErr2 } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) - q })
-            .eq('id', p.id).eq('org_id', orgId());
+            .eq('org_id', orgId())
+            .eq('id', p.id);
           if(upErr2) throw upErr2;
 
           // registrar el movimiento (con costo/precio del lote)
@@ -1149,9 +1157,13 @@ const parseLocaleNumber = (raw)=>{
       }
 
       async function upsertFinEntry(entry){
+        // >>> AJUSTE: salvar sempre ao meio-dia (UTC) para não mudar o dia por fuso
+        const fechaStr = entry.fecha ? String(entry.fecha).slice(0,10) : null;
+        const fechaIsoNoon = fechaStr ? new Date(fechaStr + 'T12:00:00').toISOString() : null;
+
         const base = {
           org_id: orgId(),
-          fecha: entry.fecha,
+          fecha: fechaIsoNoon,
           tipo: entry.tipo,
           categoria: entry.categoria || null,
           descripcion: entry.descripcion || null,
@@ -1185,13 +1197,17 @@ const parseLocaleNumber = (raw)=>{
 
       // sumas por tipo en un rango de fechas
       async function sumFinByTipo({from, to}){
-        const desdeISO = from instanceof Date ? from.toISOString() : (from||null);
-        const hastaISO = to instanceof Date ? to.toISOString() : (to||null);
+        // >>> AJUSTE: comparar por YYYY-MM-DD para evitar timezone
+        const toDateStr = v => (v instanceof Date ? v.toISOString().slice(0,10) : (v ? String(v).slice(0,10) : null));
+        const desde = toDateStr(from);
+        const hasta = toDateStr(to);
+
         const base = sb.from('fin_entries')
           .select('monto, tipo')
           .eq('org_id', orgId());
-        if(desdeISO) base.gte('fecha', desdeISO);
-        if(hastaISO) base.lte('fecha', hastaISO);
+        if(desde) base.gte('fecha', desde);
+        if(hasta) base.lte('fecha', hasta);
+
         const { data, error } = await base;
         if(error) throw error;
         let gasto = 0, ingreso = 0, capital = 0;
@@ -1505,10 +1521,12 @@ const parseLocaleNumber = (raw)=>{
       let rows = await DB.listFinEntries(2000);
 
       function passesFilters(r){
-        const dFrom = new Date(finDesde.value + 'T00:00:00');
-        const dTo   = new Date(finHasta.value + 'T23:59:59');
-        const dt = new Date(r.fecha);
-        if(dt < dFrom || dt > dTo) return false;
+        // >>> AJUSTE: comparar por string YYYY-MM-DD para evitar timezone
+        const f = String(r.fecha).slice(0,10);
+        const dFrom = finDesde.value;
+        const dTo   = finHasta.value;
+        if((dFrom && f < dFrom) || (dTo && f > dTo)) return false;
+
         const ty = finTipoFilter.value || '(Todos)';
         if(ty !== '(Todos)' && r.tipo !== ty) return false;
         const qcat = (finCatFilter.value||'').trim().toLowerCase();
@@ -1521,7 +1539,7 @@ const parseLocaleNumber = (raw)=>{
         rows.filter(passesFilters).forEach(r=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${fmtDate(r.fecha)}</td>
+            <td>${fmtDateOnly(r.fecha)}</td>
             <td>${escapeHtml(r.tipo)}</td>
             <td>${escapeHtml(r.categoria||'')}</td>
             <td>${escapeHtml(r.descripcion||'')}</td>
@@ -2306,4 +2324,3 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
   </script>
 </body>
 </html>
-
