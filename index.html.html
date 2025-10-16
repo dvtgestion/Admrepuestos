@@ -125,6 +125,10 @@
     .lots-list { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px }
     .lot-chip { border:1px dashed var(--border); border-radius:8px; padding:6px 8px; font-size:12px; background:#fff; }
     .lot-chip b{font-weight:700}
+    
+    /* Detalhes sempre abertos: remove seta e desativa clique no título */
+details.inline.always-open[open] > summary::before { display:none; }
+details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Miniatura da peça na tabela */
     .table .thumb{
@@ -399,9 +403,9 @@
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
 
-          <!-- *** NOVO BLOCO: Calculadora de importación (BRL→Bs) para preencher Costo/Precio *** -->
+          <!-- *** NOVO BLOCO:# Calculadora de importación (BRL→Bs) para preencher Costo/Precio *** -->
           <div class="field" style="grid-column:1/-1">
-            <details class="inline" id="impCalcPiece">
+            <details class="inline always-open" id="impCalcPiece" open>
               <summary>Calculadora de importación (BRL→Bs)</summary>
               <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:8px">
                 <label class="field"><span>Costo en R$</span>
@@ -495,7 +499,7 @@
             <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
 
             <!-- *** NOVO BLOCO: Calculadora de importación (BRL→Bs) para ENTRADA *** -->
-            <details class="inline" id="impCalcEntrada" style="margin-top:8px">
+            <details class="inline always-open" id="impCalcEntrada" style="margin-top:8px" open>
               <summary>Calculadora de importación (BRL→Bs)</summary>
               <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:8px">
                 <label class="field"><span>Costo en R$</span>
