@@ -139,7 +139,7 @@
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
-    /* === Visor de imágenes (modal) === */
+    /* === Visor de imagens (modal) === */
     .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
@@ -398,6 +398,34 @@
           <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
+
+          <!-- *** NOVO BLOCO: Calculadora de importación (BRL→Bs) para preencher Costo/Precio *** -->
+          <div class="field" style="grid-column:1/-1">
+            <details class="inline" id="impCalcPiece">
+              <summary>Calculadora de importación (BRL→Bs)</summary>
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:8px">
+                <label class="field"><span>Costo en R$</span>
+                  <input id="impCostoBRL" inputmode="decimal" placeholder="Ej: 50" />
+                </label>
+                <label class="field"><span>Tasa (Bs por R$)</span>
+                  <input id="impTasa" inputmode="decimal" placeholder="Ej: 2,40" />
+                </label>
+                <label class="field"><span>Logística por unidad (Bs)</span>
+                  <input id="impLogisticaBs" inputmode="decimal" placeholder="Ej: 30" />
+                </label>
+                <label class="field"><span>Margen (%)</span>
+                  <input id="impMargen" inputmode="decimal" placeholder="Ej: 30" />
+                </label>
+              </div>
+              <div class="row-actions" style="margin-top:8px; gap:8px">
+                <button type="button" class="btn" id="impCalcular">Calcular y rellenar</button>
+                <button type="button" class="btn btn-ghost" id="impLimpiar">Limpiar</button>
+                <span class="xs muted" id="impPreview"></span>
+              </div>
+            </details>
+          </div>
+          <!-- *** FIM DO BLOCO NOVO *** -->
+
           <div class="row-actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
@@ -465,6 +493,32 @@
               </label>
             </div>
             <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
+
+            <!-- *** NOVO BLOCO: Calculadora de importación (BRL→Bs) para ENTRADA *** -->
+            <details class="inline" id="impCalcEntrada" style="margin-top:8px">
+              <summary>Calculadora de importación (BRL→Bs)</summary>
+              <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:8px">
+                <label class="field"><span>Costo en R$</span>
+                  <input id="imp2CostoBRL" inputmode="decimal" placeholder="Ej: 50" />
+                </label>
+                <label class="field"><span>Tasa (Bs por R$)</span>
+                  <input id="imp2Tasa" inputmode="decimal" placeholder="Ej: 2,40" />
+                </label>
+                <label class="field"><span>Logística por unidad (Bs)</span>
+                  <input id="imp2LogisticaBs" inputmode="decimal" placeholder="Ej: 30" />
+                </label>
+                <label class="field"><span>Margen (%)</span>
+                  <input id="imp2Margen" inputmode="decimal" placeholder="Ej: 30" />
+                </label>
+              </div>
+              <div class="row-actions" style="margin-top:8px; gap:8px">
+                <button type="button" class="btn" id="imp2Calcular">Calcular y rellenar</button>
+                <button type="button" class="btn btn-ghost" id="imp2Limpiar">Limpiar</button>
+                <span class="xs muted" id="imp2Preview"></span>
+              </div>
+            </details>
+            <!-- *** FIM DO BLOCO NOVO *** -->
+
           </div>
 
           <!-- CAMPOS EXTRAS PARA SALIDA -->
@@ -611,12 +665,6 @@ const parseLocaleNumber = (raw)=>{
   return Number.isFinite(n) ? n : NaN;
 };
 
-// >>> NOVO: formatador só de data (dd/mm/aaaa)
-const fmtDateOnly = (s) => {
-  const [y,m,d] = String(s).slice(0,10).split('-');
-  return `${d}/${m}/${y}`;
-};
-
     /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
@@ -690,8 +738,8 @@ const fmtDateOnly = (s) => {
 
       return { get, set, myOrgs, ensureCurrent };
     })();
-    
-        /* ===== DB (Supabase) ===== */
+
+    /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
@@ -950,8 +998,7 @@ const fmtDateOnly = (s) => {
           if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
           const { error: upErr2 } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) - q })
-            .eq('org_id', orgId())
-            .eq('id', p.id);
+            .eq('id', p.id).eq('org_id', orgId());
           if(upErr2) throw upErr2;
 
           // registrar el movimiento (con costo/precio del lote)
@@ -1157,13 +1204,9 @@ const fmtDateOnly = (s) => {
       }
 
       async function upsertFinEntry(entry){
-        // >>> AJUSTE: salvar sempre ao meio-dia (UTC) para não mudar o dia por fuso
-        const fechaStr = entry.fecha ? String(entry.fecha).slice(0,10) : null;
-        const fechaIsoNoon = fechaStr ? new Date(fechaStr + 'T12:00:00').toISOString() : null;
-
         const base = {
           org_id: orgId(),
-          fecha: fechaIsoNoon,
+          fecha: entry.fecha,
           tipo: entry.tipo,
           categoria: entry.categoria || null,
           descripcion: entry.descripcion || null,
@@ -1197,17 +1240,13 @@ const fmtDateOnly = (s) => {
 
       // sumas por tipo en un rango de fechas
       async function sumFinByTipo({from, to}){
-        // >>> AJUSTE: comparar por YYYY-MM-DD para evitar timezone
-        const toDateStr = v => (v instanceof Date ? v.toISOString().slice(0,10) : (v ? String(v).slice(0,10) : null));
-        const desde = toDateStr(from);
-        const hasta = toDateStr(to);
-
+        const desdeISO = from instanceof Date ? from.toISOString() : (from||null);
+        const hastaISO = to instanceof Date ? to.toISOString() : (to||null);
         const base = sb.from('fin_entries')
           .select('monto, tipo')
           .eq('org_id', orgId());
-        if(desde) base.gte('fecha', desde);
-        if(hasta) base.lte('fecha', hasta);
-
+        if(desdeISO) base.gte('fecha', desdeISO);
+        if(hastaISO) base.lte('fecha', hastaISO);
         const { data, error } = await base;
         if(error) throw error;
         let gasto = 0, ingreso = 0, capital = 0;
@@ -1303,7 +1342,7 @@ const fmtDateOnly = (s) => {
       };
     })();
     
-    /* ===== App / Navegación ===== */
+        /* ===== App / Navegación ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -1521,12 +1560,10 @@ const fmtDateOnly = (s) => {
       let rows = await DB.listFinEntries(2000);
 
       function passesFilters(r){
-        // >>> AJUSTE: comparar por string YYYY-MM-DD para evitar timezone
-        const f = String(r.fecha).slice(0,10);
-        const dFrom = finDesde.value;
-        const dTo   = finHasta.value;
-        if((dFrom && f < dFrom) || (dTo && f > dTo)) return false;
-
+        const dFrom = new Date(finDesde.value + 'T00:00:00');
+        const dTo   = new Date(finHasta.value + 'T23:59:59');
+        const dt = new Date(r.fecha);
+        if(dt < dFrom || dt > dTo) return false;
         const ty = finTipoFilter.value || '(Todos)';
         if(ty !== '(Todos)' && r.tipo !== ty) return false;
         const qcat = (finCatFilter.value||'').trim().toLowerCase();
@@ -1539,7 +1576,7 @@ const fmtDateOnly = (s) => {
         rows.filter(passesFilters).forEach(r=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${fmtDateOnly(r.fecha)}</td>
+            <td>${fmtDate(r.fecha)}</td>
             <td>${escapeHtml(r.tipo)}</td>
             <td>${escapeHtml(r.categoria||'')}</td>
             <td>${escapeHtml(r.descripcion||'')}</td>
@@ -1913,6 +1950,49 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
+      // *** NOVO: Calculadora de importación (Inventario -> Form de pieza) ***
+      const impCostoBRL = document.getElementById('impCostoBRL');
+      const impTasa = document.getElementById('impTasa');
+      const impLogisticaBs = document.getElementById('impLogisticaBs');
+      const impMargen = document.getElementById('impMargen');
+      const impCalcular = document.getElementById('impCalcular');
+      const impLimpiar = document.getElementById('impLimpiar');
+      const impPreview = document.getElementById('impPreview');
+      const savedFx = localStorage.getItem('fxRateBRL');
+      if(impTasa && savedFx){ impTasa.value = savedFx; }
+
+      function runImpCalc(){
+        const brl = parseLocaleNumber(impCostoBRL?.value);
+        const fx  = parseLocaleNumber(impTasa?.value);
+        const log = parseLocaleNumber(impLogisticaBs?.value);
+        const mg  = parseLocaleNumber(impMargen?.value);
+        if(!(isFinite(brl) && isFinite(fx))){
+          alert('Ingrese costo en R$ y tasa válidos.');
+          return;
+        }
+        const costo = brl*fx + (isFinite(log)?log:0);
+        let precio = costo;
+        if(isFinite(mg)){ precio = costo*(1 + mg/100); }
+
+        // Preencher campos do formulário principal
+        const costoInput = form.querySelector('input[name="costo"]');
+        const precioInput = form.querySelector('input[name="precio"]');
+        if(costoInput) costoInput.value = Number(costo.toFixed(2));
+        if(precioInput) precioInput.value = Number(precio.toFixed(2));
+
+        if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
+
+        if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
+      }
+      if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
+      if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
+        if(impCostoBRL) impCostoBRL.value = '';
+        if(impLogisticaBs) impLogisticaBs.value = '';
+        if(impMargen) impMargen.value = '';
+        if(impPreview) impPreview.textContent = '';
+      });
+      // *** FIM DO BLOCO NOVO ***
+
       // Acciones por fila (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
@@ -2158,6 +2238,47 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         a.href = url; a.download = `inventario_${stamp}.csv`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       });
+
+      // *** NOVO: Calculadora de importación (Movimientos -> Entrada) ***
+      const imp2CostoBRL = document.getElementById('imp2CostoBRL');
+      const imp2Tasa = document.getElementById('imp2Tasa');
+      const imp2LogisticaBs = document.getElementById('imp2LogisticaBs');
+      const imp2Margen = document.getElementById('imp2Margen');
+      const imp2Calcular = document.getElementById('imp2Calcular');
+      const imp2Limpiar = document.getElementById('imp2Limpiar');
+      const imp2Preview = document.getElementById('imp2Preview');
+      const savedFx2 = localStorage.getItem('fxRateBRL');
+      if(imp2Tasa && savedFx2){ imp2Tasa.value = savedFx2; }
+
+      function runImpCalc2(){
+        const brl = parseLocaleNumber(imp2CostoBRL?.value);
+        const fx  = parseLocaleNumber(imp2Tasa?.value);
+        const log = parseLocaleNumber(imp2LogisticaBs?.value);
+        const mg  = parseLocaleNumber(imp2Margen?.value);
+        if(!(isFinite(brl) && isFinite(fx))){
+          alert('Ingrese costo en R$ y tasa válidos.');
+          return;
+        }
+        const costo = brl*fx + (isFinite(log)?log:0);
+        let precio = costo;
+        if(isFinite(mg)){ precio = costo*(1 + mg/100); }
+
+        if(entradaCosto) entradaCosto.value = Number(costo.toFixed(2));
+        if(entradaPrecio) entradaPrecio.value = Number(precio.toFixed(2));
+
+        if(imp2Preview){ imp2Preview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
+
+        if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
+      }
+      if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
+      if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
+        if(imp2CostoBRL) imp2CostoBRL.value = '';
+        if(imp2LogisticaBs) imp2LogisticaBs.value = '';
+        if(imp2Margen) imp2Margen.value = '';
+        if(imp2Preview) imp2Preview.textContent = '';
+      });
+      // *** FIM DO BLOCO NOVO ***
+
     }
 
     // ---- Sugerencias ----
