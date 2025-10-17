@@ -158,10 +158,11 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
+
+    /* ✅ Ajuste: no celular a sidebar continua LATERAL à esquerda (não vira barra superior) */
     @media (max-width:900px){
-      /* AJUSTE: manter a sidebar lateral no mobile */
-      .app{grid-template-columns:220px 1fr}
-      .sidebar{position:sticky; top:0; z-index:10; height:100dvh; overflow:auto}
+      .app{ grid-template-columns:260px 1fr; } /* mantém duas colunas no mobile */
+      .sidebar{ position:sticky; top:0; z-index:10; height:100dvh; }
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
     }
@@ -273,7 +274,7 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
   <template id="tpl-finanzas">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, otros ingresos y capital.</p></div>
+        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, outros ingresos y capital.</p></div>
         <div class="right">
           <div class="filter-group">
             <label class="field" style="min-width:160px">
@@ -636,7 +637,13 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* ===== Utils ===== */
     const fmtMoney = (n)=> Number(n||0).toLocaleString('es-BO', {style:'currency', currency:'BOB'});
-    const fmtDate  = (d)=> new Date(d).toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    // ✅ Corrigido: trata "YYYY-MM-DD" como meia-noite local (evita -1 dia)
+    const fmtDate  = (d)=>{
+      if(!d) return '—';
+      const s = String(d);
+      const dt = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T12:00:00') : new Date(s);
+      return dt.toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    };
     const escapeHtml = (s)=> String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const csvCell = (v)=> { const needsQuote = /[",\n]/.test(String(v)); const esc = String(v).replace(/"/g,'""'); return needsQuote ? `"${esc}"` : esc; };
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
@@ -670,32 +677,19 @@ const parseLocaleNumber = (raw)=>{
   return Number.isFinite(n) ? n : NaN;
 };
 
-    /* === AJUSTES DE DATA (fuso local, sem voltar 1 dia) === */
-    const pad2 = (n)=> String(n).padStart(2,'0');
-    /** Retorna 'YYYY-MM-DD' no fuso local (para inputs date) */
+    // ✅ Helpers de data para inputs (evitar -1 dia)
     const toLocalDateInput = (d)=>{
-      const x = d instanceof Date ? d : new Date(d);
-      return `${x.getFullYear()}-${pad2(x.getMonth()+1)}-${pad2(x.getDate())}`;
+      const dt = (d instanceof Date) ? d : new Date(d);
+      const off = dt.getTimezoneOffset();
+      const local = new Date(dt.getTime() - off*60000);
+      return local.toISOString().slice(0,10);
     };
-    /** Formata inteligentemente: se vier 'YYYY-MM-DD', mostra DD/MM/YYYY sem construir Date (evita UTC) */
-    const fmtDateSmart = (val)=>{
-      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
-        const [y,m,d] = val.split('-').map(Number);
-        return `${pad2(d)}/${pad2(m)}/${y}`;
-      }
-      const dt = new Date(val);
-      return dt.toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
-    };
-    /** Converte 'YYYY-MM-DD' de input em ISO com 12:00 local (evita cair no dia anterior em UTC) */
-    const dateInputToISO = (s)=>{
-      if (!s) return null;
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
-        const [y,m,d] = s.split('-').map(Number);
-        const dt = new Date(y, m-1, d, 12, 0, 0); // meio-dia local
-        return dt.toISOString();
-      }
-      const dt = new Date(s);
-      return isNaN(dt) ? null : dt.toISOString();
+    const dateInputToISO = (dateStr)=>{
+      if(!dateStr) return null;
+      const [y,m,dd] = dateStr.split('-').map(Number);
+      // usa meio-dia UTC para não mudar de dia ao converter
+      const dt = new Date(Date.UTC(y, (m||1)-1, dd||1, 12, 0, 0));
+      return dt.toISOString();
     };
 
     /* ===== Auth ===== */
@@ -724,8 +718,8 @@ const parseLocaleNumber = (raw)=>{
       async function logout(){ await sb.auth.signOut(); }
       return { init, isAuthed, currentUser, login, logout };
     })();
-    
-        /* ===== Org ===== */
+
+    /* ===== Org ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
@@ -1239,7 +1233,7 @@ const parseLocaleNumber = (raw)=>{
       async function upsertFinEntry(entry){
         const base = {
           org_id: orgId(),
-          fecha: dateInputToISO(entry.fecha), // <-- AJUSTE: salva ao meio-dia local para não “voltar um dia”
+          fecha: entry.fecha,
           tipo: entry.tipo,
           categoria: entry.categoria || null,
           descripcion: entry.descripcion || null,
@@ -1400,6 +1394,7 @@ const parseLocaleNumber = (raw)=>{
       });
     }
 
+    // ✅ Ajuste: rota mais resiliente; garante highlight mesmo se alguma view lançar erro
     async function route(){
       const hash = location.hash || '#/login';
       const path = (hash.startsWith('#/')) ? hash.slice(2) : 'login';
@@ -1416,20 +1411,26 @@ const parseLocaleNumber = (raw)=>{
 
       if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
 
-      switch(path){
-        case 'login': await renderLogin(); break;
-        case 'reportes': await renderReportes(); break;
-        case 'finanzas': await renderFinanzas(); break; // NUEVO
-        case 'inventario': await renderInventario(); break;
-        case 'movimientos': await renderMovimientos(); break;
-        case 'sugerencias': await renderSugerencias(); break;
-        case 'ajustes': await renderAjustes(); break;
-        case 'historial': await renderHistorial(); break;
-        default:
-          location.hash = authed ? '#/reportes' : '#/login';
-          return;
+      try {
+        switch(path){
+          case 'login': await renderLogin(); break;
+          case 'reportes': await renderReportes(); break;
+          case 'finanzas': await renderFinanzas(); break; // NUEVO
+          case 'inventario': await renderInventario(); break;
+          case 'movimientos': await renderMovimientos(); break;
+          case 'sugerencias': await renderSugerencias(); break;
+          case 'ajustes': await renderAjustes(); break;
+          case 'historial': await renderHistorial(); break;
+          default:
+            location.hash = authed ? '#/reportes' : '#/login';
+            return;
+        }
+      } catch (err) {
+        console.error('Erro ao renderizar a rota', path, err);
+        view.innerHTML = `<div class="card"><strong>Falha ao carregar “${path}”.</strong><br><span class="muted">Veja o console para detalhes.</span></div>`;
+      } finally {
+        if(authed) setNavActive(path);
       }
-      if(authed) setNavActive(path);
     }
 
     /* ===== Vistas ===== */
@@ -1451,18 +1452,17 @@ const parseLocaleNumber = (raw)=>{
       });
     }
 
-    // ---- Reportes (ajustado con Finanzas) ----
+    // ---- Reportes (ajustado com Finanzas) ----
     let chartTop = null, chartDia = null;
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      // Fechas por defecto: últimos 30 días
+      // ✅ Fechas por defecto (local): últimos 30 días
       const repDesde = document.getElementById('repDesde');
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
-      // AJUSTE: usar data local no input (evita UTC)
       repDesde.value = toLocalDateInput(d0);
       repHasta.value = toLocalDateInput(today);
 
@@ -1577,10 +1577,9 @@ const parseLocaleNumber = (raw)=>{
       const finTbody = document.getElementById('finTbody');
       const dlFinCats = document.getElementById('dlFinCats');
 
-      // Período default: últimos 30 dias
+      // ✅ Período default (local): últimos 30 dias
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
-      // AJUSTE: usar data local no input (evita UTC)
       finDesde.value = toLocalDateInput(d0);
       finHasta.value = toLocalDateInput(today);
 
@@ -1611,7 +1610,7 @@ const parseLocaleNumber = (raw)=>{
         rows.filter(passesFilters).forEach(r=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${fmtDateSmart(r.fecha)}</td>
+            <td>${fmtDate(r.fecha)}</td>
             <td>${escapeHtml(r.tipo)}</td>
             <td>${escapeHtml(r.categoria||'')}</td>
             <td>${escapeHtml(r.descripcion||'')}</td>
@@ -1646,15 +1645,16 @@ const parseLocaleNumber = (raw)=>{
         const fd = new FormData(finForm);
         const id = fd.get('id') || undefined;
         const tipo = fd.get('tipo');
-        const fecha = fd.get('fecha');
+        const fechaRaw = fd.get('fecha');                 // <-- date input (YYYY-MM-DD)
+        const fecha = dateInputToISO(fechaRaw);           // ✅ salva com meio-dia ISO
         const categoria = String(fd.get('categoria')||'').trim();
         const descripcion = String(fd.get('descripcion')||'').trim();
         const rawMonto = fd.get('monto');
-const monto = parseLocaleNumber(rawMonto);
-if(!tipo || !fecha || isNaN(monto) || monto < 0){
-  alert('Ingresa un monto válido (puedes usar coma o punto como separador decimal).');
-  return;
-}
+        const monto = parseLocaleNumber(rawMonto);
+        if(!tipo || !fecha || isNaN(monto) || monto < 0){
+          alert('Ingresa un monto válido (puedes usar coma o punto como separador decimal).');
+          return;
+        }
         try{
           const u = Auth.currentUser();
           await DB.upsertFinEntry({ id, tipo, fecha, categoria, descripcion, monto, usuario: u?u.email:'' });
@@ -1674,13 +1674,14 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           finFormWrap.open = true;
           finFormSummary.textContent = 'Editar lanzamiento';
           finForm.querySelector('input[name="id"]').value = r.id;
+          // mantém como local YYYY-MM-DD
           finForm.querySelector('select[name="tipo"]').value = r.tipo;
-          finForm.querySelector('input[name="fecha"]').value = String(r.fecha).slice(0,10);
+          finForm.querySelector('input[name="fecha"]').value = toLocalDateInput(r.fecha);
           finForm.querySelector('input[name="categoria"]').value = r.categoria || '';
           finForm.querySelector('input[name="descripcion"]').value = r.descripcion || '';
           finForm.querySelector('input[name="monto"]').value =
-  new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    .format(Number(r.monto || 0));
+            new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              .format(Number(r.monto || 0));
         }
         if(bDel){
           const id = bDel.getAttribute('data-del');
@@ -1700,428 +1701,452 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       const tpl = document.getElementById('tpl-inventario').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      const tbody = document.getElementById('partsTbody');
-      const search = document.getElementById('searchParts');
-      const addBtn = document.getElementById('addPartBtn');
-      const formWrap = document.getElementById('partFormWrap');
-      const form = document.getElementById('partForm');
-      const summary = document.getElementById('partFormSummary');
-      const cancelBtn = document.getElementById('cancelEdit');
-      const importCSV = document.getElementById('importCSV');
-      const filterAlm = document.getElementById('filterAlmacen');
-      const safety1 = document.getElementById('safetyDaysHint');
-      const safety2 = document.getElementById('safetyDaysHint2');
-      if(safety1) safety1.textContent = SAFETY_DAYS;
-      if(safety2) safety2.textContent = SAFETY_DAYS;
+      try {
+        const tbody = document.getElementById('partsTbody');
+        const search = document.getElementById('searchParts');
+        const addBtn = document.getElementById('addPartBtn');
+        const formWrap = document.getElementById('partFormWrap');
+        const form = document.getElementById('partForm');
+        const summary = document.getElementById('partFormSummary');
+        const cancelBtn = document.getElementById('cancelEdit');
+        const importCSV = document.getElementById('importCSV');
+        const filterAlm = document.getElementById('filterAlmacen');
+        const safety1 = document.getElementById('safetyDaysHint');
+        const safety2 = document.getElementById('safetyDaysHint2');
+        if(safety1) safety1.textContent = SAFETY_DAYS;
+        if(safety2) safety2.textContent = SAFETY_DAYS;
 
-      const imagePicker = document.getElementById('imagePicker');
-      let imageTargetPart = null;
-
-      let parts = await DB.listParts();
-
-      function buildFilters(){
-        const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
-        filterAlm.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
-      }
-
-      function buildSuggestors(){
-        const dlAlm = document.getElementById('dlAlmacenes');
-        const almChips = document.getElementById('almacenChips');
-        const dlProv = document.getElementById('dlProveedores');
-        const provChips = document.getElementById('proveedorChips');
-
-        const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
-        const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
-
-        dlAlm.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}">`).join('');
-        almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
-
-        dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        provChips.innerHTML = fornecedores.map ? fornecedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('') : proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
-
-        almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
-        provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
-      }
-
-      function matchesFilters(p){
-        const q = (search.value||'').toLowerCase().trim();
-        const alm = filterAlm.value || '(Todos)';
-        const tokens = [p.codigo, p.nombre, p.categoria, p.proveedor, p.almacen].map(x=>String(x||'').toLowerCase());
-        const passQ = !q || tokens.some(t=>t.includes(q));
-        const passA = alm === '(Todos)' || String(p.almacen||'').toLowerCase() === alm.toLowerCase();
-        return passQ && passA;
-      }
-
-      function makeLotsDrawerCell(p){
-        const cell = document.createElement('td');
-        const det = document.createElement('details');
-        det.className = 'inline';
-        const sum = document.createElement('summary');
-        sum.textContent = 'ver lotes';
-        const box = document.createElement('div');
-        box.className = 'lots-list';
-        box.id = `lots-${p.id}`;
-        det.appendChild(sum);
-        det.appendChild(box);
-
-        let loaded = false;
-        det.addEventListener('toggle', async ()=>{
-          if(det.open && !loaded){
-            const lots = await DB.listLots(p.id);
-            box.innerHTML = lots.length
-              ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
-              : '<span class="muted xs">Sin lotes disponibles</span>';
-            loaded = true;
-          }
-        });
-        cell.appendChild(det);
-        return cell;
-      }
-
-      function partNameCellHTML(p, low){
-        const badge = low ? '<span class="badge low">Bajo stock</span>' : '';
-        const img = p.imageUrl ? `<img class="thumb" src="${escapeHtml(p.imageUrl)}" alt="">` : '';
-        return `${img}${escapeHtml(p.nombre)} ${badge}`;
-      }
-
-      async function paint(){
-        tbody.innerHTML = '';
-        for(const p of parts.filter(matchesFilters)){
-          const low = Number(p.stock) < Number(p.stockMin);
-          const tr = document.createElement('tr');
-
-          const htmlLeft = `
-            <td>${escapeHtml(p.codigo)}</td>
-            <td>${partNameCellHTML(p, low)}</td>
-            <td>${escapeHtml(p.categoria||'')}</td>
-            <td>${escapeHtml(p.almacen||'')}</td>
-            <td>${escapeHtml(p.ubicacion||'')}</td>
-            <td class="num">${p.stock}</td>
-            <td class="num">${p.stockMin}</td>
-            <td class="num">${fmtMoney(p.costo)}</td>
-            <td class="num">${fmtMoney(p.precio)}</td>
-          `;
-
-          tr.innerHTML = htmlLeft;
-          tr.appendChild(makeLotsDrawerCell(p));
-
-          const tdAct = document.createElement('td');
-          tdAct.className = 'num';
-          tdAct.innerHTML = `
-            <div class="row-actions" style="justify-content:flex-end">
-              <button class="btn" data-act="img" data-id="${p.id}">Imagen</button>
-              <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
-              <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
-            </div>
-          `;
-          tr.appendChild(tdAct);
-
-          tbody.appendChild(tr);
-        }
-      }
-
-      buildFilters();
-      buildSuggestors();
-      await paint();
-
-      search.addEventListener('input', paint);
-      filterAlm.addEventListener('change', paint);
-
-      const resetFormToNew = ()=>{
-        form.reset();
-        form.querySelector('input[name="id"]').value = '';
-        summary.textContent = 'Nueva pieza';
-      };
-
-      addBtn.addEventListener('click', ()=>{
-        resetFormToNew();
-        formWrap.open = true;
-      });
-      cancelBtn.addEventListener('click', ()=>{
-        resetFormToNew();
-        formWrap.open = false;
-      });
-      document.getElementById('scanBtn').addEventListener('click', startScan);
-
-      // ===== Visor de imágenes =====
-      async function openImageModal(part){
-        const overlay = document.createElement('div');
-        overlay.className = 'modal';
-        overlay.innerHTML = `
-          <div class="box">
-            <header>
-              <h3>Imágenes de: ${escapeHtml(part.nombre)}</h3>
-              <div class="actions">
-                <button class="btn" data-upload>Subir imagen</button>
-                <a class="btn" target="_blank" rel="noopener" href="${part.imageUrl || '#'}" data-ver-principal ${part.imageUrl ? '' : 'style="display:none"'}>Ver principal</a>
-                <button class="btn btn-ghost" data-close>Cerrar</button>
-              </div>
-            </header>
-            <div class="img-grid" id="imgGrid"><div class="muted" style="padding:8px">Cargando…</div></div>
-            <footer>
-              <button class="btn" data-close2>Cerrar</button>
-            </footer>
-          </div>
-        `;
-        document.body.appendChild(overlay);
-
-        const grid = overlay.querySelector('#imgGrid');
-        const btnClose = overlay.querySelector('[data-close]');
-        const btnClose2 = overlay.querySelector('[data-close2]');
-        const btnUpload = overlay.querySelector('[data-upload]');
-        const linkVerPrincipal = overlay.querySelector('[data-ver-principal]');
-        const close = ()=> overlay.remove();
-
-        btnClose.onclick = close; btnClose2.onclick = close;
-        overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
-
-        async function renderList(){
-          const imgs = await DB.listPartImages(part.id);
-          if(!imgs.length){
-            grid.innerHTML = `<div class="muted" style="padding:8px">Sin imágenes todavía. Use “Subir imagen”.</div>`;
-            return;
-          }
-          grid.innerHTML = '';
-          imgs.forEach(it=>{
-            const isMain = (part.imagePath === it.path);
-            const card = document.createElement('div');
-            card.className = 'img-card';
-            card.innerHTML = `
-               <img src="${escapeHtml(it.url)}" alt="">
-               <div class="row">
-                 ${isMain ? '<span class="badge-primary">Principal</span>'
-                          : `<button class="btn" data-set="${escapeHtml(it.path)}" data-url="${escapeHtml(it.url)}">Usar como principal</button>`}
-                 <a class="btn" target="_blank" rel="noopener" href="${escapeHtml(it.url)}">Ver</a>
-                 <button class="btn btn-danger" data-del="${escapeHtml(it.path)}">Eliminar</button>
-               </div>
-            `;
-            grid.appendChild(card);
+        // ✅ Conecta “Añadir pieza” cedo (mesmo se algo abaixo falhar)
+        if (addBtn) {
+          addBtn.addEventListener('click', (e)=>{
+            e.preventDefault();
+            form.reset();
+            form.querySelector('input[name="id"]').value = '';
+            summary.textContent = 'Nueva pieza';
+            formWrap.open = true;
           });
         }
 
-        grid.addEventListener('click', async (e)=>{
-          const setBtn = e.target.closest('button[data-set]');
-          const delBtn = e.target.closest('button[data-del]');
-          if(setBtn){
-            const path = setBtn.getAttribute('data-set');
-            const url  = setBtn.getAttribute('data-url');
-            try{
-              await DB.trySetPartImage(part.id, url, path);
-              part.imageUrl = url;
-              part.imagePath = path;
-              if(linkVerPrincipal){ linkVerPrincipal.href = url; linkVerPrincipal.style.display=''; }
-              await renderList();
-              parts = await DB.listParts();
-              await paint();
-            }catch(err){ alert(err.message || 'No se pudo cambiar la imagen principal'); }
+        const imagePicker = document.getElementById('imagePicker');
+        let imageTargetPart = null;
+
+        let parts = await DB.listParts();
+
+        function buildFilters(){
+          const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
+          filterAlm.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
+        }
+
+        function buildSuggestors(){
+          const dlAlm = document.getElementById('dlAlmacenes');
+          const almChips = document.getElementById('almacenChips');
+          const dlProv = document.getElementById('dlProveedores');
+          const provChips = document.getElementById('proveedorChips');
+
+          const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
+          const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
+
+          if (dlAlm) dlAlm.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}">`).join('');
+          if (almChips) {
+            almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
+            almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
           }
-          if(delBtn){
-            const path = delBtn.getAttribute('data-del');
-            if(!confirm('¿Eliminar esta imagen del Storage?')) return;
+
+          if (dlProv) dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
+          if (provChips) {
+            provChips.innerHTML = fornecedores.map ? fornecedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('')
+                                                   : proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
+            provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
+          }
+        }
+
+        function matchesFilters(p){
+          const q = (search.value||'').toLowerCase().trim();
+          const alm = filterAlm.value || '(Todos)';
+          const tokens = [p.codigo, p.nombre, p.categoria, p.proveedor, p.almacen].map(x=>String(x||'').toLowerCase());
+          const passQ = !q || tokens.some(t=>t.includes(q));
+          const passA = alm === '(Todos)' || String(p.almacen||'').toLowerCase() === alm.toLowerCase();
+          return passQ && passA;
+        }
+
+        function makeLotsDrawerCell(p){
+          const cell = document.createElement('td');
+          const det = document.createElement('details');
+          det.className = 'inline';
+          const sum = document.createElement('summary');
+          sum.textContent = 'ver lotes';
+          const box = document.createElement('div');
+          box.className = 'lots-list';
+          box.id = `lots-${p.id}`;
+          det.appendChild(sum);
+          det.appendChild(box);
+
+          let loaded = false;
+          det.addEventListener('toggle', async ()=>{
+            if(det.open && !loaded){
+              const lots = await DB.listLots(p.id);
+              box.innerHTML = lots.length
+                ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
+                : '<span class="muted xs">Sin lotes disponibles</span>';
+              loaded = true;
+            }
+          });
+          cell.appendChild(det);
+          return cell;
+        }
+
+        function partNameCellHTML(p, low){
+          const badge = low ? '<span class="badge low">Bajo stock</span>' : '';
+          const img = p.imageUrl ? `<img class="thumb" src="${escapeHtml(p.imageUrl)}" alt="">` : '';
+          return `${img}${escapeHtml(p.nombre)} ${badge}`;
+        }
+
+        async function paint(){
+          tbody.innerHTML = '';
+          for(const p of parts.filter(matchesFilters)){
+            const low = Number(p.stock) < Number(p.stockMin);
+            const tr = document.createElement('tr');
+
+            const htmlLeft = `
+              <td>${escapeHtml(p.codigo)}</td>
+              <td>${partNameCellHTML(p, low)}</td>
+              <td>${escapeHtml(p.categoria||'')}</td>
+              <td>${escapeHtml(p.almacen||'')}</td>
+              <td>${escapeHtml(p.ubicacion||'')}</td>
+              <td class="num">${p.stock}</td>
+              <td class="num">${p.stockMin}</td>
+              <td class="num">${fmtMoney(p.costo)}</td>
+              <td class="num">${fmtMoney(p.precio)}</td>
+            `;
+
+            tr.innerHTML = htmlLeft;
+            tr.appendChild(makeLotsDrawerCell(p));
+
+            const tdAct = document.createElement('td');
+            tdAct.className = 'num';
+            tdAct.innerHTML = `
+              <div class="row-actions" style="justify-content:flex-end">
+                <button class="btn" data-act="img" data-id="${p.id}">Imagen</button>
+                <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
+                <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
+              </div>
+            `;
+            tr.appendChild(tdAct);
+
+            tbody.appendChild(tr);
+          }
+        }
+
+        buildFilters();
+        buildSuggestors();
+        await paint();
+
+        search.addEventListener('input', paint);
+        filterAlm.addEventListener('change', paint);
+
+        const resetFormToNew = ()=>{
+          form.reset();
+          form.querySelector('input[name="id"]').value = '';
+          summary.textContent = 'Nueva pieza';
+        };
+
+        if (cancelBtn){
+          cancelBtn.addEventListener('click', ()=>{
+            resetFormToNew();
+            formWrap.open = false;
+          });
+        }
+        document.getElementById('scanBtn').addEventListener('click', startScan);
+
+        // ===== Visor de imágenes =====
+        async function openImageModal(part){
+          const overlay = document.createElement('div');
+          overlay.className = 'modal';
+          overlay.innerHTML = `
+            <div class="box">
+              <header>
+                <h3>Imágenes de: ${escapeHtml(part.nombre)}</h3>
+                <div class="actions">
+                  <button class="btn" data-upload>Subir imagen</button>
+                  <a class="btn" target="_blank" rel="noopener" href="${part.imageUrl || '#'}" data-ver-principal ${part.imageUrl ? '' : 'style="display:none"'}>Ver principal</a>
+                  <button class="btn btn-ghost" data-close>Cerrar</button>
+                </div>
+              </header>
+              <div class="img-grid" id="imgGrid"><div class="muted" style="padding:8px">Cargando…</div></div>
+              <footer>
+                <button class="btn" data-close2>Cerrar</button>
+              </footer>
+            </div>
+          `;
+          document.body.appendChild(overlay);
+
+          const grid = overlay.querySelector('#imgGrid');
+          const btnClose = overlay.querySelector('[data-close]');
+          const btnClose2 = overlay.querySelector('[data-close2]');
+          const btnUpload = overlay.querySelector('[data-upload]');
+          const linkVerPrincipal = overlay.querySelector('[data-ver-principal]');
+          const close = ()=> overlay.remove();
+
+          btnClose.onclick = close; btnClose2.onclick = close;
+          overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
+
+          async function renderList(){
+            const imgs = await DB.listPartImages(part.id);
+            if(!imgs.length){
+              grid.innerHTML = `<div class="muted" style="padding:8px">Sin imágenes todavía. Use “Subir imagen”.</div>`;
+              return;
+            }
+            grid.innerHTML = '';
+            imgs.forEach(it=>{
+              const isMain = (part.imagePath === it.path);
+              const card = document.createElement('div');
+              card.className = 'img-card';
+              card.innerHTML = `
+                 <img src="${escapeHtml(it.url)}" alt="">
+                 <div class="row">
+                   ${isMain ? '<span class="badge-primary">Principal</span>'
+                            : `<button class="btn" data-set="${escapeHtml(it.path)}" data-url="${escapeHtml(it.url)}">Usar como principal</button>`}
+                   <a class="btn" target="_blank" rel="noopener" href="${escapeHtml(it.url)}">Ver</a>
+                   <button class="btn btn-danger" data-del="${escapeHtml(it.path)}">Eliminar</button>
+                 </div>
+              `;
+              grid.appendChild(card);
+            });
+          }
+
+          grid.addEventListener('click', async (e)=>{
+            const setBtn = e.target.closest('button[data-set]');
+            const delBtn = e.target.closest('button[data-del]');
+            if(setBtn){
+              const path = setBtn.getAttribute('data-set');
+              const url  = setBtn.getAttribute('data-url');
+              try{
+                await DB.trySetPartImage(part.id, url, path);
+                part.imageUrl = url;
+                part.imagePath = path;
+                if(linkVerPrincipal){ linkVerPrincipal.href = url; linkVerPrincipal.style.display=''; }
+                await renderList();
+                parts = await DB.listParts();
+                await paint();
+              }catch(err){ alert(err.message || 'No se pudo cambiar la imagen principal'); }
+            }
+            if(delBtn){
+              const path = delBtn.getAttribute('data-del');
+              if(!confirm('¿Eliminar esta imagen del Storage?')) return;
+              try{
+                await DB.deletePartImage(path);
+                if(part.imagePath === path){
+                  await DB.trySetPartImage(part.id, null, null);
+                  part.imageUrl = null; part.imagePath = null;
+                  if(linkVerPrincipal){ linkVerPrincipal.style.display='none'; }
+                }
+                await renderList();
+                parts = await DB.listParts();
+                await paint();
+              }catch(err){ alert(err.message || 'No se pudo eliminar'); }
+            }
+          });
+
+          btnUpload.addEventListener('click', ()=>{
+            imageTargetPart = part; // garante que há peça alvo ANTES de abrir picker
+            window.__imgModalRefresh = renderList;
+            imagePicker.value = '';
+            imagePicker.click();
+          });
+
+          await renderList();
+        }
+
+        form.addEventListener('submit', async (e)=>{
+          e.preventDefault();
+          const fd = new FormData(form);
+          const part = {
+            id: fd.get('id') || undefined,
+            codigo: String(fd.get('codigo')).trim(),
+            nombre: String(fd.get('nombre')).trim(),
+            categoria: String(fd.get('categoria')||'').trim(),
+            ubicacion: String(fd.get('ubicacion')||'').trim(),
+            almacen: String(fd.get('almacen')||'').trim(),
+            proveedor: String(fd.get('proveedor')||'').trim(),
+            leadTimeDias: Number(fd.get('leadTimeDias')||0),
+            stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
+            costo: Number(fd.get('costo')||0),
+            precio: Number(fd.get('precio')||0),
+          };
+          if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
+
+          let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id) || await DB.getPartById(part.id); }
+          try{
+            const newId = await DB.upsertPart(part);
+            const finalId = part.id || newId;
+
+            if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
+              const u = Auth.currentUser();
+              await DB.addPriceHistory({
+                piezaId: finalId,
+                codigo: prev.codigo, nombre: prev.nombre,
+                costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
+                precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
+                usuario: u ? u.email : ''
+              });
+            }
+
+            parts = await DB.listParts();
+            buildFilters(); buildSuggestors(); await paint();
+
+            // limpa e fecha
+            form.reset();
+            form.querySelector('input[name="id"]').value = '';
+            summary.textContent = 'Nueva pieza';
+            formWrap.open = false;
+            alert('Pieza guardada');
+          }catch(err){ alert(err.message || 'No se pudo guardar'); }
+        });
+
+        // *** NOVO: Calculadora de importación (Inventario -> Form de pieza) ***
+        const impCostoBRL = document.getElementById('impCostoBRL');
+        const impTasa = document.getElementById('impTasa');
+        const impLogisticaBs = document.getElementById('impLogisticaBs');
+        const impMargen = document.getElementById('impMargen');
+        const impCalcular = document.getElementById('impCalcular');
+        const impLimpiar = document.getElementById('impLimpiar');
+        const impPreview = document.getElementById('impPreview');
+        const savedFx = localStorage.getItem('fxRateBRL');
+        if(impTasa && savedFx){ impTasa.value = savedFx; }
+
+        function runImpCalc(){
+          const brl = parseLocaleNumber(impCostoBRL?.value);
+          const fx  = parseLocaleNumber(impTasa?.value);
+          const log = parseLocaleNumber(impLogisticaBs?.value);
+          const mg  = parseLocaleNumber(impMargen?.value);
+          if(!(isFinite(brl) && isFinite(fx))){
+            alert('Ingrese costo en R$ y tasa válidos.');
+            return;
+          }
+          const costo = brl*fx + (isFinite(log)?log:0);
+          let precio = costo;
+          if(isFinite(mg)){ precio = costo*(1 + mg/100); }
+
+          // Preencher campos do formulário principal
+          const costoInput = form.querySelector('input[name="costo"]');
+          const precioInput = form.querySelector('input[name="precio"]');
+          if(costoInput) costoInput.value = Number(costo.toFixed(2));
+          if(precioInput) precioInput.value = Number(precio.toFixed(2));
+
+          if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
+
+          if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
+        }
+        if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
+        if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
+          if(impCostoBRL) impCostoBRL.value = '';
+          if(impLogisticaBs) impLogisticaBs.value = '';
+          if(impMargen) impMargen.value = '';
+          if(impPreview) impPreview.textContent = '';
+        });
+        // *** FIM DO BLOCO NOVO ***
+
+        // Acciones por fila (Imagen/Editar/Eliminar)
+        document.getElementById('partsTbody').addEventListener('click', async (e)=>{
+          const btn = e.target.closest('button[data-act]'); if(!btn) return;
+          const id = btn.dataset.id; const act = btn.dataset.act;
+
+          if(act === 'img'){
+            const p = parts.find(x => x.id === id) || await DB.getPartById(id);
+            if(!p){ alert('Pieza no encontrada'); return; }
+            await openImageModal(p);
+            return;
+          }
+
+          if(act === 'edit'){
+            const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
+            formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
+            form.querySelector('input[name="id"]').value = p.id;
+            form.querySelector('input[name="codigo"]').value = p.codigo;
+            form.querySelector('input[name="nombre"]').value = p.nombre;
+            form.querySelector('input[name="categoria"]').value = p.categoria || '';
+            form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
+            form.querySelector('input[name="almacen"]').value = p.almacen || '';
+            form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
+            form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
+            form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
+            form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
+            form.querySelector('input[name="stock"]').value = p.stock;
+            form.querySelector('input[name="costo"]').value = p.costo;
+            form.querySelector('input[name="precio"]').value = p.precio;
+          }
+
+          if(act === 'del'){
+            const p = parts.find(x => x.id === id);
+            if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
             try{
-              await DB.deletePartImage(path);
-              if(part.imagePath === path){
-                await DB.trySetPartImage(part.id, null, null);
-                part.imageUrl = null; part.imagePath = null;
-                if(linkVerPrincipal){ linkVerPrincipal.style.display='none'; }
-              }
-              await renderList();
-              parts = await DB.listParts();
-              await paint();
+              if(p?.imagePath){ try{ await DB.deletePartImage(p.imagePath); }catch(e){} }
+              await DB.deletePart(id);
+              parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
             }catch(err){ alert(err.message || 'No se pudo eliminar'); }
           }
         });
 
-        btnUpload.addEventListener('click', ()=>{
-          imageTargetPart = part; // garante que há peça alvo ANTES de abrir picker
-          window.__imgModalRefresh = renderList;
-          imagePicker.value = '';
-          imagePicker.click();
+        // Upload real quando escolher arquivo (atualiza o modal se aberto)
+        imagePicker.addEventListener('change', async ()=>{
+          const f = imagePicker.files?.[0];
+          if(!f){ return; }
+          if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
+          try{
+            const up = await DB.uploadPartImage(imageTargetPart.id, f);
+            await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
+            if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
+              try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
+            }
+            parts = await DB.listParts();
+            await paint();
+            if (typeof window.__imgModalRefresh === 'function') { await window.__imgModalRefresh(); }
+            alert('Imagen actualizada');
+          }catch(e){
+            alert(e.message || 'No se pudo subir la imagen');
+          }finally{
+            imageTargetPart = null;
+            imagePicker.value = '';
+            window.__imgModalRefresh = null;
+          }
         });
 
-        await renderList();
+        // Importador CSV
+        importCSV.addEventListener('change', ()=>{
+          const f = document.getElementById('importCSV').files[0]; if(!f) return;
+          const reader = new FileReader();
+          reader.onload = async ()=>{
+            try{
+              const lines = String(reader.result||'').split(/\r?\n/).filter(Boolean);
+              if(!lines.length){ alert('CSV vacío'); return; }
+              const head = lines.shift().split(',').map(h=>h.trim());
+              for(const line of lines){
+                const cells = parseCSVLine(line);
+                const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
+                const part = {
+                  codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
+                  ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
+                  leadTimeDias: Number(obj.leadTimeDias||0),
+                  stock: Number(obj.stock||0),
+                  costo: Number(obj.costo_Bs||obj.costo||0),
+                  precio: Number(obj.precio_Bs||obj.precio||0)
+                };
+                await DB.upsertPart(part);
+              }
+              parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
+              alert('Importación completa');
+            }catch(e){ alert(e.message || 'Error al importar'); }
+            document.getElementById('importCSV').value = '';
+          };
+          reader.readAsText(f);
+        });
+      } catch (e) {
+        console.error('Erro em renderInventario()', e);
+        const box = document.createElement('div');
+        box.className = 'card';
+        box.innerHTML = `<strong>Falha ao carregar Inventario.</strong><br><span class="muted">Detalhes no console.</span>`;
+        view.appendChild(box);
       }
-
-      form.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        const fd = new FormData(form);
-        const part = {
-          id: fd.get('id') || undefined,
-          codigo: String(fd.get('codigo')).trim(),
-          nombre: String(fd.get('nombre')).trim(),
-          categoria: String(fd.get('categoria')||'').trim(),
-          ubicacion: String(fd.get('ubicacion')||'').trim(),
-          almacen: String(fd.get('almacen')||'').trim(),
-          proveedor: String(fd.get('proveedor')||'').trim(),
-          leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
-          costo: Number(fd.get('costo')||0),
-          precio: Number(fd.get('precio')||0),
-        };
-        if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
-
-        let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id) || await DB.getPartById(part.id); }
-        try{
-          const newId = await DB.upsertPart(part);
-          const finalId = part.id || newId;
-
-          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
-            const u = Auth.currentUser();
-            await DB.addPriceHistory({
-              piezaId: finalId,
-              codigo: prev.codigo, nombre: prev.nombre,
-              costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
-              precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
-              usuario: u ? u.email : ''
-            });
-          }
-
-          parts = await DB.listParts();
-          buildFilters(); buildSuggestors(); await paint();
-
-          resetFormToNew();
-          formWrap.open = false;
-          alert('Pieza guardada');
-        }catch(err){ alert(err.message || 'No se pudo guardar'); }
-      });
-
-      // *** NOVO: Calculadora de importación (Inventario -> Form de pieza) ***
-      const impCostoBRL = document.getElementById('impCostoBRL');
-      const impTasa = document.getElementById('impTasa');
-      const impLogisticaBs = document.getElementById('impLogisticaBs');
-      const impMargen = document.getElementById('impMargen');
-      const impCalcular = document.getElementById('impCalcular');
-      const impLimpiar = document.getElementById('impLimpiar');
-      const impPreview = document.getElementById('impPreview');
-      const savedFx = localStorage.getItem('fxRateBRL');
-      if(impTasa && savedFx){ impTasa.value = savedFx; }
-
-      function runImpCalc(){
-        const brl = parseLocaleNumber(impCostoBRL?.value);
-        const fx  = parseLocaleNumber(impTasa?.value);
-        const log = parseLocaleNumber(impLogisticaBs?.value);
-        const mg  = parseLocaleNumber(impMargen?.value);
-        if(!(isFinite(brl) && isFinite(fx))){
-          alert('Ingrese costo en R$ y tasa válidos.');
-          return;
-        }
-        const costo = brl*fx + (isFinite(log)?log:0);
-        let precio = costo;
-        if(isFinite(mg)){ precio = costo*(1 + mg/100); }
-
-        // Preencher campos do formulário principal
-        const costoInput = form.querySelector('input[name="costo"]');
-        const precioInput = form.querySelector('input[name="precio"]');
-        if(costoInput) costoInput.value = Number(costo.toFixed(2));
-        if(precioInput) precioInput.value = Number(precio.toFixed(2));
-
-        if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
-
-        if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
-      }
-      if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
-      if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
-        if(impCostoBRL) impCostoBRL.value = '';
-        if(impLogisticaBs) impLogisticaBs.value = '';
-        if(impMargen) impMargen.value = '';
-        if(impPreview) impPreview.textContent = '';
-      });
-      // *** FIM DO BLOCO NOVO ***
-
-      // Acciones por fila (Imagen/Editar/Eliminar)
-      document.getElementById('partsTbody').addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-act]'); if(!btn) return;
-        const id = btn.dataset.id; const act = btn.dataset.act;
-
-        if(act === 'img'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id);
-          if(!p){ alert('Pieza no encontrada'); return; }
-          await openImageModal(p);
-          return;
-        }
-
-        if(act === 'edit'){
-          const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
-          formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
-          form.querySelector('input[name="id"]').value = p.id;
-          form.querySelector('input[name="codigo"]').value = p.codigo;
-          form.querySelector('input[name="nombre"]').value = p.nombre;
-          form.querySelector('input[name="categoria"]').value = p.categoria || '';
-          form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
-          form.querySelector('input[name="almacen"]').value = p.almacen || '';
-          form.querySelector('input[name="proveedor"]').value = p.proveedor || '';
-          form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
-          form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
-          form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
-        }
-
-        if(act === 'del'){
-          const p = parts.find(x => x.id === id);
-          if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
-          try{
-            if(p?.imagePath){ try{ await DB.deletePartImage(p.imagePath); }catch(e){} }
-            await DB.deletePart(id);
-            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
-          }catch(err){ alert(err.message || 'No se pudo eliminar'); }
-        }
-      });
-
-      // Upload real quando escolher arquivo (atualiza o modal se aberto)
-      imagePicker.addEventListener('change', async ()=>{
-        const f = imagePicker.files?.[0];
-        if(!f){ return; }
-        if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
-        try{
-          const up = await DB.uploadPartImage(imageTargetPart.id, f);
-          await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
-          if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
-            try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
-          }
-          parts = await DB.listParts();
-          await paint();
-          if (typeof window.__imgModalRefresh === 'function') { await window.__imgModalRefresh(); }
-          alert('Imagen actualizada');
-        }catch(e){
-          alert(e.message || 'No se pudo subir la imagen');
-        }finally{
-          imageTargetPart = null;
-          imagePicker.value = '';
-          window.__imgModalRefresh = null;
-        }
-      });
-
-      // Importador CSV
-      importCSV.addEventListener('change', ()=>{
-        const f = document.getElementById('importCSV').files[0]; if(!f) return;
-        const reader = new FileReader();
-        reader.onload = async ()=>{
-          try{
-            const lines = String(reader.result||'').split(/\r?\n/).filter(Boolean);
-            if(!lines.length){ alert('CSV vacío'); return; }
-            const head = lines.shift().split(',').map(h=>h.trim());
-            for(const line of lines){
-              const cells = parseCSVLine(line);
-              const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
-              const part = {
-                codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
-                ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
-                leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0),
-                costo: Number(obj.costo_Bs||obj.costo||0),
-                precio: Number(obj.precio_Bs||obj.precio||0)
-              };
-              await DB.upsertPart(part);
-            }
-            parts = await DB.listParts(); buildFilters(); buildSuggestors(); await paint();
-            alert('Importación completa');
-          }catch(e){ alert(e.message || 'Error al importar'); }
-          document.getElementById('importCSV').value = '';
-        };
-        reader.readAsText(f);
-      });
     }
 
     // ---- Movimientos ----
