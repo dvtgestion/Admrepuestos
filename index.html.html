@@ -127,8 +127,8 @@
     .lot-chip b{font-weight:700}
     
     /* Detalhes sempre abertos: remove seta e desativa clique no título */
-    details.inline.always-open[open] > summary::before { display:none; }
-    details.inline.always-open > summary { pointer-events:none; cursor:default; }
+details.inline.always-open[open] > summary::before { display:none; }
+details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Miniatura da peça na tabela */
     .table .thumb{
@@ -158,21 +158,13 @@
 
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
-
-    /* AJUSTE PEDIDO: sidebar lateral também no mobile */
     @media (max-width:900px){
-      .app{ grid-template-columns:200px 1fr; }
-      .sidebar{
-        position: sticky;
-        top: 0;
-        height: 100dvh;
-        overflow: auto;
-        z-index: 1;
-      }
+      /* AJUSTE: manter a sidebar lateral no mobile */
+      .app{grid-template-columns:220px 1fr}
+      .sidebar{position:sticky; top:0; z-index:10; height:100dvh; overflow:auto}
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
     }
-
     @media (max-width:600px){
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
@@ -629,8 +621,8 @@
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  
-    <script>
+
+  <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -678,6 +670,34 @@ const parseLocaleNumber = (raw)=>{
   return Number.isFinite(n) ? n : NaN;
 };
 
+    /* === AJUSTES DE DATA (fuso local, sem voltar 1 dia) === */
+    const pad2 = (n)=> String(n).padStart(2,'0');
+    /** Retorna 'YYYY-MM-DD' no fuso local (para inputs date) */
+    const toLocalDateInput = (d)=>{
+      const x = d instanceof Date ? d : new Date(d);
+      return `${x.getFullYear()}-${pad2(x.getMonth()+1)}-${pad2(x.getDate())}`;
+    };
+    /** Formata inteligentemente: se vier 'YYYY-MM-DD', mostra DD/MM/YYYY sem construir Date (evita UTC) */
+    const fmtDateSmart = (val)=>{
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) {
+        const [y,m,d] = val.split('-').map(Number);
+        return `${pad2(d)}/${pad2(m)}/${y}`;
+      }
+      const dt = new Date(val);
+      return dt.toLocaleString(undefined, {year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
+    };
+    /** Converte 'YYYY-MM-DD' de input em ISO com 12:00 local (evita cair no dia anterior em UTC) */
+    const dateInputToISO = (s)=>{
+      if (!s) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+        const [y,m,d] = s.split('-').map(Number);
+        const dt = new Date(y, m-1, d, 12, 0, 0); // meio-dia local
+        return dt.toISOString();
+      }
+      const dt = new Date(s);
+      return isNaN(dt) ? null : dt.toISOString();
+    };
+
     /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
@@ -704,8 +724,8 @@ const parseLocaleNumber = (raw)=>{
       async function logout(){ await sb.auth.signOut(); }
       return { init, isAuthed, currentUser, login, logout };
     })();
-
-    /* ===== Org ===== */
+    
+        /* ===== Org ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
@@ -1219,7 +1239,7 @@ const parseLocaleNumber = (raw)=>{
       async function upsertFinEntry(entry){
         const base = {
           org_id: orgId(),
-          fecha: entry.fecha,
+          fecha: dateInputToISO(entry.fecha), // <-- AJUSTE: salva ao meio-dia local para não “voltar um dia”
           tipo: entry.tipo,
           categoria: entry.categoria || null,
           descripcion: entry.descripcion || null,
@@ -1442,8 +1462,9 @@ const parseLocaleNumber = (raw)=>{
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
-      repDesde.value = d0.toISOString().slice(0,10);
-      repHasta.value = today.toISOString().slice(0,10);
+      // AJUSTE: usar data local no input (evita UTC)
+      repDesde.value = toLocalDateInput(d0);
+      repHasta.value = toLocalDateInput(today);
 
       const elBruto = document.getElementById('kpiBruto');
       const elCogs  = document.getElementById('kpiCogs');
@@ -1559,8 +1580,9 @@ const parseLocaleNumber = (raw)=>{
       // Período default: últimos 30 dias
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
-      finDesde.value = d0.toISOString().slice(0,10);
-      finHasta.value = today.toISOString().slice(0,10);
+      // AJUSTE: usar data local no input (evita UTC)
+      finDesde.value = toLocalDateInput(d0);
+      finHasta.value = toLocalDateInput(today);
 
       // Sugerir categorías
       (async ()=>{
@@ -1589,7 +1611,7 @@ const parseLocaleNumber = (raw)=>{
         rows.filter(passesFilters).forEach(r=>{
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td>${fmtDate(r.fecha)}</td>
+            <td>${fmtDateSmart(r.fecha)}</td>
             <td>${escapeHtml(r.tipo)}</td>
             <td>${escapeHtml(r.categoria||'')}</td>
             <td>${escapeHtml(r.descripcion||'')}</td>
@@ -1715,7 +1737,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
 
         dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
+        provChips.innerHTML = fornecedores.map ? fornecedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('') : proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
         provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
@@ -2458,4 +2480,3 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
   </script>
 </body>
 </html>
-
