@@ -426,9 +426,6 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
                 <button type="button" class="btn btn-ghost" id="impLimpiar">Limpiar</button>
                 <span class="xs muted" id="impPreview"></span>
               </div>
-              <!-- NOVO: guardamos a última Tasa/Margen usada ao salvar a pieza -->
-              <input type="hidden" id="impFxUsedPart" />
-              <input type="hidden" id="impMgUsedPart" />
             </details>
           </div>
           <!-- *** FIM DO BLOCO NOVO *** -->
@@ -451,8 +448,6 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
               <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
               <th class="num">Stock</th><th class="num">Mín</th>
               <th class="num">Costo base</th><th class="num">Precio base</th>
-              <!-- NOVO: Exibir Tasa/Margen para cada pieza -->
-              <th class="num">Tasa</th><th class="num">Margen (%)</th>
               <th>Lotes</th><th></th>
             </tr></thead>
             <tbody id="partsTbody"></tbody>
@@ -525,9 +520,6 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
                 <button type="button" class="btn btn-ghost" id="imp2Limpiar">Limpiar</button>
                 <span class="xs muted" id="imp2Preview"></span>
               </div>
-              <!-- NOVO: guardamos a última Tasa/Margen usada no movimiento de ENTRADA -->
-              <input type="hidden" id="imp2FxUsed" />
-              <input type="hidden" id="imp2MgUsed" />
             </details>
             <!-- *** FIM DO BLOCO NOVO *** -->
 
@@ -614,10 +606,7 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
           <table class="table compact" id="histTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th>
-              <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th>
-              <!-- NOVO: mostrar Tasa/Margen guardadas -->
-              <th class="num">Tasa</th><th class="num">Margen (%)</th>
-              <th>Usuario</th>
+              <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th><th>Usuario</th>
             </tr></thead>
             <tbody id="histTbody"></tbody>
           </table>
@@ -628,8 +617,8 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
   <!-- Picker global para imagen -->
   <input id="imagePicker" type="file" accept="image/*" style="display:none" />
-  
-    <!-- Supabase JS -->
+
+  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
@@ -762,7 +751,7 @@ const parseLocaleNumber = (raw)=>{
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path, fx_tasa, margen_pct')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
@@ -772,16 +761,14 @@ const parseLocaleNumber = (raw)=>{
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
           costo:Number(r.costo||0), precio:Number(r.precio||0),
-          imageUrl: r.image_url || null, imagePath: r.image_path || null,
-          fxTasa: (r.fx_tasa!=null)?Number(r.fx_tasa):null,
-          marginPct: (r.margen_pct!=null)?Number(r.margen_pct):null
+          imageUrl: r.image_url || null, imagePath: r.image_path || null
         }));
       }
 
       async function getPartById(id){
         if(!id) return null;
         const { data, error } = await sb.from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path, fx_tasa, margen_pct')
+          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
@@ -791,9 +778,7 @@ const parseLocaleNumber = (raw)=>{
           leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
           stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
           costo:Number(data.costo||0), precio:Number(data.precio||0),
-          imageUrl:data.image_url || null, imagePath:data.image_path || null,
-          fxTasa:(data.fx_tasa!=null)?Number(data.fx_tasa):null,
-          marginPct:(data.margen_pct!=null)?Number(data.margen_pct):null
+          imageUrl:data.image_url || null, imagePath:data.image_path || null
         };
       }
 
@@ -894,7 +879,7 @@ const parseLocaleNumber = (raw)=>{
         if (e3) throw e3;
       }
 
-      // Upsert de piezas (AGORA guarda fx_tasa/margen_pct)
+      // Upsert de piezas
       async function upsertPart(part){
         const base = {
           org_id: orgId(),
@@ -903,8 +888,6 @@ const parseLocaleNumber = (raw)=>{
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: Number(part.leadTimeDias||0),
           costo: Number(part.costo||0), precio: Number(part.precio||0),
-          fx_tasa: (part.fxTasa!=null && part.fxTasa!=='') ? Number(part.fxTasa) : null,
-          margen_pct: (part.marginPct!=null && part.marginPct!=='') ? Number(part.marginPct) : null,
         };
 
         if(part.id){
@@ -963,8 +946,7 @@ const parseLocaleNumber = (raw)=>{
         return data||[];
       }
       
-      // AGORA aceita fxRate/marginPct e grava Price History com Tasa/Margen em ENTRADA
-      async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId, fxRate, marginPct}){
+            async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
@@ -996,24 +978,6 @@ const parseLocaleNumber = (raw)=>{
             costo_unit: c, precio_unit: pr, lote_id: lot.id
           });
           if(insErr) throw insErr;
-
-          // PRICE HISTORY com Tasa/Margen usados (si existen)
-          if(fxRate!=null || marginPct!=null){
-            try{
-              await addPriceHistory({
-                piezaId: p.id,
-                codigo: p.codigo,
-                nombre: p.nombre,
-                costoAntes: Number(p.costo||0),
-                costoDespues: Number(c),
-                precioAntes: Number(p.precio||0),
-                precioDespues: Number(pr),
-                usuario: usuarioEmail || '',
-                tasa: (fxRate!=null && fxRate!=='') ? Number(fxRate) : null,
-                margenPct: (marginPct!=null && marginPct!=='') ? Number(marginPct) : null,
-              });
-            }catch(_e){}
-          }
 
         }else{ // SALIDA
           if(!loteId) throw new Error('Seleccione el lote para la salida');
@@ -1160,10 +1124,10 @@ const parseLocaleNumber = (raw)=>{
         await undoMovementById(last.id);
       }
 
-      // ---- Historial de precios (AGORA com tasa/margen) ----
+      // ---- Historial de precios ----
       async function listPriceHistory(limit=500){
         const { data, error } = await sb.from('price_history')
-          .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario, tasa, margen_pct, pieza_id')
+          .select('fecha, codigo, nombre, costo_antes, costo_despues, precio_antes, precio_despues, usuario')
           .eq('org_id', orgId())
           .order('fecha',{ascending:false})
           .limit(limit);
@@ -1172,10 +1136,7 @@ const parseLocaleNumber = (raw)=>{
           fecha:h.fecha, codigo:h.codigo, nombre:h.nombre,
           costoAntes:h.costo_antes, costoDespues:h.costo_despues,
           precioAntes:h.precio_antes, precioDespues:h.precio_despues,
-          usuario:h.usuario,
-          tasa:(h.tasa!=null)?Number(h.tasa):null,
-          margenPct:(h.margen_pct!=null)?Number(h.margen_pct):null,
-          piezaId:h.pieza_id||null
+          usuario:h.usuario
         }));
       }
 
@@ -1185,9 +1146,7 @@ const parseLocaleNumber = (raw)=>{
           pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
           costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
           precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
-          usuario: entry.usuario || '',
-          tasa: (entry.tasa!=null && entry.tasa!=='') ? Number(entry.tasa) : null,
-          margen_pct: (entry.margenPct!=null && entry.margenPct!=='') ? Number(entry.margenPct) : null
+          usuario: entry.usuario || ''
         };
         const { error } = await sb.from('price_history').insert(row);
         if(error) throw error;
@@ -1395,23 +1354,6 @@ const parseLocaleNumber = (raw)=>{
     const logoutBtn = document.getElementById('logoutBtn');
     const PUBLIC_ROUTES = ['login'];
 
-    // FIX MOBILE: injeta CSS e ajusta padding-top da view para não ficar por baixo da barra sticky
-    (function ensureMobilePadStyle(){
-      const id='mobileBarPadStyle';
-      if(!document.getElementById(id)){
-        const st=document.createElement('style');
-        st.id=id;
-        st.textContent='@media (max-width:900px){ main.view{ padding-top: calc(var(--mobile-bar-offset, 0px) + 16px) !important; }}';
-        document.head.appendChild(st);
-      }
-    })();
-    function updateMobileTopPadding(){
-      const isMobile = window.matchMedia('(max-width: 900px)').matches;
-      const h = isMobile ? (sidebar?.offsetHeight||0) : 0;
-      document.documentElement.style.setProperty('--mobile-bar-offset', h+'px');
-    }
-    window.addEventListener('resize', updateMobileTopPadding);
-
     async function init(){
       await Auth.init();
       if(logoutBtn){
@@ -1443,7 +1385,7 @@ const parseLocaleNumber = (raw)=>{
         sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); appEl.classList.add('no-sidebar');
       }
 
-      if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); updateMobileTopPadding(); return; }
+      if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
 
       switch(path){
         case 'login': await renderLogin(); break;
@@ -1459,8 +1401,6 @@ const parseLocaleNumber = (raw)=>{
           return;
       }
       if(authed) setNavActive(path);
-      // Ajusta padding após render
-      requestAnimationFrame(updateMobileTopPadding);
     }
 
     /* ===== Vistas ===== */
@@ -1746,10 +1686,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       const imagePicker = document.getElementById('imagePicker');
       let imageTargetPart = null;
 
-      // NOVO: refs para esconder/guardar Tasa/Margen usados no formulário de peça
-      const impFxUsedPart = document.getElementById('impFxUsedPart');
-      const impMgUsedPart = document.getElementById('impMgUsedPart');
-
       let parts = await DB.listParts();
 
       function buildFilters(){
@@ -1833,8 +1769,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
             <td class="num">${p.stockMin}</td>
             <td class="num">${fmtMoney(p.costo)}</td>
             <td class="num">${fmtMoney(p.precio)}</td>
-            <td class="num">${(p.fxTasa!=null && !isNaN(p.fxTasa)) ? Number(p.fxTasa).toFixed(2) : '—'}</td>
-            <td class="num">${(p.marginPct!=null && !isNaN(p.marginPct)) ? Number(p.marginPct).toFixed(2) : '—'}</td>
           `;
 
           tr.innerHTML = htmlLeft;
@@ -1866,8 +1800,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         form.reset();
         form.querySelector('input[name="id"]').value = '';
         summary.textContent = 'Nueva pieza';
-        if(impFxUsedPart) impFxUsedPart.value = '';
-        if(impMgUsedPart) impMgUsedPart.value = '';
       };
 
       addBtn.addEventListener('click', ()=>{
@@ -1994,8 +1926,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
-          fxTasa: (impFxUsedPart && impFxUsedPart.value !== '') ? parseLocaleNumber(impFxUsedPart.value) : null,
-          marginPct: (impMgUsedPart && impMgUsedPart.value !== '') ? parseLocaleNumber(impMgUsedPart.value) : null,
         };
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
@@ -2004,39 +1934,14 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          const u = Auth.currentUser();
-          // Si es pieza nueva, registramos historial inicial con Tasa/Margen usados (si hay)
-          if(!part.id){
-            try{
-              await DB.addPriceHistory({
-                piezaId: finalId,
-                codigo: part.codigo, nombre: part.nombre,
-                costoAntes: 0, costoDespues: Number(part.costo)||0,
-                precioAntes: 0, precioDespues: Number(part.precio)||0,
-                usuario: u ? u.email : '',
-                tasa: (part.fxTasa!=null)?Number(part.fxTasa):null,
-                margenPct: (part.marginPct!=null)?Number(part.marginPct):null
-              });
-            }catch(_e){}
-          }
-
-          // Si editamos y mudó costo/precio, registra historial com Tasa/Margen
           if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
-            // fallback: se não usou calculadora agora, tenta usar valores já salvos
-            const tasaUsed = (impFxUsedPart && impFxUsedPart.value!==''
-                              ? parseLocaleNumber(impFxUsedPart.value)
-                              : (part.fxTasa ?? prev.fxTasa ?? null));
-            const margenUsed = (impMgUsedPart && impMgUsedPart.value!==''
-                              ? parseLocaleNumber(impMgUsedPart.value)
-                              : (part.marginPct ?? prev.marginPct ?? null));
+            const u = Auth.currentUser();
             await DB.addPriceHistory({
               piezaId: finalId,
               codigo: prev.codigo, nombre: prev.nombre,
               costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
               precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
-              usuario: u ? u.email : '',
-              tasa: (tasaUsed!=null)?Number(tasaUsed):null,
-              margenPct: (margenUsed!=null)?Number(margenUsed):null
+              usuario: u ? u.email : ''
             });
           }
 
@@ -2082,10 +1987,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
         if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
-
-        // NOVO: guarda valores de Tasa/Margen usados para o histórico
-        if(impFxUsedPart) impFxUsedPart.value = isFinite(fx)? String(fx) : '';
-        if(impMgUsedPart) impMgUsedPart.value = isFinite(mg)? String(mg) : '';
       }
       if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
       if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
@@ -2093,8 +1994,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(impLogisticaBs) impLogisticaBs.value = '';
         if(impMargen) impMargen.value = '';
         if(impPreview) impPreview.textContent = '';
-        if(impFxUsedPart) impFxUsedPart.value = '';
-        if(impMgUsedPart) impMgUsedPart.value = '';
       });
       // *** FIM DO BLOCO NOVO ***
 
@@ -2126,7 +2025,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
-          // Não preenche hidden de Tasa/Margen automaticamente (apenas quando usar calculadora novamente)
         }
 
         if(act === 'del'){
@@ -2182,9 +2080,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
                 leadTimeDias: Number(obj.leadTimeDias||0),
                 stock: Number(obj.stock||0),
                 costo: Number(obj.costo_Bs||obj.costo||0),
-                precio: Number(obj.precio_Bs||obj.precio||0),
-                fxTasa: (obj.tasa!=null && obj.tasa!=='') ? Number(obj.tasa) : null,
-                marginPct: (obj.margen_pct!=null && obj.margen_pct!=='') ? Number(obj.margen_pct) : null,
+                precio: Number(obj.precio_Bs||obj.precio||0)
               };
               await DB.upsertPart(part);
             }
@@ -2215,10 +2111,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       const exportBtn = document.getElementById('exportCSV');
       const undoBtn = document.getElementById('undoLast');
       const almFilter = document.getElementById('moveAlmacenFilter');
-
-      // NOVO: refs para salvar Tasa/Margen usados na ENTRADA (histórico)
-      const imp2FxUsed = document.getElementById('imp2FxUsed');
-      const imp2MgUsed = document.getElementById('imp2MgUsed');
 
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
@@ -2304,9 +2196,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           if(tipo==='entrada'){
             payload.costoUnit = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
             payload.precioUnit = (entradaPrecio.value !== '') ? Number(entradaPrecio.value) : null;
-            // inclui Tasa/Margen usados para historial
-            payload.fxRate = (imp2FxUsed && imp2FxUsed.value!=='') ? parseLocaleNumber(imp2FxUsed.value) : null;
-            payload.marginPct = (imp2MgUsed && imp2MgUsed.value!=='') ? parseLocaleNumber(imp2MgUsed.value) : null;
           }else{ // salida
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
@@ -2317,8 +2206,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
           alert('Movimiento registrado');
           moveForm.reset(); fillPartOptions(); toggleMoveFields();
-          if(imp2FxUsed) imp2FxUsed.value = '';
-          if(imp2MgUsed) imp2MgUsed.value = '';
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
@@ -2342,9 +2229,9 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
 
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
-        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs','tasa','margen_pct'];
+        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
         const rows = p.map(pt=>{
-          const row = { id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio, tasa: (pt.fxTasa!=null)?pt.fxTasa:'', margen_pct:(pt.marginPct!=null)?pt.marginPct:'' };
+          const row = { id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio };
           return head.map(k=>csvCell(row[k] ?? '')).join(',');
         });
         const csv = head.join(',') + '\n' + rows.join('\n');
@@ -2386,10 +2273,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(imp2Preview){ imp2Preview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
         if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
-
-        // NOVO: guarda Tasa/Margen usados para histórico
-        if(imp2FxUsed) imp2FxUsed.value = isFinite(fx)? String(fx) : '';
-        if(imp2MgUsed) imp2MgUsed.value = isFinite(mg)? String(mg) : '';
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
       if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
@@ -2397,8 +2280,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(imp2LogisticaBs) imp2LogisticaBs.value = '';
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
-        if(imp2FxUsed) imp2FxUsed.value = '';
-        if(imp2MgUsed) imp2MgUsed.value = '';
       });
       // *** FIM DO BLOCO NOVO ***
 
@@ -2536,8 +2417,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           <td>${escapeHtml(h.nombre)}</td>
           <td class="num">${fmtMoney(h.costoAntes)} ➝ ${fmtMoney(h.costoDespues)}</td>
           <td class="num">${fmtMoney(h.precioAntes)} ➝ ${fmtMoney(h.precioDespues)}</td>
-          <td class="num">${(h.tasa!=null && !isNaN(h.tasa)) ? Number(h.tasa).toFixed(2) : '—'}</td>
-          <td class="num">${(h.margenPct!=null && !isNaN(h.margenPct)) ? Number(h.margenPct).toFixed(2) : '—'}</td>
           <td>${escapeHtml(h.usuario||'')}</td>`;
         tbody.appendChild(tr);
       });
