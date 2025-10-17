@@ -13,7 +13,6 @@
       --bg:#f6f7f9; --card:#ffffff; --text:#0f172a; --muted:#6b7280; --border:#e5e7eb;
       --primary:#1f6feb; --danger:#ef4444; --radius:12px;
       --shadow:0 1px 2px rgba(0,0,0,.04),0 6px 24px rgba(0,0,0,.06);
-      --sidebar-w:260px; /* largura da barra lateral */
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -157,19 +156,26 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     .modal footer{display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border)}
     .badge-primary{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#eef2ff; color:#1f6feb}
 
+    /* ====== MODO MOBILE: Sidebar como gaveta lateral esquerda ====== */
+    .sidebar-scrim{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; z-index:90; }
+    .menu-btn{
+      position:fixed; left:12px; top:12px; z-index:110; border:1px solid var(--border);
+      background:#fff; border-radius:10px; padding:8px 10px; cursor:pointer; display:none;
+      box-shadow:var(--shadow);
+    }
+
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
-
-    /* === MOBILE: barra lateral fixa à esquerda e conteúdo adaptado === */
     @media (max-width:900px){
-      .app{ display:block; min-height:100dvh; }
+      .app{grid-template-columns:1fr}
+      /* Sidebar vira drawer à esquerda, fora da tela por padrão */
       .sidebar{
-        position:fixed; left:0; top:0; bottom:0;
-        width:var(--sidebar-w); height:100dvh; overflow:auto;
-        z-index:100; border-right:1px solid var(--border);
+        position:fixed; left:0; top:0; bottom:0; width:260px; height:100dvh;
+        transform:translateX(-100%); transition:transform .25s ease;
+        z-index:100; box-shadow:var(--shadow); overflow:auto;
       }
-      .view{ padding:16px; margin-left:var(--sidebar-w); }
-      .app.no-sidebar .view{ margin-left:0; } /* login: sem barra */
+      .sidebar.open{ transform:translateX(0); }
+      .menu-btn{ display:block; }
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
     }
@@ -206,6 +212,11 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
         <button id="logoutBtn" class="btn btn-ghost">Cerrar sesión</button>
       </div>
     </aside>
+    <!-- Scrim para fechar a gaveta no mobile -->
+    <div id="scrim" class="sidebar-scrim hidden"></div>
+    <!-- Botão de menu (só aparece no mobile) -->
+    <button id="mobileMenuBtn" class="menu-btn" aria-label="Abrir menú">☰</button>
+
     <main id="view" class="view"></main>
   </div>
 
@@ -281,7 +292,7 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
   <template id="tpl-finanzas">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, otros ingresos y capital.</p></div>
+        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, outros ingresos y capital.</p></div>
         <div class="right">
           <div class="filter-group">
             <label class="field" style="min-width:160px">
@@ -604,6 +615,26 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     </section>
   </template>
 
+  <template id="tpl-historial">
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left"><h2>Historial de precios</h2><p class="muted">Cambios de costo y precio por pieza.</p></div>
+        <div class="right"></div>
+      </header>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="table compact" id="histTable">
+            <thead><tr>
+              <th>Fecha</th><th>Código</th><th>Nombre</th>
+              <th class="num">Costo (antes ➝ después)</th><th class="num">Precio (antes ➝ después)</th><th>Usuario</th>
+            </tr></thead>
+            <tbody id="histTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </template>
+
   <!-- Picker global para imagen -->
   <input id="imagePicker" type="file" accept="image/*" style="display:none" />
 
@@ -735,8 +766,8 @@ const parseLocaleNumber = (raw)=>{
     /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
-      
-            // ---- Partes ----
+
+      // ---- Partes ----
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
@@ -1348,6 +1379,8 @@ const parseLocaleNumber = (raw)=>{
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
+    const scrim = document.getElementById('scrim');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const userLabel = document.getElementById('userLabel');
     const logoutBtn = document.getElementById('logoutBtn');
     const PUBLIC_ROUTES = ['login'];
@@ -1357,6 +1390,12 @@ const parseLocaleNumber = (raw)=>{
       const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
       return `${y}-${m}-${da}`;
     }
+
+    // Controles da gaveta (mobile)
+    function openSidebar(){ sidebar.classList.add('open'); scrim.classList.remove('hidden'); }
+    function closeSidebar(){ sidebar.classList.remove('open'); scrim.classList.add('hidden'); }
+    if(mobileMenuBtn) mobileMenuBtn.addEventListener('click', openSidebar);
+    if(scrim) scrim.addEventListener('click', closeSidebar);
 
     async function init(){
       await Auth.init();
@@ -1371,7 +1410,11 @@ const parseLocaleNumber = (raw)=>{
     function setNavActive(path){
       document.querySelectorAll('.nav-btn').forEach(btn=>{
         btn.classList.toggle('btn-primary', btn.dataset.route === path);
-        btn.onclick = ()=>{ location.hash = '#/' + btn.dataset.route; };
+        btn.onclick = ()=>{ 
+          location.hash = '#/' + btn.dataset.route; 
+          // fechar a gaveta ao navegar no mobile
+          closeSidebar();
+        };
       });
     }
 
@@ -1385,16 +1428,23 @@ const parseLocaleNumber = (raw)=>{
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
+        mobileMenuBtn?.classList.remove('hidden');
       }else{
         sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); appEl.classList.add('no-sidebar');
+        mobileMenuBtn?.classList.add('hidden');
+        closeSidebar();
       }
 
-      // helper para proteger cada render e mostrar erro amigável
+      // helper: render com fallback visual (sem alert chato)
       const safeRender = async (nome, fn) => {
         try{ await fn(); }
         catch(err){
           console.error(`Falha ao carregar ${nome}`, err);
-          alert(`Falha ao carregar ${nome}.\nDetalhes no console.`);
+          view.innerHTML = '';
+          const c = document.createElement('div');
+          c.className = 'card';
+          c.innerHTML = `<strong style="color:#b91c1c">Falha ao carregar ${nome}</strong><div class="muted xs">Veja detalhes no console do navegador (F12).</div>`;
+          view.appendChild(c);
         }
       };
 
@@ -1403,7 +1453,7 @@ const parseLocaleNumber = (raw)=>{
       switch(path){
         case 'login': await safeRender('Login', renderLogin); break;
         case 'reportes': await safeRender('Reportes', renderReportes); break;
-        case 'finanzas': await safeRender('Finanzas', renderFinanzas); break; // NUEVO
+        case 'finanzas': await safeRender('Finanzas', renderFinanzas); break;
         case 'inventario': await safeRender('Inventario', renderInventario); break;
         case 'movimientos': await safeRender('Movimientos', renderMovimientos); break;
         case 'sugerencias': await safeRender('Sugerencias', renderSugerencias); break;
@@ -1441,7 +1491,7 @@ const parseLocaleNumber = (raw)=>{
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      // Fechas por defecto: últimos 30 días (LOCAL, evitando drift UTC)
+      // Fechas por defecto: últimos 30 días (LOCAL)
       const repDesde = document.getElementById('repDesde');
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
@@ -1459,84 +1509,98 @@ const parseLocaleNumber = (raw)=>{
       const elMovs  = document.getElementById('kpiMovs');
 
       async function run(){
-        const parts = await DB.listParts();
-        const moves = await DB.listMoves(10000);
+        try{
+          const parts = await DB.listParts();
+          const moves = await DB.listMoves(10000);
 
-        // Filtro por período
-        const dFrom = new Date(repDesde.value + 'T00:00:00');
-        const dTo   = new Date(repHasta.value + 'T23:59:59');
+          // Filtro por período
+          const dFrom = new Date(repDesde.value + 'T00:00:00');
+          const dTo   = new Date(repHasta.value + 'T23:59:59');
 
-        // Mapa de piezas
-        const pmap = new Map(parts.map(p=>[p.id, p]));
+          // Mapa de piezas
+          const pmap = new Map(parts.map(p=>[p.id, p]));
 
-        let bruto=0, cogs=0, units=0, movs=0;
-        const byCode = new Map(); // codigo -> unidades
-        const byDay  = new Map(); // yyyy-mm-dd -> ingresos
+          let bruto=0, cogs=0, units=0, movs=0;
+          const byCode = new Map(); // codigo -> unidades
+          const byDay  = new Map(); // yyyy-mm-dd -> ingresos
 
-        for(const m of moves){
-          const dt = new Date(m.fecha);
-          if(dt < dFrom || dt > dTo) continue;
-          movs++;
-          if(m.tipo === 'salida'){
-            const p = pmap.get(m.pieza_id);
-            const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
-            const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
-            const q = Number(m.cantidad||0);
-            bruto += precio * q;
-            cogs  +=  costo * q;
-            units += q;
+          for(const m of moves){
+            const dt = new Date(m.fecha);
+            if(dt < dFrom || dt > dTo) continue;
+            movs++;
+            if(m.tipo === 'salida'){
+              const p = pmap.get(m.pieza_id);
+              const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
+              const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
+              const q = Number(m.cantidad||0);
+              bruto += precio * q;
+              cogs  +=  costo * q;
+              units += q;
 
-            const k = (p?.codigo || m.codigo || '—');
-            byCode.set(k, (byCode.get(k)||0)+q);
+              const k = (p?.codigo || m.codigo || '—');
+              byCode.set(k, (byCode.get(k)||0)+q);
 
-            const dayKey = localYMD(dt);
-            byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
+              const dayKey = localYMD(dt);
+              byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
+            }
           }
+          // Finanzas del período
+          let gasto=0, ingreso=0; 
+          try{
+            const sums = await DB.sumFinByTipo({ from: dFrom, to: dTo });
+            gasto = sums.gasto || 0; ingreso = sums.ingreso || 0;
+          }catch(e){ console.warn('sumFinByTipo fallo', e); }
+
+          // KPIs
+          elBruto.textContent = fmtMoney(bruto);
+          elCogs.textContent  = fmtMoney(cogs);
+          const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
+          elLiq.textContent   = fmtMoney(liq);
+          elUnits.textContent = String(units);
+          elSaf.textContent   = String(SAFETY_DAYS);
+          elSkus.textContent  = String(parts.length);
+          elMovs.textContent  = String(movs);
+
+          // Valor de inventario por lotes
+          try{
+            const invVal = await DB.getInventoryValueByLots();
+            elInv.textContent = fmtMoney(invVal);
+          }catch(e){ elInv.textContent = '—'; }
+
+          // Gráficos só se Chart existir
+          if(window.Chart){
+            const topArr = Array.from(byCode.entries())
+              .sort((a,b)=>b[1]-a[1]).slice(0,10);
+            const topLabels = topArr.map(x=>x[0]);
+            const topData   = topArr.map(x=>x[1]);
+
+            const days = Array.from(byDay.keys()).sort();
+            const revs = days.map(d=> byDay.get(d));
+
+            if(chartTop) chartTop.destroy();
+            if(chartDia) chartDia.destroy();
+
+            const ctxTop = document.getElementById('chartTop');
+            if(ctxTop){
+              chartTop = new Chart(ctxTop, {
+                type: 'bar',
+                data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
+              });
+            }
+
+            const ctxDia = document.getElementById('chartDia');
+            if(ctxDia){
+              chartDia = new Chart(ctxDia, {
+                type: 'line',
+                data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
+                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
+              });
+            }
+          }
+        }catch(err){
+          console.error('Erro em Reportes.run()', err);
         }
-        // Finanzas del período
-        const { gasto, ingreso, capital } = await DB.sumFinByTipo({ from: dFrom, to: dTo });
-
-        // KPIs
-        elBruto.textContent = fmtMoney(bruto);
-        elCogs.textContent  = fmtMoney(cogs);
-        // Ganancia neta ajustada por Finanzas:
-        const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
-        elLiq.textContent   = fmtMoney(liq);
-        elUnits.textContent = String(units);
-        elSaf.textContent   = String(SAFETY_DAYS);
-        elSkus.textContent  = String(parts.length);
-        elMovs.textContent  = String(movs);
-
-        // Valor de inventario por lotes
-        const invVal = await DB.getInventoryValueByLots();
-        elInv.textContent = fmtMoney(invVal);
-
-        // Top 10
-        const topArr = Array.from(byCode.entries())
-          .sort((a,b)=>b[1]-a[1]).slice(0,10);
-        const topLabels = topArr.map(x=>x[0]);
-        const topData   = topArr.map(x=>x[1]);
-
-        // Ingresos por día (orden cronológico)
-        const days = Array.from(byDay.keys()).sort();
-        const revs = days.map(d=> byDay.get(d));
-
-        if(chartTop) chartTop.destroy();
-        if(chartDia) chartDia.destroy();
-
-        const ctxTop = document.getElementById('chartTop');
-        chartTop = new Chart(ctxTop, {
-          type: 'bar',
-          data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
-        });
-
-        const ctxDia = document.getElementById('chartDia');
-        chartDia = new Chart(ctxDia, {
-          type: 'line',
-          data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
-        });
       }
 
       document.getElementById('repAplicar').addEventListener('click', run);
@@ -1726,7 +1790,7 @@ const parseLocaleNumber = (raw)=>{
         almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
 
         dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
+        provChips.innerHTML = fornecedores = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
         provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
@@ -1822,7 +1886,7 @@ const parseLocaleNumber = (raw)=>{
         summary.textContent = 'Nueva pieza';
       };
 
-      // >>> garante que “Añadir pieza” abre o formulário
+      // “Añadir pieza” abre o formulário
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
@@ -1923,7 +1987,7 @@ const parseLocaleNumber = (raw)=>{
         });
 
         btnUpload.addEventListener('click', ()=>{
-          imageTargetPart = part; // garante que há peça alvo ANTES de abrir picker
+          imageTargetPart = part;
           window.__imgModalRefresh = renderList;
           imagePicker.value = '';
           imagePicker.click();
@@ -1944,7 +2008,7 @@ const parseLocaleNumber = (raw)=>{
           almacen: String(fd.get('almacen')||'').trim(),
           proveedor: String(fd.get('proveedor')||'').trim(),
           leadTimeDias: Number(fd.get('leadTimeDias')||0),
-          stock: Number(fd.get('stock')||0), // stock inicial -> lote inicial
+          stock: Number(fd.get('stock')||0),
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
@@ -1999,7 +2063,6 @@ const parseLocaleNumber = (raw)=>{
         let precio = costo;
         if(isFinite(mg)){ precio = costo*(1 + mg/100); }
 
-        // Preencher campos do formulário principal
         const costoInput = form.querySelector('input[name="costo"]');
         const precioInput = form.querySelector('input[name="precio"]');
         if(costoInput) costoInput.value = Number(costo.toFixed(2));
@@ -2016,9 +2079,8 @@ const parseLocaleNumber = (raw)=>{
         if(impMargen) impMargen.value = '';
         if(impPreview) impPreview.textContent = '';
       });
-      // *** FIM DO BLOCO NOVO ***
 
-      // Acciones por fila (Imagen/Editar/Eliminar)
+      // Ações por linha (Imagem/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
@@ -2302,7 +2364,6 @@ const parseLocaleNumber = (raw)=>{
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
       });
-      // *** FIM DO BLOCO NOVO ***
 
     }
 
