@@ -160,9 +160,26 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
-      .sidebar{position:sticky; top:0; z-index:10}
+      /* Sidebar vira drawer off-canvas no mobile */
+      .sidebar{
+        position:fixed; inset:auto 0 0 0; top:0; left:0; bottom:0; width:260px;
+        transform:translateX(-100%); transition:transform .2s ease;
+        z-index:1200; box-shadow:0 10px 30px rgba(0,0,0,.2);
+      }
+      .sidebar.open{ transform:translateX(0); }
+      .view{padding:16px}
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
+      /* Botão flutuante do menu */
+      #menuBtn{
+        position:fixed; left:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 80px);
+        z-index:1300; border-radius:999px; padding:10px 14px; box-shadow:var(--shadow);
+      }
+      /* Backdrop quando sidebar aberta */
+      .drawer-backdrop{
+        position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:1190; display:none;
+      }
+      .drawer-backdrop.show{ display:block; }
     }
     @media (max-width:600px){
       .view{padding:16px}
@@ -173,10 +190,28 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
+
+    /* ===== Barrinha flutuante Tasa & Margen (sempre visível) ===== */
+    #fxBar{
+      position:fixed; right:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+      background:#ffffff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow);
+      padding:8px; display:flex; align-items:center; gap:8px; z-index:1400;
+    }
+    #fxBar .input{ height:36px; padding:6px 10px; font-size:14px; width:110px; }
+    #fxBar .label{ font-size:12px; color:var(--muted); }
+    #fxBar .sep{ width:1px; height:22px; background:var(--border); }
+    #fxBar .btn{ height:36px; font-size:14px; padding:6px 10px; }
+    @media (max-width:600px){
+      #fxBar{ right:12px; left:12px; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); }
+      #fxBar .input{ flex:1; min-width:0; }
+    }
   </style>
 </head>
 <body>
   <div id="app" class="app no-sidebar">
+    <!-- Backdrop para drawer no mobile -->
+    <div id="drawerBackdrop" class="drawer-backdrop"></div>
+
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
       <div class="brand">
         <div class="logo" aria-hidden="true">🔧</div>
@@ -198,6 +233,19 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
       </div>
     </aside>
     <main id="view" class="view"></main>
+  </div>
+
+  <!-- Botão flutuante do menu (mobile) -->
+  <button id="menuBtn" class="btn" title="Abrir menú" style="display:none">☰ Menú</button>
+
+  <!-- Barrinha flutuante: Tasa & Margen -->
+  <div id="fxBar" aria-label="Preferencias de tasa y margen">
+    <span class="label">Tasa (Bs/R$)</span>
+    <input id="fxInputTasa" class="input" inputmode="decimal" placeholder="2,40" />
+    <span class="sep" aria-hidden="true"></span>
+    <span class="label">Margen (%)</span>
+    <input id="fxInputMargen" class="input" inputmode="decimal" placeholder="30" />
+    <button id="fxSaveBtn" class="btn btn-primary" type="button">Guardar</button>
   </div>
 
   <!-- Templates -->
@@ -669,6 +717,79 @@ const parseLocaleNumber = (raw)=>{
   return Number.isFinite(n) ? n : NaN;
 };
 
+    /* ===== FX (Tasa & Margen) — persistência por empresa + histórico ===== */
+    const Fx = (() => {
+      const kCur = (orgId)=> `inv:fx:current:${orgId||'__'}`;
+      const kHist= (orgId)=> `inv:fx:history:${orgId||'__'}`;
+
+      function getOrg(){ try{ return Org.get()?.id || null; }catch{ return null; } }
+
+      function getCurrent(){
+        const oid = getOrg();
+        const raw = localStorage.getItem(kCur(oid));
+        if(raw){
+          try{ return JSON.parse(raw); }catch{}
+        }
+        // compat outra chave já usada no sistema
+        const compat = localStorage.getItem('fxRateBRL');
+        const t = compat ? compat : '';
+        return { tasa: t, margen: '' };
+      }
+
+      function setCurrent({tasa, margen}){
+        const oid = getOrg();
+        const cur = getCurrent();
+        const val = {
+          tasa: (tasa??cur.tasa??'').toString(),
+          margen: (margen??cur.margen??'').toString()
+        };
+        localStorage.setItem(kCur(oid), JSON.stringify(val));
+
+        // manter compat com chave antiga para qualquer trecho que leia 'fxRateBRL'
+        if(val.tasa != null && String(val.tasa).trim() !== ''){
+          localStorage.setItem('fxRateBRL', String(val.tasa));
+        }
+
+        // histórico
+        try{
+          const arr = getHistory();
+          arr.unshift({ ts: Date.now(), tasa: val.tasa, margen: val.margen });
+          // limita a 200 entradas por empresa, por simplicidade
+          while(arr.length > 200) arr.pop();
+          localStorage.setItem(kHist(oid), JSON.stringify(arr));
+        }catch{}
+        return val;
+      }
+
+      function getHistory(){
+        const oid = getOrg();
+        const raw = localStorage.getItem(kHist(oid));
+        if(!raw) return [];
+        try{ return JSON.parse(raw) || []; }catch{ return []; }
+      }
+
+      // aplica valores atuais na barrinha e (se existirem) nos calculadores
+      function applyToUI(){
+        const { tasa, margen } = getCurrent();
+        const fxT = document.getElementById('fxInputTasa');
+        const fxM = document.getElementById('fxInputMargen');
+        if(fxT) fxT.value = (tasa ?? '');
+        if(fxM) fxM.value = (margen ?? '');
+
+        // Se calculadoras já estiverem na tela, sincroniza também
+        const impTasa = document.getElementById('impTasa');
+        const impMargen = document.getElementById('impMargen');
+        const imp2Tasa = document.getElementById('imp2Tasa');
+        const imp2Margen = document.getElementById('imp2Margen');
+        if(impTasa && (tasa ?? '') !== '') impTasa.value = tasa;
+        if(imp2Tasa && (tasa ?? '') !== '') imp2Tasa.value = tasa;
+        if(impMargen && (margen ?? '') !== '') impMargen.value = margen;
+        if(imp2Margen && (margen ?? '') !== '') imp2Margen.value = margen;
+      }
+
+      return { getCurrent, setCurrent, getHistory, applyToUI };
+    })();
+
     /* ===== Auth ===== */
     const Auth = (() => {
       let cache = null; // {id,email}
@@ -946,7 +1067,7 @@ const parseLocaleNumber = (raw)=>{
         return data||[];
       }
       
-            async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
+      async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
@@ -1346,13 +1467,45 @@ const parseLocaleNumber = (raw)=>{
       };
     })();
     
-        /* ===== App / Navegación ===== */
+    /* ===== App / Navegación ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
     const userLabel = document.getElementById('userLabel');
     const logoutBtn = document.getElementById('logoutBtn');
     const PUBLIC_ROUTES = ['login'];
+
+    // === Drawer (menu móvel) ===
+    const menuBtn = document.getElementById('menuBtn');
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+    function isMobile(){ return window.matchMedia('(max-width: 900px)').matches; }
+    function openDrawer(){
+      if(!sidebar) return;
+      sidebar.classList.add('open');
+      drawerBackdrop.classList.add('show');
+    }
+    function closeDrawer(){
+      if(!sidebar) return;
+      sidebar.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
+    }
+    function updateMenuBtn(){
+      if(isMobile() && Auth.isAuthed()){
+        menuBtn.style.display = '';
+      }else{
+        menuBtn.style.display = 'none';
+        closeDrawer();
+      }
+    }
+    window.addEventListener('resize', updateMenuBtn);
+    if(menuBtn){
+      menuBtn.addEventListener('click', ()=>{
+        if(sidebar.classList.contains('open')) closeDrawer(); else openDrawer();
+      });
+    }
+    if(drawerBackdrop){
+      drawerBackdrop.addEventListener('click', closeDrawer);
+    }
 
     async function init(){
       await Auth.init();
@@ -1362,12 +1515,33 @@ const parseLocaleNumber = (raw)=>{
       if(!Auth.isAuthed()) location.hash = '#/login';
       window.addEventListener('hashchange', route);
       await route();
+
+      // Inicializa FX bar (preenche com o que há salvo)
+      Fx.applyToUI();
+
+      // Botão salvar da barra
+      const fxSaveBtn = document.getElementById('fxSaveBtn');
+      const fxT = document.getElementById('fxInputTasa');
+      const fxM = document.getElementById('fxInputMargen');
+      if(fxSaveBtn){
+        fxSaveBtn.addEventListener('click', ()=>{
+          const tasa = fxT?.value ?? '';
+          const margen = fxM?.value ?? '';
+          Fx.setCurrent({ tasa, margen });
+          // reflete nos calculadores se estiverem na tela
+          Fx.applyToUI();
+          alert('Tasa y margen guardadas.');
+        });
+      }
+
+      // atualiza visibilidade do botão do menu
+      updateMenuBtn();
     }
 
     function setNavActive(path){
       document.querySelectorAll('.nav-btn').forEach(btn=>{
         btn.classList.toggle('btn-primary', btn.dataset.route === path);
-        btn.onclick = ()=>{ location.hash = '#/' + btn.dataset.route; };
+        btn.onclick = ()=>{ location.hash = '#/' + btn.dataset.route; closeDrawer(); };
       });
     }
 
@@ -1381,8 +1555,10 @@ const parseLocaleNumber = (raw)=>{
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
+        updateMenuBtn();
       }else{
         sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); appEl.classList.add('no-sidebar');
+        updateMenuBtn();
       }
 
       if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
@@ -1401,6 +1577,11 @@ const parseLocaleNumber = (raw)=>{
           return;
       }
       if(authed) setNavActive(path);
+      // fecha o drawer quando troca de rota (mobile)
+      if(isMobile()) closeDrawer();
+
+      // sempre que trocar de rota, reflita FX nos inputs se existirem
+      Fx.applyToUI();
     }
 
     /* ===== Vistas ===== */
@@ -1619,11 +1800,11 @@ const parseLocaleNumber = (raw)=>{
         const categoria = String(fd.get('categoria')||'').trim();
         const descripcion = String(fd.get('descripcion')||'').trim();
         const rawMonto = fd.get('monto');
-const monto = parseLocaleNumber(rawMonto);
-if(!tipo || !fecha || isNaN(monto) || monto < 0){
-  alert('Ingresa un monto válido (puedes usar coma o punto como separador decimal).');
-  return;
-}
+        const monto = parseLocaleNumber(rawMonto);
+        if(!tipo || !fecha || isNaN(monto) || monto < 0){
+          alert('Ingresa un monto válido (puedes usar coma o punto como separador decimal).');
+          return;
+        }
         try{
           const u = Auth.currentUser();
           await DB.upsertFinEntry({ id, tipo, fecha, categoria, descripcion, monto, usuario: u?u.email:'' });
@@ -1648,8 +1829,8 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           finForm.querySelector('input[name="categoria"]').value = r.categoria || '';
           finForm.querySelector('input[name="descripcion"]').value = r.descripcion || '';
           finForm.querySelector('input[name="monto"]').value =
-  new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    .format(Number(r.monto || 0));
+            new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              .format(Number(r.monto || 0));
         }
         if(bDel){
           const id = bDel.getAttribute('data-del');
@@ -1805,6 +1986,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
+        Fx.applyToUI(); // garante que a calculadora pegue a Tasa/Margen atuais
       });
       cancelBtn.addEventListener('click', ()=>{
         resetFormToNew();
@@ -1954,7 +2136,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
 
-      // *** NOVO: Calculadora de importación (Inventario -> Form de pieza) ***
+      // *** Calculadora de importación (Inventario -> Form de pieza) ***
       const impCostoBRL = document.getElementById('impCostoBRL');
       const impTasa = document.getElementById('impTasa');
       const impLogisticaBs = document.getElementById('impLogisticaBs');
@@ -1962,8 +2144,12 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       const impCalcular = document.getElementById('impCalcular');
       const impLimpiar = document.getElementById('impLimpiar');
       const impPreview = document.getElementById('impPreview');
-      const savedFx = localStorage.getItem('fxRateBRL');
-      if(impTasa && savedFx){ impTasa.value = savedFx; }
+      // sincroniza com FX atual
+      (()=>{
+        const cur = Fx.getCurrent();
+        if(impTasa && (cur.tasa??'')!=='') impTasa.value = cur.tasa;
+        if(impMargen && (cur.margen??'')!=='') impMargen.value = cur.margen;
+      })();
 
       function runImpCalc(){
         const brl = parseLocaleNumber(impCostoBRL?.value);
@@ -1986,7 +2172,9 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
 
         if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
-        if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
+        // guardar no FX global (e compat)
+        Fx.setCurrent({ tasa: impTasa?.value ?? '', margen: impMargen?.value ?? '' });
+        Fx.applyToUI();
       }
       if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
       if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
@@ -1995,7 +2183,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(impMargen) impMargen.value = '';
         if(impPreview) impPreview.textContent = '';
       });
-      // *** FIM DO BLOCO NOVO ***
 
       // Acciones por fila (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
@@ -2025,6 +2212,8 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           form.querySelector('input[name="stock"]').value = p.stock;
           form.querySelector('input[name="costo"]').value = p.costo;
           form.querySelector('input[name="precio"]').value = p.precio;
+
+          Fx.applyToUI(); // garante Tasa/Margen exibidas e sincronizadas
         }
 
         if(act === 'del'){
@@ -2243,7 +2432,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       });
 
-      // *** NOVO: Calculadora de importación (Movimientos -> Entrada) ***
+      // *** Calculadora de importación (Movimientos -> Entrada) ***
       const imp2CostoBRL = document.getElementById('imp2CostoBRL');
       const imp2Tasa = document.getElementById('imp2Tasa');
       const imp2LogisticaBs = document.getElementById('imp2LogisticaBs');
@@ -2251,8 +2440,12 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
       const imp2Calcular = document.getElementById('imp2Calcular');
       const imp2Limpiar = document.getElementById('imp2Limpiar');
       const imp2Preview = document.getElementById('imp2Preview');
-      const savedFx2 = localStorage.getItem('fxRateBRL');
-      if(imp2Tasa && savedFx2){ imp2Tasa.value = savedFx2; }
+      // sincroniza com FX atual
+      (()=>{
+        const cur = Fx.getCurrent();
+        if(imp2Tasa && (cur.tasa??'')!=='') imp2Tasa.value = cur.tasa;
+        if(imp2Margen && (cur.margen??'')!=='') imp2Margen.value = cur.margen;
+      })();
 
       function runImpCalc2(){
         const brl = parseLocaleNumber(imp2CostoBRL?.value);
@@ -2272,7 +2465,9 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
 
         if(imp2Preview){ imp2Preview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
-        if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
+        // guardar no FX global (e compat)
+        Fx.setCurrent({ tasa: imp2Tasa?.value ?? '', margen: imp2Margen?.value ?? '' });
+        Fx.applyToUI();
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
       if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
@@ -2281,7 +2476,6 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
       });
-      // *** FIM DO BLOCO NOVO ***
 
     }
 
@@ -2361,6 +2555,8 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(error || !data){ alert('No se pudo cambiar de empresa'); return; }
         Org.set(data);
         alert('Empresa cambiada a: ' + data.nombre);
+        // ao trocar de empresa, reflita Tasa/Margen salvos dessa empresa
+        Fx.applyToUI();
         location.hash = '#/reportes'; await route();
       });
 
@@ -2373,6 +2569,7 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(e2){ alert(e2.message); return; }
         Org.set(org);
         alert('Empresa creada y seleccionada: ' + org.nombre);
+        Fx.applyToUI();
         location.hash = '#/reportes'; await route();
       });
 
