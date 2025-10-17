@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -145,7 +144,10 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     .filter-group .field{ margin:0 }
 
     /* === Visor de imagens (modal) === */
-    .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
+    .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;
+      padding-top: calc(env(safe-area-inset-top,0px) + 24px);
+      padding-bottom: calc(env(safe-area-inset-bottom,0px) + 24px);
+    }
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
     .modal header h3{margin:0; font-size:16px}
@@ -161,7 +163,7 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
     @media (max-width:900px){
       .app{grid-template-columns:1fr}
-      .sidebar{position:sticky; top:0; z-index:10}
+      .sidebar{position:relative; top:auto; z-index:auto} /* ← evita sobreposição no mobile */
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
     }
@@ -427,6 +429,9 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
                 <button type="button" class="btn btn-ghost" id="impLimpiar">Limpiar</button>
                 <span class="xs muted" id="impPreview"></span>
               </div>
+              <!-- Guarda a Tasa/Margen usados na última conta (para histórico) -->
+              <input type="hidden" id="impFxUsedPart" />
+              <input type="hidden" id="impMgUsedPart" />
             </details>
           </div>
           <!-- *** FIM DO BLOCO NOVO *** -->
@@ -521,6 +526,9 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
                 <button type="button" class="btn btn-ghost" id="imp2Limpiar">Limpiar</button>
                 <span class="xs muted" id="imp2Preview"></span>
               </div>
+              <!-- Guarda a Tasa/Margen usados na última conta (para histórico do movimiento) -->
+              <input type="hidden" id="imp2FxUsed" />
+              <input type="hidden" id="imp2MgUsed" />
             </details>
             <!-- *** FIM DO BLOCO NOVO *** -->
 
@@ -618,8 +626,8 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
   <!-- Picker global para imagen -->
   <input id="imagePicker" type="file" accept="image/*" style="display:none" />
-
-  <!-- Supabase JS -->
+  
+    <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <script>
@@ -836,7 +844,7 @@ const parseLocaleNumber = (raw)=>{
       }
 
       // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
-      async function createInitialLotForPart({ partRow, qty, costo, precio }) {
+      async function createInitialLotForPart({ partRow, qty, costo, precio, tasa, margen }) {
         const q = Number(qty || 0);
         const c = Number(costo || 0);
         const p = Number(precio || 0);
@@ -856,7 +864,7 @@ const parseLocaleNumber = (raw)=>{
         if (e1) throw e1;
 
         const u = Auth.currentUser();
-        const { error: e2 } = await sb.from('movements').insert({
+        const moveBase = {
           org_id: orgId(),
           pieza_id: partRow.id,
           codigo: partRow.codigo,
@@ -869,8 +877,25 @@ const parseLocaleNumber = (raw)=>{
           costo_unit: c,
           precio_unit: p,
           lote_id: lot.id,
-        });
-        if (e2) throw e2;
+        };
+
+        try{
+          const row = {
+            ...moveBase,
+            tasa: (tasa != null ? Number(tasa) : null),
+            margen: (margen != null ? Number(margen) : null)
+          };
+          const { error: e2 } = await sb.from('movements').insert(row);
+          if (e2) throw e2;
+        }catch(err){
+          const msg = String(err?.message||'');
+          if (msg.includes('column') && (msg.includes('tasa') || msg.includes('margen'))){
+            const { error: e2b } = await sb.from('movements').insert(moveBase);
+            if (e2b) throw e2b;
+          }else{
+            throw err;
+          }
+        }
 
         const { error: e3 } = await sb
           .from('parts')
@@ -917,7 +942,9 @@ const parseLocaleNumber = (raw)=>{
               partRow: created,
               qty: initialQty,
               costo: part.costo,
-              precio: part.precio
+              precio: part.precio,
+              tasa: part.fxUsed ?? null,
+              margen: part.mgUsed ?? null
             });
           }
           return created.id;
@@ -947,7 +974,7 @@ const parseLocaleNumber = (raw)=>{
         return data||[];
       }
       
-            async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId}){
+      async function applyMovement({piezaId, tipo, cantidad, referencia, usuarioEmail, costoUnit, precioUnit, loteId, tasa, margen}){
         const { data: p, error: e1 } = await sb.from('parts')
           .select('id, stock, codigo, nombre, almacen, costo, precio')
           .eq('id', piezaId).eq('org_id', orgId()).maybeSingle();
@@ -970,15 +997,31 @@ const parseLocaleNumber = (raw)=>{
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
 
-          // registrar el movimiento
-          const { error: insErr } = await sb.from('movements').insert({
+          // registrar el movimiento (com tasa/margen quando houver)
+          const moveBase = {
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
             almacen: p.almacen || '', tipo: 'entrada', cantidad: q,
             referencia: referencia || '', usuario: usuarioEmail || '',
             costo_unit: c, precio_unit: pr, lote_id: lot.id
-          });
-          if(insErr) throw insErr;
+          };
+          try{
+            const row = {
+              ...moveBase,
+              tasa: (tasa != null ? Number(tasa) : null),
+              margen: (margen != null ? Number(margen) : null)
+            };
+            const { error: insErr } = await sb.from('movements').insert(row);
+            if(insErr) throw insErr;
+          }catch(err){
+            const msg = String(err?.message||'');
+            if (msg.includes('column') && (msg.includes('tasa') || msg.includes('margen'))){
+              const { error: insErr2 } = await sb.from('movements').insert(moveBase);
+              if(insErr2) throw insErr2;
+            }else{
+              throw err;
+            }
+          }
 
         }else{ // SALIDA
           if(!loteId) throw new Error('Seleccione el lote para la salida');
@@ -1142,15 +1185,32 @@ const parseLocaleNumber = (raw)=>{
       }
 
       async function addPriceHistory(entry){
-        const row = {
+        const base = {
           org_id: orgId(),
           pieza_id: entry.piezaId || null, codigo: entry.codigo, nombre: entry.nombre,
           costo_antes: Number(entry.costoAntes||0), costo_despues: Number(entry.costoDespues||0),
           precio_antes: Number(entry.precioAntes||0), precio_despues: Number(entry.precioDespues||0),
           usuario: entry.usuario || ''
         };
-        const { error } = await sb.from('price_history').insert(row);
-        if(error) throw error;
+
+        // Tenta inserir com tasa/margen; se não existir coluna ainda, faz fallback sem quebrar
+        try{
+          const row = {
+            ...base,
+            tasa: (entry.tasa != null ? Number(entry.tasa) : null),
+            margen: (entry.margen != null ? Number(entry.margen) : null)
+          };
+          const { error } = await sb.from('price_history').insert(row);
+          if (error) throw error;
+        }catch(err){
+          const msg = String(err?.message||'');
+          if (msg.includes('column') && (msg.includes('tasa') || msg.includes('margen'))){
+            const { error: e2 } = await sb.from('price_history').insert(base);
+            if (e2) throw e2;
+          }else{
+            throw err;
+          }
+        }
       }
 
       // ---- Imagen de pieza (Storage) ----
@@ -1928,6 +1988,13 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           costo: Number(fd.get('costo')||0),
           precio: Number(fd.get('precio')||0),
         };
+
+        // captura Tasa/Margen usados na calculadora (se houve)
+        const fxUsedPart = parseLocaleNumber(document.getElementById('impFxUsedPart')?.value);
+        const mgUsedPart = parseLocaleNumber(document.getElementById('impMgUsedPart')?.value);
+        part.fxUsed = Number.isFinite(fxUsedPart) ? fxUsedPart : null;
+        part.mgUsed = Number.isFinite(mgUsedPart) ? mgUsedPart : null;
+
         if(!part.codigo || !part.nombre){ alert('Código y nombre son obligatorios'); return; }
 
         let prev = null; if(part.id){ prev = parts.find(x=>x.id===part.id) || await DB.getPartById(part.id); }
@@ -1942,15 +2009,24 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
               codigo: prev.codigo, nombre: prev.nombre,
               costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
               precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
-              usuario: u ? u.email : ''
+              usuario: u ? u.email : '',
+              tasa: part.fxUsed,      // novo
+              margen: part.mgUsed     // novo
             });
           }
 
           parts = await DB.listParts();
           buildFilters(); buildSuggestors(); await paint();
 
-          resetFormToNew();
+          // limpa escondidos após salvar
+          const fxEl = document.getElementById('impFxUsedPart');
+          const mgEl = document.getElementById('impMgUsedPart');
+          if(fxEl) fxEl.value = '';
+          if(mgEl) mgEl.value = '';
+
+          form.reset();
           formWrap.open = false;
+          summary.textContent = 'Nueva pieza';
           alert('Pieza guardada');
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
@@ -1988,6 +2064,12 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(impPreview){ impPreview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
         if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
+
+        // grava os escondidos para histórico
+        const fxUsedPartEl = document.getElementById('impFxUsedPart');
+        const mgUsedPartEl = document.getElementById('impMgUsedPart');
+        if (fxUsedPartEl) fxUsedPartEl.value = Number.isFinite(fx) ? String(fx) : '';
+        if (mgUsedPartEl) mgUsedPartEl.value = Number.isFinite(mg) ? String(mg) : '';
       }
       if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
       if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
@@ -1995,6 +2077,10 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(impLogisticaBs) impLogisticaBs.value = '';
         if(impMargen) impMargen.value = '';
         if(impPreview) impPreview.textContent = '';
+        const fxUsedPartEl = document.getElementById('impFxUsedPart');
+        const mgUsedPartEl = document.getElementById('impMgUsedPart');
+        if (fxUsedPartEl) fxUsedPartEl.value = '';
+        if (mgUsedPartEl) mgUsedPartEl.value = '';
       });
       // *** FIM DO BLOCO NOVO ***
 
@@ -2195,8 +2281,13 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           const payload = { piezaId, tipo, cantidad, referencia, usuarioEmail: u?u.email:'' };
 
           if(tipo==='entrada'){
-            payload.costoUnit = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
+            payload.costoUnit  = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
             payload.precioUnit = (entradaPrecio.value !== '') ? Number(entradaPrecio.value) : null;
+
+            const fx2 = parseLocaleNumber(document.getElementById('imp2FxUsed')?.value);
+            const mg2 = parseLocaleNumber(document.getElementById('imp2MgUsed')?.value);
+            if (Number.isFinite(fx2)) payload.tasa = fx2;
+            if (Number.isFinite(mg2)) payload.margen = mg2;
           }else{ // salida
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
@@ -2207,6 +2298,12 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
           parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
           alert('Movimiento registrado');
           moveForm.reset(); fillPartOptions(); toggleMoveFields();
+
+          // limpa escondidos após uso
+          const fx2El = document.getElementById('imp2FxUsed');
+          const mg2El = document.getElementById('imp2MgUsed');
+          if (fx2El) fx2El.value = '';
+          if (mg2El) mg2El.value = '';
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
 
@@ -2274,6 +2371,12 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(imp2Preview){ imp2Preview.textContent = `Costo: ${fmtMoney(costo)}  •  Precio sugerido: ${fmtMoney(precio)}`; }
 
         if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
+
+        // grava os escondidos para histórico do movimento
+        const fx2UsedEl = document.getElementById('imp2FxUsed');
+        const mg2UsedEl = document.getElementById('imp2MgUsed');
+        if (fx2UsedEl) fx2UsedEl.value = Number.isFinite(fx) ? String(fx) : '';
+        if (mg2UsedEl)  mg2UsedEl.value = Number.isFinite(mg) ? String(mg) : '';
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
       if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
@@ -2281,6 +2384,10 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
         if(imp2LogisticaBs) imp2LogisticaBs.value = '';
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
+        const fx2El = document.getElementById('imp2FxUsed');
+        const mg2El = document.getElementById('imp2MgUsed');
+        if (fx2El) fx2El.value = '';
+        if (mg2El) mg2El.value = '';
       });
       // *** FIM DO BLOCO NOVO ***
 
