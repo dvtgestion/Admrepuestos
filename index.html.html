@@ -127,8 +127,8 @@
     .lot-chip b{font-weight:700}
     
     /* Detalhes sempre abertos: remove seta e desativa clique no título */
-details.inline.always-open[open] > summary::before { display:none; }
-details.inline.always-open > summary { pointer-events:none; cursor:default; }
+    details.inline.always-open[open] > summary::before { display:none; }
+    details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Miniatura da peça na tabela */
     .table .thumb{
@@ -158,12 +158,21 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Responsivo */
     @media (max-width:1100px){ .kpis{grid-template-columns:repeat(2,minmax(0,1fr));} }
+
+    /* AJUSTE PEDIDO: sidebar lateral também no mobile */
     @media (max-width:900px){
-      .app{grid-template-columns:1fr}
-      .sidebar{position:sticky; top:0; z-index:10}
+      .app{ grid-template-columns:200px 1fr; }
+      .sidebar{
+        position: sticky;
+        top: 0;
+        height: 100dvh;
+        overflow: auto;
+        z-index: 1;
+      }
       .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
       .charts-compact{ grid-template-columns:1fr !important; }
     }
+
     @media (max-width:600px){
       .view{padding:16px}
       .grid{grid-template-columns:1fr}
@@ -620,8 +629,8 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -2449,3 +2458,4 @@ if(!tipo || !fecha || isNaN(monto) || monto < 0){
   </script>
 </body>
 </html>
+
