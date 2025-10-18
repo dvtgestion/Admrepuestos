@@ -178,7 +178,7 @@
       .charts-compact{ grid-template-columns:1fr !important; }
     }
 
-    /* Só no celular (<=600px): mostra o botão e aumenta o tamanho */
+    /* Só no celular (<=600px): mostra o botão e o fixa na tela */
     @media (max-width:600px){
       .menu-btn{ display:block; }
 
@@ -188,13 +188,19 @@
       .toolbar .right{gap:6px}
       .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
 
-      /* Botão hambúrguer maior (mobile) */
+      /* Botão hambúrguer maior (mobile) e FIXO na tela */
       #mobileMenuBtn{
         width:56px; height:56px; padding:0;
         display:inline-flex; align-items:center; justify-content:center;
         border-radius:12px;
         font-size:26px;     /* se o ícone for o caractere ☰ */
         line-height:1;
+
+        /* >>> FIXO acompanhando a rolagem <<< */
+        position:fixed;
+        right:16px;
+        bottom:16px;
+        z-index:1200;
       }
       #mobileMenuBtn svg{ width:28px; height:28px; }
     }
@@ -497,8 +503,8 @@
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
         </div>
       </header>
-
-      <div class="card">
+      
+            <div class="card">
         <h3>Registrar movimiento</h3>
         <form id="moveForm" class="grid">
           <label class="field"><span>Pieza</span>
@@ -1028,7 +1034,8 @@
           if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
           const { error: upErr2 } = await sb.from('parts')
             .update({ stock: Number(p.stock||0) - q })
-            .eq('id', p.id).eq('org_id', orgId());
+            .eq('org_id', orgId())
+            .eq('id', p.id);
           if(upErr2) throw upErr2;
 
           // registrar el movimiento (con costo/precio del lote)
@@ -1434,6 +1441,12 @@
       const hash = location.hash || '#/login';
       const path = (hash.startsWith('#/')) ? hash.slice(2) : 'login';
 
+      // >>> NOVO: se já autenticado e path=login, redireciona imediatamente
+      if(authed && path === 'login'){ 
+        location.hash = '#/reportes'; 
+        return; 
+      }
+
       // Mostra/oculta elementos baseados na auth
       if(authed){
         try { await Org.ensureCurrent(); } catch(e){ /* noop */ }
@@ -1483,8 +1496,10 @@
         const email = fd.get('email'); const password = fd.get('password');
         const res = await Auth.login(email, password);
         if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
-        // ✅ só muda o hash; onAuthStateChange + route() cuidam do resto
+        // ✅ limpa a view e força navegação imediata
+        view.innerHTML = '<section class="center"><div class="card card-max"><p>Entrando…</p></div></section>';
         location.hash = '#/reportes';
+        await route();
       });
     }
 
@@ -2513,3 +2528,6 @@
   </script>
 </body>
 </html>
+      
+      
+      
