@@ -127,8 +127,8 @@
     .lot-chip b{font-weight:700}
     
     /* Detalhes sempre abertos: remove seta e desativa clique no título */
-details.inline.always-open[open] > summary::before { display:none; }
-details.inline.always-open > summary { pointer-events:none; cursor:default; }
+    details.inline.always-open[open] > summary::before { display:none; }
+    details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
     /* Miniatura da peça na tabela */
     .table .thumb{
@@ -156,80 +156,57 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     .modal footer{display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--border)}
     .badge-primary{display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); background:#eef2ff; color:#1f6feb}
 
-    /* ====== MODO MOBILE: Sidebar como gaveta lateral esquerda ====== */
-    .sidebar-scrim{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; z-index:90; }
-    .menu-btn{
-      position:fixed; left:12px; top:12px; z-index:110; border:1px solid var(--border);
-      background:#fff; border-radius:10px; padding:8px 10px; cursor:pointer; display:none;
-      box-shadow:var(--shadow);
+    /* ========= Responsivo + Hamburguer só no celular ========= */
+
+    /* Botão de menu oculto por padrão (desktop/tablet) */
+    .menu-btn{ display:none; }
+
+    @media (max-width:1100px){
+      .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
     }
 
-   /* Mostra o botão de menu só no mobile: por padrão fica escondido */
-.menu-btn{ display:none; }
+    @media (max-width:900px){
+      .app{grid-template-columns:1fr}
+      /* Sidebar vira drawer à esquerda, fora da tela por padrão */
+      .sidebar{
+        position:fixed; left:0; top:0; bottom:0; width:260px; height:100dvh;
+        transform:translateX(-100%); transition:transform .25s ease;
+        z-index:100; box-shadow:var(--shadow); overflow:auto;
+      }
+      .sidebar.open{ transform:translateX(0); }
+      .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
+      .charts-compact{ grid-template-columns:1fr !important; }
+    }
 
-/* Responsivo */
-@media (max-width:1100px){
-  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
-}
+    /* Só no celular (<=600px): mostra o botão e aumenta o tamanho */
+    @media (max-width:600px){
+      .menu-btn{ display:block; }
 
-@media (max-width:900px){
-  .app{grid-template-columns:1fr}
-  /* Sidebar vira drawer à esquerda, fora da tela por padrão */
-  .sidebar{
-    position:fixed; left:0; top:0; bottom:0; width:260px; height:100dvh;
-    transform:translateX(-100%); transition:transform .25s ease;
-    z-index:100; box-shadow:var(--shadow); overflow:auto;
-  }
-  .sidebar.open{ transform:translateX(0); }
-  .grid{grid-template-columns:repeat(2, minmax(0,1fr))}
-  .charts-compact{ grid-template-columns:1fr !important; }
-}
+      .view{padding:16px}
+      .grid{grid-template-columns:1fr}
+      .kpis{grid-template-columns:1fr;}
+      .toolbar .right{gap:6px}
+      .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
 
-/* Só no celular */
-@media (max-width:600px){
-  .menu-btn{ display:block; }   /* aparece só em celular */
+      /* Botão hambúrguer maior (mobile) */
+      #mobileMenuBtn{
+        width:56px; height:56px; padding:0;
+        display:inline-flex; align-items:center; justify-content:center;
+        border-radius:12px;
+        font-size:26px;     /* se o ícone for o caractere ☰ */
+        line-height:1;
+      }
+      #mobileMenuBtn svg{ width:28px; height:28px; }
+    }
 
-  .view{padding:16px}
-  .grid{grid-template-columns:1fr}
-  .kpis{grid-template-columns:1fr;}
-  .toolbar .right{gap:6px}
-  .table.compact th, .table.compact td { padding:8px 8px; font-size:13px; }
-
-  /* Botão hambúrguer maior (mobile) */
-  #mobileMenuBtn{
-    width:56px; height:56px; padding:0;
-    display:inline-flex; align-items:center; justify-content:center;
-    border-radius:12px; 
-    font-size:26px;     
-    line-height:1;
-  }
-  #mobileMenuBtn svg{ width:28px; height:28px; }
-}
-
-/* Outros utilitários */
-#cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
-    
-#mobileMenuBtn{
-  width: 56px;         /* toque confortável (pode usar 48–64) */
-  height: 56px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;  /* opcional */
-  font-size: 26px;      /* aumenta o ícone se for o caractere ☰ */
-  line-height: 1;
-}
-
-/* Se o ícone for um SVG dentro do botão, aumente aqui também */
-#mobileMenuBtn svg{
-  width: 28px;
-  height: 28px;
-}
+    #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
   </style>
 </head>
 <body>
   <div id="app" class="app no-sidebar">
+    <!-- Botão de menu (aparece só no celular pelo CSS) -->
+    <button id="mobileMenuBtn" class="menu-btn btn" aria-label="Abrir menú">☰</button>
+
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
       <div class="brand">
         <div class="logo" aria-hidden="true">🔧</div>
@@ -250,11 +227,6 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
         <button id="logoutBtn" class="btn btn-ghost">Cerrar sesión</button>
       </div>
     </aside>
-    <!-- Scrim para fechar a gaveta no mobile -->
-    <div id="scrim" class="sidebar-scrim hidden"></div>
-    <!-- Botão de menu (só aparece no mobile) -->
-    <button id="mobileMenuBtn" class="menu-btn" aria-label="Abrir menú">☰</button>
-
     <main id="view" class="view"></main>
   </div>
 
@@ -330,7 +302,7 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
   <template id="tpl-finanzas">
     <section class="stack">
       <header class="toolbar">
-        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, outros ingresos y capital.</p></div>
+        <div class="left"><h2>Finanzas</h2><p class="muted">Gastos operativos, otros ingresos y capital.</p></div>
         <div class="right">
           <div class="filter-group">
             <label class="field" style="min-width:160px">
@@ -678,8 +650,8 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <script>
+  
+    <script>
     /* =======================
        CONFIG SUPABASE
     ======================= */
@@ -699,33 +671,22 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     const parseCSVLine = (s)=>{ const out=[]; let cur=''; let q=false; for(let i=0;i<s.length;i++){ const c=s[i]; if(c==='"'){ if(q && s[i+1]==='"'){cur+='"'; i++;} else {q=!q;} continue; } if(c===',' && !q){ out.push(cur); cur=''; continue; } cur+=c; } out.push(cur); return out; };
     
     // Aceita "24376.55", "24.376,55", "24,376.55", "24376,55" etc.
-const parseLocaleNumber = (raw)=>{
-  if(raw == null) return NaN;
-  let s = String(raw).trim().replace(/\s/g,''); // tira espaços
-  const lastComma = s.lastIndexOf(',');
-  const lastDot   = s.lastIndexOf('.');
-
-  if(lastComma > -1 && lastDot > -1){
-    // Se tem os dois, o separador decimal costuma ser o último símbolo
-    if(lastComma > lastDot){
-      // decimal = vírgula => remove pontos (milhar) e troca vírgula por ponto
-      s = s.replace(/\./g,'').replace(',', '.');
-    }else{
-      // decimal = ponto => remove vírgulas (milhar)
-      s = s.replace(/,/g,'');
-    }
-  }else if(lastComma > -1){
-    // só vírgula => trata como decimal
-    s = s.replace(/\./g,'');   // remove pontos remanescentes
-    s = s.replace(',', '.');
-  }else{
-    // só ponto ou nenhum => remove vírgulas de milhar
-    s = s.replace(/,/g,'');
-  }
-
-  const n = Number(s);
-  return Number.isFinite(n) ? n : NaN;
-};
+    const parseLocaleNumber = (raw)=>{
+      if(raw == null) return NaN;
+      let s = String(raw).trim().replace(/\s/g,'');
+      const lastComma = s.lastIndexOf(',');
+      const lastDot   = s.lastIndexOf('.');
+      if(lastComma > -1 && lastDot > -1){
+        if(lastComma > lastDot){ s = s.replace(/\./g,'').replace(',', '.'); }
+        else { s = s.replace(/,/g,''); }
+      }else if(lastComma > -1){
+        s = s.replace(/\./g,'').replace(',', '.');
+      }else{
+        s = s.replace(/,/g,'');
+      }
+      const n = Number(s);
+      return Number.isFinite(n) ? n : NaN;
+    };
 
     /* ===== Auth ===== */
     const Auth = (() => {
@@ -735,6 +696,9 @@ const parseLocaleNumber = (raw)=>{
         if(cache) localStorage.setItem('authedUser', JSON.stringify(cache));
         else localStorage.removeItem('authedUser');
       }
+      // ✅ NOVO: permite “primar” o cache a partir de fora (route)
+      function prime(user){ set(user || null); }
+
       async function init(){
         const { data:{ user } } = await sb.auth.getUser();
         set(user || null);
@@ -745,18 +709,17 @@ const parseLocaleNumber = (raw)=>{
       }
       const isAuthed = () => !!cache;
       const currentUser = () => cache;
-      // Dentro de /* ===== Auth ===== */
-async function login(email, password){
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) return { ok:false, error: error.message };
 
-  // Garante que o cache de autenticação fica true imediatamente
-  set(data?.user || null);
-
-  return { ok:true };
-}
+      // ✅ Mantém o cache imediatamente após login (evita “2x no mobile”)
+      async function login(email, password){
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if(error) return { ok:false, error: error.message };
+        set(data?.user || null);
+        return { ok:true };
+      }
       async function logout(){ await sb.auth.signOut(); }
-      return { init, isAuthed, currentUser, login, logout };
+
+      return { init, isAuthed, currentUser, login, logout, prime };
     })();
 
     /* ===== Org ===== */
@@ -1270,18 +1233,10 @@ async function login(email, password){
         return data||[];
       }
 
-      // >>> AJUSTE DE DATA (evitar "um dia atrás"): salvar ao meio-dia local
-      function toMiddayISO(dateInput){
-        if(!dateInput) return null;
-        const [y,m,d] = String(dateInput).split('-').map(Number);
-        const dt = new Date(y, (m||1)-1, d||1, 12, 0, 0); // 12:00 local
-        return dt.toISOString();
-      }
-
       async function upsertFinEntry(entry){
         const base = {
           org_id: orgId(),
-          fecha: entry.fecha, // deve vir em ISO (meio-dia) do chamador
+          fecha: entry.fecha,
           tipo: entry.tipo,
           categoria: entry.categoria || null,
           descripcion: entry.descripcion || null,
@@ -1318,7 +1273,7 @@ async function login(email, password){
         const desdeISO = from instanceof Date ? from.toISOString() : (from||null);
         const hastaISO = to instanceof Date ? to.toISOString() : (to||null);
         const base = sb.from('fin_entries')
-          .select('monto, tipo, fecha')
+          .select('monto, tipo')
           .eq('org_id', orgId());
         if(desdeISO) base.gte('fecha', desdeISO);
         if(hastaISO) base.lte('fecha', hastaISO);
@@ -1413,8 +1368,7 @@ async function login(email, password){
         // Finanzas
         listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics,
-        toMiddayISO
+        recomputeMetrics
       };
     })();
     
@@ -1422,29 +1376,38 @@ async function login(email, password){
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
-    const scrim = document.getElementById('scrim');
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const userLabel = document.getElementById('userLabel');
     const logoutBtn = document.getElementById('logoutBtn');
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const PUBLIC_ROUTES = ['login'];
 
-    // util: data local YYYY-MM-DD
-    function localYMD(d=new Date()){
-      const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), da=String(d.getDate()).padStart(2,'0');
-      return `${y}-${m}-${da}`;
-    }
-
-    // Controles da gaveta (mobile)
-    function openSidebar(){ sidebar.classList.add('open'); scrim.classList.remove('hidden'); }
-    function closeSidebar(){ sidebar.classList.remove('open'); scrim.classList.add('hidden'); }
-    if(mobileMenuBtn) mobileMenuBtn.addEventListener('click', openSidebar);
-    if(scrim) scrim.addEventListener('click', closeSidebar);
+    // Helpers drawer mobile
+    const isMobile = ()=> window.matchMedia('(max-width:600px)').matches;
+    function openSidebarMobile(){ if(sidebar){ sidebar.classList.add('open'); } }
+    function closeSidebarMobile(){ if(sidebar){ sidebar.classList.remove('open'); } }
+    function toggleSidebarMobile(){ if(sidebar){ sidebar.classList.toggle('open'); } }
 
     async function init(){
       await Auth.init();
       if(logoutBtn){
         logoutBtn.addEventListener('click', async () => { await Auth.logout(); location.hash = '#/login'; await route(); });
       }
+      if(mobileMenuBtn){
+        mobileMenuBtn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          if(!Auth.isAuthed()) return; // não abre menu se não estiver logado
+          toggleSidebarMobile();
+        });
+      }
+      // Fecha a gaveta ao tocar fora (somente no mobile)
+      document.addEventListener('click', (ev)=>{
+        if(!isMobile()) return;
+        if(!sidebar?.classList.contains('open')) return;
+        const withinSidebar = ev.target.closest?.('.sidebar');
+        const hitMenuBtn = ev.target.closest?.('#mobileMenuBtn');
+        if(!withinSidebar && !hitMenuBtn){ closeSidebarMobile(); }
+      }, true);
+
       if(!Auth.isAuthed()) location.hash = '#/login';
       window.addEventListener('hashchange', route);
       await route();
@@ -1455,79 +1418,75 @@ async function login(email, password){
         btn.classList.toggle('btn-primary', btn.dataset.route === path);
         btn.onclick = ()=>{ 
           location.hash = '#/' + btn.dataset.route; 
-          // fechar a gaveta ao navegar no mobile
-          closeSidebar();
+          if(isMobile()) closeSidebarMobile(); // fecha a gaveta após navegar no mobile
         };
       });
     }
 
     async function route(){
+      // ✅ Robustez extra: confirma auth direto no Supabase se cache ainda não pegou
+      let authed = Auth.isAuthed();
+      if(!authed){
+        const { data:{ user } } = await sb.auth.getUser();
+        if(user){ Auth.prime(user); authed = true; }
+      }
+
       const hash = location.hash || '#/login';
       const path = (hash.startsWith('#/')) ? hash.slice(2) : 'login';
-      const authed = Auth.isAuthed();
 
+      // Mostra/oculta elementos baseados na auth
       if(authed){
         try { await Org.ensureCurrent(); } catch(e){ /* noop */ }
         sidebar.classList.remove('hidden'); sidebar.setAttribute('aria-hidden','false'); appEl.classList.remove('no-sidebar');
+        if(mobileMenuBtn) mobileMenuBtn.classList.remove('hidden'); // disponível no mobile
         const u = Auth.currentUser(); const org = Org.get();
         userLabel.textContent = u ? `Conectado como: ${u.email} — Empresa: ${org?.nombre||'—'}` : '';
-        mobileMenuBtn?.classList.remove('hidden');
       }else{
         sidebar.classList.add('hidden'); sidebar.setAttribute('aria-hidden','true'); appEl.classList.add('no-sidebar');
-        mobileMenuBtn?.classList.add('hidden');
-        closeSidebar();
+        if(mobileMenuBtn) mobileMenuBtn.classList.add('hidden'); // esconde o botão quando não logado
+        closeSidebarMobile();
       }
 
-      // helper: render com fallback visual (sem alert chato)
-      const safeRender = async (nome, fn) => {
-        try{ await fn(); }
-        catch(err){
-          console.error(`Falha ao carregar ${nome}`, err);
-          view.innerHTML = '';
-          const c = document.createElement('div');
-          c.className = 'card';
-          c.innerHTML = `<strong style="color:#b91c1c">Falha ao carregar ${nome}</strong><div class="muted xs">Veja detalhes no console do navegador (F12).</div>`;
-          view.appendChild(c);
-        }
-      };
+      // Redirecionamento se necessário
+      if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
 
-      if(!authed && !PUBLIC_ROUTES.includes(path)){ await safeRender('Login', renderLogin); return; }
-
+      // Render
       switch(path){
-        case 'login': await safeRender('Login', renderLogin); break;
-        case 'reportes': await safeRender('Reportes', renderReportes); break;
-        case 'finanzas': await safeRender('Finanzas', renderFinanzas); break;
-        case 'inventario': await safeRender('Inventario', renderInventario); break;
-        case 'movimientos': await safeRender('Movimientos', renderMovimientos); break;
-        case 'sugerencias': await safeRender('Sugerencias', renderSugerencias); break;
-        case 'ajustes': await safeRender('Ajustes', renderAjustes); break;
-        case 'historial': await safeRender('Historial', renderHistorial); break;
+        case 'login': await renderLogin(); break;
+        case 'reportes': await renderReportes(); break;
+        case 'finanzas': await renderFinanzas(); break;
+        case 'inventario': await renderInventario(); break;
+        case 'movimientos': await renderMovimientos(); break;
+        case 'sugerencias': await renderSugerencias(); break;
+        case 'ajustes': await renderAjustes(); break;
+        case 'historial': await renderHistorial(); break;
         default:
           location.hash = authed ? '#/reportes' : '#/login';
           return;
       }
       if(authed) setNavActive(path);
+      if(isMobile()) closeSidebarMobile(); // fecha ao chegar na vista
     }
 
     /* ===== Vistas ===== */
 
     // ---- Login ----
     async function renderLogin(){
-  const tpl = document.getElementById('tpl-login').content.cloneNode(true);
-  view.innerHTML = ''; view.appendChild(tpl);
+      const tpl = document.getElementById('tpl-login').content.cloneNode(true);
+      view.innerHTML = ''; view.appendChild(tpl);
 
-  const form = document.getElementById('loginForm');
+      const form = document.getElementById('loginForm');
 
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const fd = new FormData(form);
-    const email = fd.get('email'); const password = fd.get('password');
-    const res = await Auth.login(email, password);
-    if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
-    location.hash = '#/reportes';
-  });
-}
-
+      form.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const fd = new FormData(form);
+        const email = fd.get('email'); const password = fd.get('password');
+        const res = await Auth.login(email, password);
+        if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
+        // ✅ só muda o hash; onAuthStateChange + route() cuidam do resto
+        location.hash = '#/reportes';
+      });
+    }
 
     // ---- Reportes (ajustado com Finanzas) ----
     let chartTop = null, chartDia = null;
@@ -1535,13 +1494,13 @@ async function login(email, password){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
-      // Fechas por defecto: últimos 30 días (LOCAL)
+      // Fechas por defecto: últimos 30 días
       const repDesde = document.getElementById('repDesde');
       const repHasta = document.getElementById('repHasta');
       const today = new Date();
-      const d0 = new Date(); d0.setDate(today.getDate()-29);
-      repDesde.value = localYMD(d0);
-      repHasta.value = localYMD(today);
+      const d0 = new Date(Date.now() - 29*24*3600*1000);
+      repDesde.value = d0.toISOString().slice(0,10);
+      repHasta.value = today.toISOString().slice(0,10);
 
       const elBruto = document.getElementById('kpiBruto');
       const elCogs  = document.getElementById('kpiCogs');
@@ -1553,98 +1512,84 @@ async function login(email, password){
       const elMovs  = document.getElementById('kpiMovs');
 
       async function run(){
-        try{
-          const parts = await DB.listParts();
-          const moves = await DB.listMoves(10000);
+        const parts = await DB.listParts();
+        const moves = await DB.listMoves(10000);
 
-          // Filtro por período
-          const dFrom = new Date(repDesde.value + 'T00:00:00');
-          const dTo   = new Date(repHasta.value + 'T23:59:59');
+        // Filtro por período
+        const dFrom = new Date(repDesde.value + 'T00:00:00');
+        const dTo   = new Date(repHasta.value + 'T23:59:59');
 
-          // Mapa de piezas
-          const pmap = new Map(parts.map(p=>[p.id, p]));
+        // Mapa de piezas
+        const pmap = new Map(parts.map(p=>[p.id, p]));
 
-          let bruto=0, cogs=0, units=0, movs=0;
-          const byCode = new Map(); // codigo -> unidades
-          const byDay  = new Map(); // yyyy-mm-dd -> ingresos
+        let bruto=0, cogs=0, units=0, movs=0;
+        const byCode = new Map(); // codigo -> unidades
+        const byDay  = new Map(); // yyyy-mm-dd -> ingresos
 
-          for(const m of moves){
-            const dt = new Date(m.fecha);
-            if(dt < dFrom || dt > dTo) continue;
-            movs++;
-            if(m.tipo === 'salida'){
-              const p = pmap.get(m.pieza_id);
-              const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
-              const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
-              const q = Number(m.cantidad||0);
-              bruto += precio * q;
-              cogs  +=  costo * q;
-              units += q;
+        for(const m of moves){
+          const dt = new Date(m.fecha);
+          if(dt < dFrom || dt > dTo) continue;
+          movs++;
+          if(m.tipo === 'salida'){
+            const p = pmap.get(m.pieza_id);
+            const precio = (m.precio_unit != null) ? Number(m.precio_unit) : Number(p?.precio||0);
+            const costo  = (m.costo_unit  != null) ? Number(m.costo_unit ) : Number(p?.costo ||0);
+            const q = Number(m.cantidad||0);
+            bruto += precio * q;
+            cogs  +=  costo * q;
+            units += q;
 
-              const k = (p?.codigo || m.codigo || '—');
-              byCode.set(k, (byCode.get(k)||0)+q);
+            const k = (p?.codigo || m.codigo || '—');
+            byCode.set(k, (byCode.get(k)||0)+q);
 
-              const dayKey = localYMD(dt);
-              byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
-            }
+            const dayKey = dt.toISOString().slice(0,10);
+            byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
           }
-          // Finanzas del período
-          let gasto=0, ingreso=0; 
-          try{
-            const sums = await DB.sumFinByTipo({ from: dFrom, to: dTo });
-            gasto = sums.gasto || 0; ingreso = sums.ingreso || 0;
-          }catch(e){ console.warn('sumFinByTipo fallo', e); }
-
-          // KPIs
-          elBruto.textContent = fmtMoney(bruto);
-          elCogs.textContent  = fmtMoney(cogs);
-          const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
-          elLiq.textContent   = fmtMoney(liq);
-          elUnits.textContent = String(units);
-          elSaf.textContent   = String(SAFETY_DAYS);
-          elSkus.textContent  = String(parts.length);
-          elMovs.textContent  = String(movs);
-
-          // Valor de inventario por lotes
-          try{
-            const invVal = await DB.getInventoryValueByLots();
-            elInv.textContent = fmtMoney(invVal);
-          }catch(e){ elInv.textContent = '—'; }
-
-          // Gráficos só se Chart existir
-          if(window.Chart){
-            const topArr = Array.from(byCode.entries())
-              .sort((a,b)=>b[1]-a[1]).slice(0,10);
-            const topLabels = topArr.map(x=>x[0]);
-            const topData   = topArr.map(x=>x[1]);
-
-            const days = Array.from(byDay.keys()).sort();
-            const revs = days.map(d=> byDay.get(d));
-
-            if(chartTop) chartTop.destroy();
-            if(chartDia) chartDia.destroy();
-
-            const ctxTop = document.getElementById('chartTop');
-            if(ctxTop){
-              chartTop = new Chart(ctxTop, {
-                type: 'bar',
-                data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
-                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
-              });
-            }
-
-            const ctxDia = document.getElementById('chartDia');
-            if(ctxDia){
-              chartDia = new Chart(ctxDia, {
-                type: 'line',
-                data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
-                options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
-              });
-            }
-          }
-        }catch(err){
-          console.error('Erro em Reportes.run()', err);
         }
+        // Finanzas del período
+        const { gasto, ingreso, capital } = await DB.sumFinByTipo({ from: dFrom, to: dTo });
+
+        // KPIs
+        elBruto.textContent = fmtMoney(bruto);
+        elCogs.textContent  = fmtMoney(cogs);
+        // Ganancia neta ajustada por Finanzas:
+        const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
+        elLiq.textContent   = fmtMoney(liq);
+        elUnits.textContent = String(units);
+        elSaf.textContent   = String(SAFETY_DAYS);
+        elSkus.textContent  = String(parts.length);
+        elMovs.textContent  = String(movs);
+
+        // Valor de inventario por lotes
+        const invVal = await DB.getInventoryValueByLots();
+        elInv.textContent = fmtMoney(invVal);
+
+        // Top 10
+        const topArr = Array.from(byCode.entries())
+          .sort((a,b)=>b[1]-a[1]).slice(0,10);
+        const topLabels = topArr.map(x=>x[0]);
+        const topData   = topArr.map(x=>x[1]);
+
+        // Ingresos por día (orden cronológico)
+        const days = Array.from(byDay.keys()).sort();
+        const revs = days.map(d=> byDay.get(d));
+
+        if(chartTop) chartTop.destroy();
+        if(chartDia) chartDia.destroy();
+
+        const ctxTop = document.getElementById('chartTop');
+        chartTop = new Chart(ctxTop, {
+          type: 'bar',
+          data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
+        });
+
+        const ctxDia = document.getElementById('chartDia');
+        chartDia = new Chart(ctxDia, {
+          type: 'line',
+          data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
+          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
+        });
       }
 
       document.getElementById('repAplicar').addEventListener('click', run);
@@ -1668,11 +1613,11 @@ async function login(email, password){
       const finTbody = document.getElementById('finTbody');
       const dlFinCats = document.getElementById('dlFinCats');
 
-      // Período default: últimos 30 dias (LOCAL)
+      // Período default: últimos 30 dias
       const today = new Date();
-      const d0 = new Date(); d0.setDate(today.getDate()-29);
-      finDesde.value = localYMD(d0);
-      finHasta.value = localYMD(today);
+      const d0 = new Date(Date.now() - 29*24*3600*1000);
+      finDesde.value = d0.toISOString().slice(0,10);
+      finHasta.value = today.toISOString().slice(0,10);
 
       // Sugerir categorías
       (async ()=>{
@@ -1736,30 +1681,23 @@ async function login(email, password){
         const fd = new FormData(finForm);
         const id = fd.get('id') || undefined;
         const tipo = fd.get('tipo');
-        const fechaStr = fd.get('fecha'); // YYYY-MM-DD (local)
-        const fechaISO = DB.toMiddayISO(fechaStr); // evita "dia anterior"
+        const fecha = fd.get('fecha');
         const categoria = String(fd.get('categoria')||'').trim();
         const descripcion = String(fd.get('descripcion')||'').trim();
         const rawMonto = fd.get('monto');
         const monto = parseLocaleNumber(rawMonto);
-        if(!tipo || !fechaISO || isNaN(monto) || monto < 0){
+        if(!tipo || !fecha || isNaN(monto) || monto < 0){
           alert('Ingresa un monto válido (puedes usar coma o punto como separador decimal).');
           return;
         }
         try{
           const u = Auth.currentUser();
-          await DB.upsertFinEntry({ id, tipo, fecha: fechaISO, categoria, descripcion, monto, usuario: u?u.email:'' });
+          await DB.upsertFinEntry({ id, tipo, fecha, categoria, descripcion, monto, usuario: u?u.email:'' });
           rows = await DB.listFinEntries(2000);
           resetForm(); finFormWrap.open = false; paint();
           alert('Lanzamiento guardado');
         }catch(err){ alert(err.message || 'No se pudo guardar'); }
       });
-
-      // helper para converter ISO → input date local
-      function isoToInputDateLocal(iso){
-        const dt = new Date(iso);
-        return localYMD(dt);
-      }
 
       finTbody.addEventListener('click', async (e)=>{
         const bEdit = e.target.closest('button[data-edit]');
@@ -1772,7 +1710,7 @@ async function login(email, password){
           finFormSummary.textContent = 'Editar lanzamiento';
           finForm.querySelector('input[name="id"]').value = r.id;
           finForm.querySelector('select[name="tipo"]').value = r.tipo;
-          finForm.querySelector('input[name="fecha"]').value = isoToInputDateLocal(r.fecha);
+          finForm.querySelector('input[name="fecha"]').value = String(r.fecha).slice(0,10);
           finForm.querySelector('input[name="categoria"]').value = r.categoria || '';
           finForm.querySelector('input[name="descripcion"]').value = r.descripcion || '';
           finForm.querySelector('input[name="monto"]').value =
@@ -1930,7 +1868,6 @@ async function login(email, password){
         summary.textContent = 'Nueva pieza';
       };
 
-      // “Añadir pieza” abre o formulário
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
         formWrap.open = true;
@@ -2123,8 +2060,9 @@ async function login(email, password){
         if(impMargen) impMargen.value = '';
         if(impPreview) impPreview.textContent = '';
       });
+      // *** FIM DO BLOCO NOVO ***
 
-      // Ações por linha (Imagem/Editar/Eliminar)
+      // Acciones por fila (Imagen/Editar/Eliminar)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
@@ -2408,7 +2346,7 @@ async function login(email, password){
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
       });
-
+      // *** FIM DO BLOCO NOVO ***
     }
 
     // ---- Sugerencias ----
