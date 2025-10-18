@@ -188,6 +188,25 @@ details.inline.always-open > summary { pointer-events:none; cursor:default; }
     }
 
     #cam{width:1px;height:1px;position:absolute;left:-9999px;top:-9999px}
+    
+    /* Botão hambúrguer maior (mobile) */
+#mobileMenuBtn{
+  width: 56px;         /* toque confortável (pode usar 48–64) */
+  height: 56px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;  /* opcional */
+  font-size: 26px;      /* aumenta o ícone se for o caractere ☰ */
+  line-height: 1;
+}
+
+/* Se o ícone for um SVG dentro do botão, aumente aqui também */
+#mobileMenuBtn svg{
+  width: 28px;
+  height: 28px;
+}
   </style>
 </head>
 <body>
