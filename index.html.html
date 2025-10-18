@@ -726,11 +726,16 @@ const parseLocaleNumber = (raw)=>{
       }
       const isAuthed = () => !!cache;
       const currentUser = () => cache;
-      async function login(email, password){
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if(error) return { ok:false, error: error.message };
-        return { ok:true };
-      }
+      // Dentro de /* ===== Auth ===== */
+async function login(email, password){
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) return { ok:false, error: error.message };
+
+  // Garante que o cache de autenticação fica true imediatamente
+  set(data?.user || null);
+
+  return { ok:true };
+}
       async function logout(){ await sb.auth.signOut(); }
       return { init, isAuthed, currentUser, login, logout };
     })();
@@ -1489,20 +1494,21 @@ const parseLocaleNumber = (raw)=>{
 
     // ---- Login ----
     async function renderLogin(){
-      const tpl = document.getElementById('tpl-login').content.cloneNode(true);
-      view.innerHTML = ''; view.appendChild(tpl);
+  const tpl = document.getElementById('tpl-login').content.cloneNode(true);
+  view.innerHTML = ''; view.appendChild(tpl);
 
-      const form = document.getElementById('loginForm');
+  const form = document.getElementById('loginForm');
 
-      form.addEventListener('submit', async (e)=>{
-        e.preventDefault();
-        const fd = new FormData(form);
-        const email = fd.get('email'); const password = fd.get('password');
-        const res = await Auth.login(email, password);
-        if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
-        location.hash = '#/reportes'; await route();
-      });
-    }
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const fd = new FormData(form);
+    const email = fd.get('email'); const password = fd.get('password');
+    const res = await Auth.login(email, password);
+    if(!res.ok){ alert(res.error || 'Error al iniciar sesión'); return; }
+    location.hash = '#/reportes';
+  });
+}
+
 
     // ---- Reportes (ajustado com Finanzas) ----
     let chartTop = null, chartDia = null;
