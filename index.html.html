@@ -651,7 +651,7 @@
   </template>
 
   <!-- Picker global para imagen -->
-  <input id="imagePicker" type="file" accept="image/*" style="display:none" />
+  <input id="imagePicker" type="file" accept="image/*" multiple style="display:none" />
 
   <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2156,39 +2156,47 @@
         }
       });
 
-     // único handler (não acumula ouvintes)
+     // handler único, aceita múltiplos arquivos e NÃO apaga imagens antigas
 imagePicker.onchange = async ()=>{
-  const f = imagePicker.files?.[0];
-  if(!f) return;
+  const files = Array.from(imagePicker.files || []);
+  if (!files.length) return;
 
-  // se por algum motivo o alvo não estiver setado, apenas saia silenciosamente
-  if(!imageTargetPart){ 
+  // se, por alguma razão, o alvo não foi definido, apenas limpa e sai em silêncio
+  if (!imageTargetPart) {
     imagePicker.value = '';
-    return; 
+    return;
   }
 
-  try{
-    const up = await DB.uploadPartImage(imageTargetPart.id, f);
-    await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
+  try {
+    // Se a peça ainda não tem principal, tornamos a primeira enviada a principal.
+    // Caso já tenha, apenas subimos as demais como adicionais.
+    let setouPrincipalNestaRodada = false;
 
-    // se havia uma principal antiga, tenta apagar (opcional)
-    if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
-      try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
+    for (const f of files) {
+      const up = await DB.uploadPartImage(imageTargetPart.id, f);
+
+      // 1) Se não havia principal: define a primeira como principal
+      if (!imageTargetPart.imagePath && !setouPrincipalNestaRodada) {
+        await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
+        imageTargetPart.imagePath = up.path;
+        imageTargetPart.imageUrl  = up.url;
+        setouPrincipalNestaRodada = true;
+      }
+      // 2) Se já havia principal, só mantém a imagem extra no Storage
+      // (nenhuma ação adicional necessária aqui)
     }
 
-    // atualiza a listagem e a tabela desta mesma view
+    // Atualiza listagem e modal, se aberto
     parts = await DB.listParts();
     await paint();
-
-    // se o modal estiver aberto, atualiza a grade lá dentro também
-    if (typeof window.__imgModalRefresh === 'function') { 
-      await window.__imgModalRefresh(); 
+    if (typeof window.__imgModalRefresh === 'function') {
+      await window.__imgModalRefresh();
     }
 
-    alert('Imagen actualizada');
-  }catch(e){
-    alert(e.message || 'No se pudo subir la imagen');
-  }finally{
+    alert(files.length > 1 ? 'Imágenes subidas' : 'Imagen subida');
+  } catch (e) {
+    alert(e.message || 'No se pudo subir la(s) imagen(es)');
+  } finally {
     imageTargetPart = null;
     imagePicker.value = '';
     window.__imgModalRefresh = null;
