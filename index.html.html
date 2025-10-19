@@ -2347,21 +2347,26 @@
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
 
-      exportBtn.addEventListener('click', async ()=>{
-        const p = await DB.listParts();
-        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs']);
-        const rows = p.map(pt=>{
-          const row = { id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio };
-          return head.map(k=>csvCell(row[k] ?? '')).join(',');
-        });
-        const csv = head.join(',') + '\n' + rows.join('\n');
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-        a.href = url; a.download = `inventario_${stamp}.csv`;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      });
+    exportBtn.addEventListener('click', async ()=>{
+  const p = await DB.listParts();
+  const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
+  const rows = p.map(pt=>{
+    const row = {
+      id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria,
+      almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias,
+      consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock,
+      stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio
+    };
+    return head.map(k=>csvCell(row[k] ?? '')).join(',');
+  });
+  const csv = head.join(',') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+  a.href = url; a.download = `inventario_${stamp}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+});
 
       // *** NOVO: Calculadora de importación (Movimientos -> Entrada) ***
       const imp2CostoBRL = document.getElementById('imp2CostoBRL');
