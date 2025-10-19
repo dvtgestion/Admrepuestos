@@ -139,11 +139,11 @@
     /* Charts compactos */
     .charts-compact canvas { max-height: 180px; }
 
-    /* Grupo de filtros (Reportes) com maior separação visual */
+    /* Grupo de filtros (Reportes) con mayor separação visual */
     .filter-group{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; }
     .filter-group .field{ margin:0 }
 
-    /* === Visor de imagens (modal) === */
+    /* === Visor de imágenes (modal) === */
     .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:24px; z-index:1000;}
     .modal .box{background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); width:min(100%, 920px); max-height:90vh; display:flex; flex-direction:column;}
     .modal header{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border)}
@@ -193,10 +193,9 @@
         width:56px; height:56px; padding:0;
         display:inline-flex; align-items:center; justify-content:center;
         border-radius:12px;
-        font-size:26px;     /* se o ícone for o caractere ☰ */
+        font-size:26px;
         line-height:1;
 
-        /* >>> FIXO acompanhando a rolagem <<< */
         position:fixed;
         right:16px;
         bottom:16px;
@@ -728,7 +727,7 @@
       return { init, isAuthed, currentUser, login, logout, prime };
     })();
     
-        /* ===== Org ===== */
+    /* ===== Org ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
       let currentName = localStorage.getItem('currentOrgName') || null;
@@ -774,8 +773,8 @@
 
       return { get, set, myOrgs, ensureCurrent };
     })();
-
-    /* ===== DB (Supabase) ===== */
+    
+        /* ===== DB (Supabase) ===== */
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
@@ -1312,6 +1311,18 @@
         return { gasto, ingreso, capital };
       }
 
+      // 🔧 NOVO: categorias distintas para popular o datalist do formulário de Finanzas
+      async function listFinCategories(){
+        const { data, error } = await sb
+          .from('fin_entries')
+          .select('categoria', { distinct: true })
+          .eq('org_id', orgId())
+          .not('categoria', 'is', null)
+          .order('categoria', { ascending: true });
+        if(error) throw error;
+        return (data || []).map(r => r.categoria).filter(Boolean);
+      }
+
       // ---- Backup / Restore / Wipe ----
       async function backupAll(){
         const [parts, moves, hist, fin] = await Promise.all([
@@ -1577,7 +1588,9 @@
             const k = (p?.codigo || m.codigo || '—');
             byCode.set(k, (byCode.get(k)||0)+q);
 
-            const dayKey = new Date(m.fecha).toISOString().slice(0,10);
+            // ✅ FIX: agrupamento por dia usando fuso local (não UTC)
+            const dt = new Date(m.fecha);
+            const dayKey = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
             byDay.set(dayKey, (byDay.get(dayKey)||0) + precio*q);
           }
         }
@@ -2336,7 +2349,7 @@
 
       exportBtn.addEventListener('click', async ()=>{
         const p = await DB.listParts();
-        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
+        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs']);
         const rows = p.map(pt=>{
           const row = { id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio };
           return head.map(k=>csvCell(row[k] ?? '')).join(',');
@@ -2562,5 +2575,4 @@
   </script>
 </body>
 </html>
-    
     
