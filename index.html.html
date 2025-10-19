@@ -2156,29 +2156,44 @@
         }
       });
 
-      // Upload real quando escolher arquivo (atualiza o modal se aberto)
-      imagePicker.addEventListener('change', async ()=>{
-        const f = imagePicker.files?.[0];
-        if(!f){ return; }
-        if(!imageTargetPart){ alert('Pieza no seleccionada'); return; }
-        try{
-          const up = await DB.uploadPartImage(imageTargetPart.id, f);
-          await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
-          if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
-            try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
-          }
-          parts = await DB.listParts();
-          await paint();
-          if (typeof window.__imgModalRefresh === 'function') { await window.__imgModalRefresh(); }
-          alert('Imagen actualizada');
-        }catch(e){
-          alert(e.message || 'No se pudo subir la imagen');
-        }finally{
-          imageTargetPart = null;
-          imagePicker.value = '';
-          window.__imgModalRefresh = null;
-        }
-      });
+     // único handler (não acumula ouvintes)
+imagePicker.onchange = async ()=>{
+  const f = imagePicker.files?.[0];
+  if(!f) return;
+
+  // se por algum motivo o alvo não estiver setado, apenas saia silenciosamente
+  if(!imageTargetPart){ 
+    imagePicker.value = '';
+    return; 
+  }
+
+  try{
+    const up = await DB.uploadPartImage(imageTargetPart.id, f);
+    await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
+
+    // se havia uma principal antiga, tenta apagar (opcional)
+    if(imageTargetPart.imagePath && imageTargetPart.imagePath !== up.path){
+      try{ await DB.deletePartImage(imageTargetPart.imagePath); }catch(e){}
+    }
+
+    // atualiza a listagem e a tabela desta mesma view
+    parts = await DB.listParts();
+    await paint();
+
+    // se o modal estiver aberto, atualiza a grade lá dentro também
+    if (typeof window.__imgModalRefresh === 'function') { 
+      await window.__imgModalRefresh(); 
+    }
+
+    alert('Imagen actualizada');
+  }catch(e){
+    alert(e.message || 'No se pudo subir la imagen');
+  }finally{
+    imageTargetPart = null;
+    imagePicker.value = '';
+    window.__imgModalRefresh = null;
+  }
+};
 
       // Importador CSV (usa parseLocaleNumber p/ custo/preço)
       importCSV.addEventListener('change', ()=>{
