@@ -496,8 +496,7 @@
               <span class="xs muted">Hasta</span>
               <input type="date" id="moveHasta" class="input" />
             </label>
-            <input id="moveRefFilter" class="input" placeholder="Filtrar por referencia…" style="min-width:200px" />
-            <button id="moveAplicar" class="btn btn-primary">Aplicar</button>
+            <input id="moveSearchFilter" class="input" placeholder="Buscar (código, nombre, ref)…" style="min-width:220px" />
           </div>
           <select id="moveAlmacenFilter" class="input" title="Filtrar piezas por almacén"></select>
           <button id="undoLast" class="btn btn-danger">Deshacer último</button>
@@ -2256,19 +2255,16 @@ imagePicker.onchange = async ()=>{
       // AQUI A MUDANÇA (2/4): Pegando os novos elementos de filtro
       const moveDesde = document.getElementById('moveDesde');
       const moveHasta = document.getElementById('moveHasta');
-      const moveRefFilter = document.getElementById('moveRefFilter');
-      const moveAplicar = document.getElementById('moveAplicar');
+      const moveSearchFilter = document.getElementById('moveSearchFilter'); // Nome alterado
       // Fim da mudança
 
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
 
-      // AQUI A MUDANÇA (3/4): Definindo datas padrão (últimos 30 dias)
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
       moveDesde.value = d0.toISOString().slice(0,10);
       moveHasta.value = today.toISOString().slice(0,10);
-      // Fim da mudança
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -2315,22 +2311,33 @@ imagePicker.onchange = async ()=>{
       }
       toggleMoveFields();
 
-      // AQUI A MUDANÇA (4/4): Ajustando paintMoves para usar os filtros
+      // AQUI A MUDANÇA (3/4): Ajustando paintMoves para nova lógica de filtro
       function paintMoves(){
         tbody.innerHTML = '';
         
-        // Pega os valores dos filtros
         const dFrom = new Date(moveDesde.value + 'T00:00:00');
         const dTo   = new Date(moveHasta.value + 'T23:59:59');
-        const qRef = (moveRefFilter.value || '').trim().toLowerCase();
+        // Pega o valor do novo campo de busca
+        const q = (moveSearchFilter.value || '').trim().toLowerCase();
         
         const filteredMoves = moves.filter(m => {
+          // Filtro de data
           const dt = new Date(m.fecha);
           if(dt < dFrom || dt > dTo) return false;
           
-          if(qRef && !String(m.referencia||'').toLowerCase().includes(qRef)) return false;
+          // Novo filtro de busca (código, nome, referência)
+          if (q) { // Só filtra se 'q' não estiver vazio
+            const ref = String(m.referencia || '').toLowerCase();
+            const cod = String(m.codigo || '').toLowerCase();
+            const nom = String(m.nombre || '').toLowerCase();
+            
+            // Se não incluir em NENHUM dos campos, o item é filtrado (return false)
+            if (!ref.includes(q) && !cod.includes(q) && !nom.includes(q)) {
+              return false;
+            }
+          }
           
-          return true;
+          return true; // Passou em todos os filtros
         });
 
         filteredMoves.forEach(m=>{
@@ -2352,8 +2359,11 @@ imagePicker.onchange = async ()=>{
       }
       paintMoves();
       
-      // Adiciona o listener para o botão "Aplicar"
-      moveAplicar.addEventListener('click', paintMoves);
+      // AQUI A MUDANÇA (4/4): Adicionando listeners automáticos
+      // Remove o listener do botão 'Aplicar' e adiciona listeners de 'input'/'change'
+      moveDesde.addEventListener('change', paintMoves);
+      moveHasta.addEventListener('change', paintMoves);
+      moveSearchFilter.addEventListener('input', paintMoves); // Filtra ao digitar
       // Fim da mudança
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
@@ -2459,7 +2469,7 @@ imagePicker.onchange = async ()=>{
         if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
-      if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
+      if(imp2Limpiar) impLimpiar.addEventListener('click', ()=>{
         if(imp2CostoBRL) imp2CostoBRL.value = '';
         if(imp2LogisticaBs) imp2LogisticaBs.value = '';
         if(imp2Margen) imp2Margen.value = '';
@@ -2564,7 +2574,7 @@ imagePicker.onchange = async ()=>{
           const dump = await DB.backupAll();
           const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
           const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
-        }catch(e){ alert(e.message || 'No se pudo hacer backup'); }
+        }catch(e){ alert(e.message || 'No se pudo fazer backup'); }
       });
 
       restoreFile.addEventListener('change', async ()=>{
