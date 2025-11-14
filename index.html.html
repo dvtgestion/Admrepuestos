@@ -486,6 +486,19 @@
       <header class="toolbar">
         <div class="left"><h2>Movimientos</h2><p class="muted">Entradas y salidas que afectan el stock.</p></div>
         <div class="right">
+          
+          <div class="filter-group">
+            <label class="field" style="min-width:150px">
+              <span class="xs muted">Desde</span>
+              <input type="date" id="moveDesde" class="input" />
+            </label>
+            <label class="field" style="min-width:150px">
+              <span class="xs muted">Hasta</span>
+              <input type="date" id="moveHasta" class="input" />
+            </label>
+            <input id="moveRefFilter" class="input" placeholder="Filtrar por referencia…" style="min-width:200px" />
+            <button id="moveAplicar" class="btn btn-primary">Aplicar</button>
+          </div>
           <select id="moveAlmacenFilter" class="input" title="Filtrar piezas por almacén"></select>
           <button id="undoLast" class="btn btn-danger">Deshacer último</button>
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
@@ -1275,7 +1288,7 @@
         if(error) throw error;
       }
 
-      // sumas por tipo en un rango de fechas
+      // sumas por tipo en um rango de fechas
       async function sumFinByTipo({from, to}){
         const desdeISO = from instanceof Date ? from.toISOString() : (from||null);
         const hastaISO = to instanceof Date ? to.toISOString() : (to||null);
@@ -1381,7 +1394,7 @@
       };
     })();
     
-    /* ===== App / Navegación ===== */
+    /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
     const view = document.getElementById('view');
     const sidebar = document.getElementById('sidebar');
@@ -2240,8 +2253,22 @@ imagePicker.onchange = async ()=>{
       const undoBtn = document.getElementById('undoLast');
       const almFilter = document.getElementById('moveAlmacenFilter');
 
+      // AQUI A MUDANÇA (2/4): Pegando os novos elementos de filtro
+      const moveDesde = document.getElementById('moveDesde');
+      const moveHasta = document.getElementById('moveHasta');
+      const moveRefFilter = document.getElementById('moveRefFilter');
+      const moveAplicar = document.getElementById('moveAplicar');
+      // Fim da mudança
+
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
+
+      // AQUI A MUDANÇA (3/4): Definindo datas padrão (últimos 30 dias)
+      const today = new Date();
+      const d0 = new Date(Date.now() - 29*24*3600*1000);
+      moveDesde.value = d0.toISOString().slice(0,10);
+      moveHasta.value = today.toISOString().slice(0,10);
+      // Fim da mudança
 
       function buildAlmacenOptions(){
         const set = new Set(['(Todos)']); parts.forEach(p=>{ if(p.almacen && p.almacen.trim()) set.add(p.almacen.trim()); });
@@ -2288,11 +2315,26 @@ imagePicker.onchange = async ()=>{
       }
       toggleMoveFields();
 
+      // AQUI A MUDANÇA (4/4): Ajustando paintMoves para usar os filtros
       function paintMoves(){
         tbody.innerHTML = '';
-        moves.forEach(m=>{
+        
+        // Pega os valores dos filtros
+        const dFrom = new Date(moveDesde.value + 'T00:00:00');
+        const dTo   = new Date(moveHasta.value + 'T23:59:59');
+        const qRef = (moveRefFilter.value || '').trim().toLowerCase();
+        
+        const filteredMoves = moves.filter(m => {
+          const dt = new Date(m.fecha);
+          if(dt < dFrom || dt > dTo) return false;
+          
+          if(qRef && !String(m.referencia||'').toLowerCase().includes(qRef)) return false;
+          
+          return true;
+        });
+
+        filteredMoves.forEach(m=>{
           const tr = document.createElement('tr');
-          // AQUI A MUDANÇA (2/2): Adicionando as colunas na renderização da linha
           tr.innerHTML = `
             <td>${fmtDate(m.fecha)}</td>
             <td>${escapeHtml(m.codigo)}</td>
@@ -2305,11 +2347,14 @@ imagePicker.onchange = async ()=>{
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
             <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
-          // FIM DA MUDANÇA
           tbody.appendChild(tr);
         });
       }
       paintMoves();
+      
+      // Adiciona o listener para o botão "Aplicar"
+      moveAplicar.addEventListener('click', paintMoves);
+      // Fim da mudança
 
       almFilter.addEventListener('change', ()=>{ fillPartOptions(); if(tipoSel.value==='salida') fillMoveLots(); });
       partSel.addEventListener('change', ()=>{ if(tipoSel.value==='salida') fillMoveLots(); });
@@ -2335,7 +2380,9 @@ imagePicker.onchange = async ()=>{
           }
 
           await DB.applyMovement(payload);
-          parts = await DB.listParts(); moves = await DB.listMoves(2000); paintMoves();
+          parts = await DB.listParts(); 
+          moves = await DB.listMoves(2000); // Recarrega os movimentos
+          paintMoves(); // Repinta a tabela (que agora será filtrada)
           alert('Movimiento registrado');
           moveForm.reset(); fillPartOptions(); toggleMoveFields();
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
