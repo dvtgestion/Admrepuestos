@@ -1493,6 +1493,12 @@
       if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
 
       // Render
+      // ======================================================
+      // AJUSTE FEITO AQUI: A linha setNavActive foi movida para
+      // antes do 'switch' para garantir que seja executada.
+      // ======================================================
+      if(authed) setNavActive(path);
+
       switch(path){
         case 'login': await renderLogin(); break;
         case 'reportes': await renderReportes(); break;
@@ -1506,7 +1512,7 @@
           location.hash = authed ? '#/reportes' : '#/login';
           return;
       }
-      if(authed) setNavActive(path);
+      
       if(isMobile()) closeSidebarMobile(); // fecha ao chegar na vista
     }
 
@@ -2470,7 +2476,7 @@ imagePicker.onchange = async ()=>{
         if(imp2Tasa && String(imp2Tasa.value).trim()){ localStorage.setItem('fxRateBRL', imp2Tasa.value.trim()); }
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
-      if(imp2Limpiar) impLimpiar.addEventListener('click', ()=>{
+      if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
         if(imp2CostoBRL) imp2CostoBRL.value = '';
         if(imp2LogisticaBs) imp2LogisticaBs.value = '';
         if(imp2Margen) imp2Margen.value = '';
