@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Gestión de Inventario — Autopartes</title>
 
-  <!-- Chart.js para gráficos de Reportes -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
 
   <style>
@@ -209,7 +208,6 @@
 </head>
 <body>
   <div id="app" class="app no-sidebar">
-    <!-- Botão de menu (aparece só no celular pelo CSS) -->
     <button id="mobileMenuBtn" class="menu-btn btn" aria-label="Abrir menú">☰</button>
 
     <aside id="sidebar" class="sidebar hidden" aria-hidden="true">
@@ -219,7 +217,6 @@
       </div>
       <nav class="nav" aria-label="Navegación principal">
         <button class="nav-btn" data-route="reportes">Reportes</button>
-        <!-- NOVO: botón Finanzas -->
         <button class="nav-btn" data-route="finanzas">Finanzas</button>
         <button class="nav-btn" data-route="inventario">Inventario</button>
         <button class="nav-btn" data-route="movimientos">Movimientos</button>
@@ -235,7 +232,6 @@
     <main id="view" class="view"></main>
   </div>
 
-  <!-- Templates -->
   <template id="tpl-login">
     <section class="center">
       <div class="card card-max" role="dialog" aria-labelledby="loginTitle">
@@ -303,7 +299,6 @@
     </section>
   </template>
 
-  <!-- NOVO: Template Finanzas -->
   <template id="tpl-finanzas">
     <section class="stack">
       <header class="toolbar">
@@ -405,7 +400,6 @@
           <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
-          <!-- Almacén con datalist + chips -->
           <label class="field"><span>Almacén</span>
             <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
             <datalist id="dlAlmacenes"></datalist>
@@ -413,7 +407,6 @@
             <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
           </label>
 
-          <!-- Proveedor con datalist + chips -->
           <label class="field"><span>Proveedor</span>
             <input name="proveedor" placeholder="Proveedor principal" list="dlProveedores" />
             <datalist id="dlProveedores"></datalist>
@@ -424,7 +417,6 @@
             <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
           </label>
 
-          <!-- AUTOMÁTICOS (solo lectura) -->
           <label class="field"><span>Consumo diario (auto)</span>
             <input name="consumoDiario" type="number" min="0" step="0.01" value="0" readonly
               title="Calculado automáticamente por movimientos (últimos 30 días)" />
@@ -438,7 +430,6 @@
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
 
-          <!-- *** NOVO BLOCO:# Calculadora de importación (BRL→Bs) para preencher Costo/Precio *** -->
           <div class="field" style="grid-column:1/-1">
             <details class="inline always-open" id="impCalcPiece" open>
               <summary>Calculadora de importación (BRL→Bs)</summary>
@@ -463,8 +454,6 @@
               </div>
             </details>
           </div>
-          <!-- *** FIM DO BLOCO NOVO *** -->
-
           <div class="row-actions">
             <button class="btn btn-primary" type="submit">Guardar</button>
             <button type="button" id="cancelEdit" class="btn btn-ghost">Cancelar</button>
@@ -521,7 +510,6 @@
             <input name="cantidad" type="number" min="1" step="1" required />
           </label>
 
-          <!-- CAMPOS EXTRAS PARA ENTRADA -->
           <div id="entradaFields" class="field" style="grid-column: span 2; display:none">
             <div class="grid" style="grid-template-columns: repeat(2, minmax(0,1fr)); gap:12px">
               <label class="field"><span>Costo unitario (Bs)</span>
@@ -533,7 +521,6 @@
             </div>
             <span class="xs muted">Estos valores se guardan en el <strong>lote</strong> que está entrando y no cambian el precio/costo base de la pieza.</span>
 
-            <!-- *** NOVO BLOCO: Calculadora de importación (BRL→Bs) para ENTRADA *** -->
             <details class="inline always-open" id="impCalcEntrada" style="margin-top:8px" open>
               <summary>Calculadora de importación (BRL→Bs)</summary>
               <div class="grid" style="grid-template-columns: repeat(4, minmax(0,1fr)); gap:12px; margin-top:8px">
@@ -556,11 +543,8 @@
                 <span class="xs muted" id="imp2Preview"></span>
               </div>
             </details>
-            <!-- *** FIM DO BLOCO NOVO *** -->
+            </div>
 
-          </div>
-
-          <!-- CAMPOS EXTRAS PARA SALIDA -->
           <div id="salidaFields" class="field" style="grid-column: span 2; display:none">
             <label class="field"><span>Seleccionar lote para salida</span>
               <select id="salidaLote"></select>
@@ -579,7 +563,10 @@
           <table class="table compact" id="movesTable">
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th><th>Almacén</th><th>Tipo</th>
-              <th class="num">Cantidad</th><th>Referencia</th><th>Usuario</th><th></th>
+              <th class="num">Cantidad</th>
+              <th class="num">Costo (Bs)</th>
+              <th class="num">Precio (Bs)</th>
+              <th>Referencia</th><th>Usuario</th><th></th>
             </tr></thead>
             <tbody id="movesTbody"></tbody>
           </table>
@@ -650,10 +637,8 @@
     </section>
   </template>
 
-  <!-- Picker global para imagen -->
   <input id="imagePicker" type="file" accept="image/*" multiple style="display:none" />
 
-  <!-- Supabase JS -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <script>
@@ -2307,6 +2292,7 @@ imagePicker.onchange = async ()=>{
         tbody.innerHTML = '';
         moves.forEach(m=>{
           const tr = document.createElement('tr');
+          // AQUI A MUDANÇA (2/2): Adicionando as colunas na renderização da linha
           tr.innerHTML = `
             <td>${fmtDate(m.fecha)}</td>
             <td>${escapeHtml(m.codigo)}</td>
@@ -2314,9 +2300,12 @@ imagePicker.onchange = async ()=>{
             <td>${escapeHtml(m.almacen||'')}</td>
             <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
             <td class="num">${m.cantidad}</td>
+            <td class="num">${fmtMoney(m.costo_unit)}</td>
+            <td class="num">${fmtMoney(m.precio_unit)}</td>
             <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
             <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
+          // FIM DA MUDANÇA
           tbody.appendChild(tr);
         });
       }
@@ -2603,4 +2592,3 @@ imagePicker.onchange = async ()=>{
   </script>
 </body>
 </html>
-    
