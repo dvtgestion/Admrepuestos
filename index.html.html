@@ -564,6 +564,22 @@
               <select id="salidaLote"></select>
             </label>
             <div id="salidaLotesInfo" class="muted xs"></div>
+
+            <div style="border:1px dashed var(--border); padding:10px; border-radius:8px; margin-top:8px;">
+               <small class="muted" style="display:block; margin-bottom:6px;">Calculadora de Precio de Venta (Salida)</small>
+               <div class="grid" style="grid-template-columns: 1fr 1fr 1fr; gap:8px">
+                  <label class="field"><span>Costo Lote (Ref)</span>
+                     <input id="outCalcCosto" readonly placeholder="—" style="background:#f8fafc" />
+                  </label>
+                  <label class="field"><span>Margen (%)</span>
+                     <input id="outCalcMargen" type="number" step="0.01" placeholder="Ej: 25" />
+                  </label>
+                  <label class="field"><span>Precio Final (Bs)</span>
+                     <input id="outCalcPrecio" type="number" step="0.01" placeholder="Ej: 125" />
+                  </label>
+               </div>
+               <span class="xs muted">Este precio se guardará en el movimiento. Si deja en blanco, usa el precio por defecto.</span>
+            </div>
           </div>
 
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
@@ -1060,15 +1076,18 @@
             .eq('id', p.id);
           if(upErr2) throw upErr2;
 
-          // registrar el movimiento (con costo/precio del lote)
+          // MODIFICAÇÃO: Usar o preço unitário passado no formulário (se houver),
+          // caso contrário, usa o preço padrão da peça.
+          const finalPrice = (precioUnit != null) ? Number(precioUnit) : Number(p.precio||0);
+
+          // registrar el movimiento
           const { error: insErr2 } = await sb.from('movements').insert({
             org_id: orgId(),
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
             almacen: p.almacen || '', tipo: 'salida', cantidad: q,
             referencia: referencia || '', usuario: usuarioEmail || '',
-            // FIX: Usar costo/precio atualizado do Inventario (p), e não do lote antigo (lot)
-            costo_unit: Number(p.costo||0),
-            precio_unit: Number(p.precio||0),
+            costo_unit: Number(p.costo||0), // Mantém custo base do inventário
+            precio_unit: finalPrice,        // Usa o preço calculado (com desconto/margem)
             lote_id: lot.id
           });
           if(insErr2) throw insErr2;
@@ -2289,6 +2308,11 @@ imagePicker.onchange = async ()=>{
       const undoBtn = document.getElementById('undoLast');
       const almFilter = document.getElementById('moveAlmacenFilter');
 
+      // Elementos da nova calculadora de saída
+      const outCalcCosto = document.getElementById('outCalcCosto');
+      const outCalcMargen = document.getElementById('outCalcMargen');
+      const outCalcPrecio = document.getElementById('outCalcPrecio');
+
       // AQUI A MUDANÇA (2/4): Pegando os novos elementos de filtro
       const moveDesde = document.getElementById('moveDesde');
       const moveHasta = document.getElementById('moveHasta');
@@ -2297,6 +2321,7 @@ imagePicker.onchange = async ()=>{
 
       let parts = await DB.listParts();
       let moves = await DB.listMoves(2000);
+      let currentLots = []; // Armazena os lotes atuais para consulta de custo
 
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
@@ -2321,8 +2346,17 @@ imagePicker.onchange = async ()=>{
       async function fillMoveLots(){
         if(tipoSel.value !== 'salida'){ salidaFields.style.display='none'; return; }
         const partId = partSel.value;
+        
+        // Reset calculadora
+        outCalcCosto.value = ''; 
+        outCalcMargen.value = ''; 
+        outCalcPrecio.value = '';
+        currentLots = [];
+
         if(!partId){ salidaLoteSel.innerHTML = ''; salidaLotesInfo.textContent = ''; return; }
         const lots = await DB.listLots(partId);
+        currentLots = lots; // Guarda referencia
+
         if(!lots.length){
           salidaLoteSel.innerHTML = '';
           salidaLotesInfo.textContent = 'Sin lotes disponibles para esta pieza.';
@@ -2333,7 +2367,53 @@ imagePicker.onchange = async ()=>{
         }).join('');
         const totalDisp = lots.reduce((s,x)=>s+Number(x.qty||0),0);
         salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp}`;
+        
+        // Popula a calculadora com o primeiro lote
+        updateOutCalcBase();
       }
+
+      // Atualiza a base da calculadora quando troca o lote
+      function updateOutCalcBase(){
+        const lotId = salidaLoteSel.value;
+        const lot = currentLots.find(l => String(l.id) === String(lotId));
+        if(lot){
+            outCalcCosto.value = Number(lot.costo_unit).toFixed(2);
+            // Preço sugerido inicial = preço do lote
+            outCalcPrecio.value = Number(lot.precio_unit).toFixed(2);
+            // Calcula margem atual
+            const cost = Number(lot.costo_unit);
+            const price = Number(lot.precio_unit);
+            if(cost > 0) {
+                const mg = ((price / cost) - 1) * 100;
+                outCalcMargen.value = mg.toFixed(2);
+            } else {
+                outCalcMargen.value = '0';
+            }
+        }
+      }
+
+      salidaLoteSel.addEventListener('change', updateOutCalcBase);
+
+      // Lógica da Calculadora: Margem -> Preço
+      outCalcMargen.addEventListener('input', ()=>{
+         const cost = parseFloat(outCalcCosto.value);
+         const margin = parseFloat(outCalcMargen.value);
+         if(!isNaN(cost) && !isNaN(margin)){
+             const price = cost * (1 + (margin/100));
+             outCalcPrecio.value = price.toFixed(2);
+         }
+      });
+
+      // Lógica da Calculadora: Preço -> Margem
+      outCalcPrecio.addEventListener('input', ()=>{
+          const cost = parseFloat(outCalcCosto.value);
+          const price = parseFloat(outCalcPrecio.value);
+          if(!isNaN(cost) && cost > 0 && !isNaN(price)){
+              const margin = ((price / cost) - 1) * 100;
+              outCalcMargen.value = margin.toFixed(2);
+          }
+      });
+
 
       function toggleMoveFields(){
         const t = tipoSel.value;
@@ -2424,6 +2504,12 @@ imagePicker.onchange = async ()=>{
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
             payload.loteId = loteId;
+            
+            // CAPTURA O PREÇO PERSONALIZADO DA CALCULADORA
+            const calcPrice = parseFloat(outCalcPrecio.value);
+            if(!isNaN(calcPrice) && calcPrice >= 0){
+                payload.precioUnit = calcPrice;
+            }
           }
 
           await DB.applyMovement(payload);
