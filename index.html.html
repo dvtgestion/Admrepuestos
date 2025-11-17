@@ -78,6 +78,7 @@
     .btn-primary{background:var(--primary); color:#fff; border-color:transparent}
     .btn-ghost{background:transparent}
     .btn-danger{background:var(--danger); color:#fff; border-color:transparent}
+    .btn-warning{background:#f59e0b; color:#fff; border-color:transparent}
 
     .toolbar{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
     .toolbar .right{display:flex; gap:8px; flex-wrap:wrap}
@@ -626,6 +627,14 @@
         <span id="orgName">—</span>
         <select id="orgSelect" class="input"></select>
         <button id="orgNewBtn" class="btn">Nueva empresa</button>
+      </div>
+
+      <div class="card" style="display:flex; flex-direction:column; gap:8px;">
+        <h3>Herramientas de Corrección</h3>
+        <p class="muted xs">Si actualizó precios en el inventario pero los movimientos de salida siguen mostrando precios antiguos, use este botón para forzar que todos los lotes existentes adopten el precio actual de la pieza.</p>
+        <div>
+          <button id="syncLotsBtn" class="btn btn-warning">Sincronizar Precios de Lotes</button>
+        </div>
       </div>
     </section>
   </template>
@@ -1382,6 +1391,24 @@
         if(upErr) throw upErr;
       }
 
+      // =================================================
+      // 🔧 NOVA FUNÇÃO: Sincronizar Preços dos Lotes
+      // =================================================
+      async function syncLotPrices(){
+        const parts = await listParts(); // Pega todas as peças com preço atual
+        let count = 0;
+        
+        // Itera sobre cada peça e atualiza todos os seus lotes para usar o novo preço
+        for(const p of parts){
+           const { error } = await sb.from('part_lots')
+             .update({ costo_unit: Number(p.costo||0), precio_unit: Number(p.precio||0) })
+             .eq('org_id', orgId())
+             .eq('part_id', p.id);
+           if(!error) count++;
+        }
+        return count;
+      }
+
       return {
         listParts, getPartById, upsertPart, deletePart,
         listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
@@ -1391,7 +1418,9 @@
         // Finanzas
         listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
         backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics
+        recomputeMetrics,
+        // Nova função
+        syncLotPrices
       };
     })();
     
@@ -2549,6 +2578,9 @@ imagePicker.onchange = async ()=>{
       const orgSelect = document.getElementById('orgSelect');
       const orgNewBtn = document.getElementById('orgNewBtn');
 
+      // Botão de Sync
+      const syncLotsBtn = document.getElementById('syncLotsBtn');
+
       (async ()=>{
         const orgs = await Org.myOrgs();
         const cur = Org.get();
@@ -2599,6 +2631,22 @@ imagePicker.onchange = async ()=>{
         if(!confirm('Esto borrará TODAS las piezas, lotes, movimientos, historial y finanzas de la EMPRESA ACTUAL. ¿Continuar?')) return;
         try{ await DB.wipeCurrentOrg(); alert('Datos borrados de la empresa actual'); location.hash = '#/reportes'; await route(); }
         catch(e){ alert(e.message || 'No se pudo borrar'); }
+      });
+
+      // Lógica do Sync
+      syncLotsBtn.addEventListener('click', async ()=>{
+         if(!confirm('¿Seguro? Esto actualizará el precio de TODOS los lotes existentes para que coincidan con el precio actual del inventario.')) return;
+         try{
+            syncLotsBtn.disabled = true;
+            syncLotsBtn.textContent = 'Sincronizando...';
+            const count = await DB.syncLotPrices();
+            alert(`Éxito: ${count} piezas actualizadas en sus lotes.`);
+         }catch(err){
+            alert('Error: ' + err.message);
+         }finally{
+            syncLotsBtn.disabled = false;
+            syncLotsBtn.textContent = 'Sincronizar Precios de Lotes';
+         }
       });
     }
 
