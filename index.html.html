@@ -1057,8 +1057,9 @@
             pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
             almacen: p.almacen || '', tipo: 'salida', cantidad: q,
             referencia: referencia || '', usuario: usuarioEmail || '',
-            costo_unit: Number(lot.costo_unit||0),
-            precio_unit: Number(lot.precio_unit||0),
+            // FIX: Usar costo/precio atualizado do Inventario (p), e não do lote antigo (lot)
+            costo_unit: Number(p.costo||0),
+            precio_unit: Number(p.precio||0),
             lote_id: lot.id
           });
           if(insErr2) throw insErr2;
