@@ -594,8 +594,8 @@
             <thead><tr>
               <th>Fecha</th><th>Código</th><th>Nombre</th><th>Almacén</th><th>Tipo</th>
               <th class="num">Cantidad</th>
-              <th class="num">Costo (Bs)</th>
-              <th class="num">Precio (Bs)</th>
+              <th class="num">Costo Unit.</th>
+              <th class="num">Total (Bs)</th>
               <th>Referencia</th><th>Usuario</th><th></th>
             </tr></thead>
             <tbody id="movesTbody"></tbody>
@@ -2467,8 +2467,7 @@ imagePicker.onchange = async ()=>{
             <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
             <td class="num">${m.cantidad}</td>
             <td class="num">${fmtMoney(m.costo_unit)}</td>
-            <td class="num">${fmtMoney(m.precio_unit)}</td>
-            <td>${escapeHtml(m.referencia||'')}</td>
+            <td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td> <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
             <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
