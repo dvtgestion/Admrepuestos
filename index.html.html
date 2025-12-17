@@ -1746,11 +1746,17 @@
       finDesde.value = d0.toISOString().slice(0,10);
       finHasta.value = today.toISOString().slice(0,10);
 
-      // Sugerir categorías
+            // Sugerir categorías
       (async ()=>{
         try{
-          const cats = await DB.listFinCategories();
-          dlFinCats.innerHTML = cats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
+          // Pega todas as categorias do banco (mesmo as repetidas)
+          const rawCats = await DB.listFinCategories();
+          
+          // O COMANDO MÁGICO (Set):
+          // Remove as repetidas e os espaços extras antes de mostrar na tela
+          const uniqueCats = [...new Set(rawCats.map(c => String(c || '').trim()))].sort();
+          
+          dlFinCats.innerHTML = uniqueCats.map(c=>`<option value="${escapeHtml(c)}">`).join('');
         }catch(e){}
       })();
 
