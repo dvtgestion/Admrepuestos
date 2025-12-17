@@ -424,17 +424,18 @@
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
           <label class="field"><span>Almacén</span>
-            <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
-            <datalist id="dlAlmacenes"></datalist>
-            <div class="chips" id="almacenChips"></div>
-            <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
-          </label>
+  <input name="almacen" placeholder="Central, Sucursal 1…" list="dlAlmacenes" />
+  <datalist id="dlAlmacenes"></datalist>
+  <div class="chips" id="almacenChips"></div>
+  <span class="xs muted">Tip: puedes escribir libremente o hacer clic en un chip.</span>
+</label>
 
-          <label class="field"><span>Proveedor</span>
-            <input name="proveedor" placeholder="Proveedor principal" list="dlProveedores" />
-            <datalist id="dlProveedores"></datalist>
-            <div class="chips" id="proveedorChips"></div>
-          </label>
+<label class="field"><span>Proveedor</span>
+  <input name="proveedor" placeholder="Proveedor principal" list="dlProveedores" />
+  <datalist id="dlProveedores"></datalist>
+  <div class="chips" id="proveedorChips"></div>
+</label>
+
 
           <label class="field"><span>Tiempo de reposición (días)</span>
             <input name="leadTimeDias" type="number" min="0" step="1" value="0" />
@@ -1885,25 +1886,23 @@
         filterAlm.innerHTML = Array.from(set).sort().map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('');
       }
 
-      function buildSuggestors(){
-        const dlAlm = document.getElementById('dlAlmacenes');
+            function buildSuggestors(){
+        // Removemos as referências a dlAlm e dlProv
         const almChips = document.getElementById('almacenChips');
-        const dlProv = document.getElementById('dlProveedores');
         const provChips = document.getElementById('proveedorChips');
 
         const almacenes = Array.from(new Set(parts.map(p=> (p.almacen||'').trim()).filter(Boolean))).sort();
         const proveedores = Array.from(new Set(parts.map(p=> (p.proveedor||'').trim()).filter(Boolean))).sort();
 
-        dlAlm.innerHTML = almacenes.map(a=>`<option value="${escapeHtml(a)}">`).join('');
-        almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
+        // Não preenchemos mais innerHTML de datalists
 
-        dlProv.innerHTML = proveedores.map(p=>`<option value="${escapeHtml(p)}">`).join('');
-        /* FIX: remover variável indevida `fornecedores` */
+        almChips.innerHTML = almacenes.map(a=>`<button type="button" class="chip" data-v="${escapeHtml(a)}">${escapeHtml(a)}</button>`).join('');
         provChips.innerHTML = proveedores.map(p=>`<button type="button" class="chip" data-v="${escapeHtml(p)}">${escapeHtml(p)}</button>`).join('');
 
         almChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="almacen"]').value = b.dataset.v; };
         provChips.onclick = (e)=>{ const b = e.target.closest('.chip'); if(!b) return; form.querySelector('[name="proveedor"]').value = b.dataset.v; };
       }
+
 
       function matchesFilters(p){
         const q = (search.value||'').toLowerCase().trim();
