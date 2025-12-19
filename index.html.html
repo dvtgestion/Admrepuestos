@@ -831,18 +831,18 @@
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-            // ---- Partes ----
+                  // ---- Partes ----
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          // ADICIONADO: descripcion
+          // CORREÇÃO: 'descripcion' adicionada na leitura
           .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
         return (data||[]).map(r => ({
           id:r.id, codigo:r.codigo, nombre:r.nombre, 
-          descripcion: r.descripcion || '', // ADICIONADO
+          descripcion: r.descripcion || '', // CORREÇÃO: Mapeando
           categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
@@ -855,14 +855,14 @@
       async function getPartById(id){
         if(!id) return null;
         const { data, error } = await sb.from('parts')
-          // ADICIONADO: descripcion
+          // CORREÇÃO: 'descripcion' adicionada na leitura individual
           .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
         return {
           id:data.id, codigo:data.codigo, nombre:data.nombre, 
-          descripcion: data.descripcion || '', // ADICIONADO
+          descripcion: data.descripcion || '', // CORREÇÃO: Mapeando
           categoria:data.categoria||'',
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
           leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
@@ -871,6 +871,7 @@
           imageUrl:data.image_url || null, imagePath:data.image_path || null
         };
       }
+
 
       // Upsert de piezas
       async function upsertPart(part){
@@ -1015,11 +1016,14 @@
         if (e3) throw e3;
       }
 
-      // Upsert de piezas
+            // Upsert de piezas
       async function upsertPart(part){
         const base = {
           org_id: orgId(),
           codigo: part.codigo, nombre: part.nombre,
+          // AQUI ESTÁ A CORREÇÃO PARA SALVAR:
+          descripcion: part.descripcion || null, 
+          
           categoria: part.categoria || null, ubicacion: part.ubicacion || null,
           almacen: part.almacen || null, proveedor: part.proveedor || null,
           lead_time_dias: Number(part.leadTimeDias||0),
