@@ -1973,7 +1973,8 @@
       function matchesFilters(p){
         const q = (search.value||'').toLowerCase().trim();
         const alm = filterAlm.value || '(Todos)';
-        const tokens = [p.codigo, p.nombre, p.categoria, p.proveedor, p.almacen].map(x=>String(x||'').toLowerCase());
+                // Adicionei p.descripcion na lista de busca
+        const tokens = [p.codigo, p.nombre, p.descripcion, p.categoria, p.proveedor, p.almacen].map(x=>String(x||'').toLowerCase());
         const passQ = !q || tokens.some(t=>t.includes(q));
         const passA = alm === '(Todos)' || String(p.almacen||'').toLowerCase() === alm.toLowerCase();
         return passQ && passA;
