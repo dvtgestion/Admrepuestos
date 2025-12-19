@@ -450,10 +450,13 @@
               title="ceil(CD × días de seguridad)" />
           </label>
 
-          <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
+                    <label class="field"><span>Stock</span><input name="stock" type="number" min="0" step="1" value="0" required /></label>
           <label class="field"><span>Costo unitario (Bs)</span><input name="costo" type="number" min="0" step="0.01" value="0" /></label>
           <label class="field"><span>Precio de venta (Bs)</span><input name="precio" type="number" min="0" step="0.01" value="0" /></label>
 
+          <label class="field" style="grid-column:1/-1"><span>Descripción detallada</span>
+            <textarea name="descripcion" class="input" rows="2" placeholder="Detalles técnicos, compatibilidad..."></textarea>
+          </label>
           <div class="field" style="grid-column:1/-1">
             <details class="inline always-open" id="impCalcPiece" open>
               <summary>Calculadora de importación (BRL→Bs)</summary>
@@ -461,6 +464,7 @@
                 <label class="field"><span>Costo en R$</span>
                   <input id="impCostoBRL" inputmode="decimal" placeholder="Ej: 50" />
                 </label>
+
                 <label class="field"><span>Tasa (Bs por R$)</span>
                   <input id="impTasa" inputmode="decimal" placeholder="Ej: 2,40" />
                 </label>
@@ -827,16 +831,19 @@
     const DB = (() => {
       function orgId(){ const o = Org.get(); if(!o?.id) throw new Error('Empresa no seleccionada'); return o.id; }
 
-      // ---- Partes ----
+            // ---- Partes ----
       async function listParts(){
         const { data, error } = await sb
           .from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          // ADICIONADO: descripcion
+          .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
         return (data||[]).map(r => ({
-          id:r.id, codigo:r.codigo, nombre:r.nombre, categoria:r.categoria||'',
+          id:r.id, codigo:r.codigo, nombre:r.nombre, 
+          descripcion: r.descripcion || '', // ADICIONADO
+          categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
           leadTimeDias:Number(r.lead_time_dias||0), consumoDiario:Number(r.consumo_diario||0),
           stock:Number(r.stock||0), stockMin:Number(r.stock_min||0),
@@ -848,18 +855,67 @@
       async function getPartById(id){
         if(!id) return null;
         const { data, error } = await sb.from('parts')
-          .select('id, org_id, codigo, nombre, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          // ADICIONADO: descripcion
+          .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
         return {
-          id:data.id, codigo:data.codigo, nombre:data.nombre, categoria:data.categoria||'',
+          id:data.id, codigo:data.codigo, nombre:data.nombre, 
+          descripcion: data.descripcion || '', // ADICIONADO
+          categoria:data.categoria||'',
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
           leadTimeDias:Number(data.lead_time_dias||0), consumoDiario:Number(data.consumo_diario||0),
           stock:Number(data.stock||0), stockMin:Number(data.stock_min||0),
           costo:Number(data.costo||0), precio:Number(data.precio||0),
           imageUrl:data.image_url || null, imagePath:data.image_path || null
         };
+      }
+
+      // Upsert de piezas
+      async function upsertPart(part){
+        const base = {
+          org_id: orgId(),
+          codigo: part.codigo, nombre: part.nombre,
+          descripcion: part.descripcion || null, // ADICIONADO
+          categoria: part.categoria || null, ubicacion: part.ubicacion || null,
+          almacen: part.almacen || null, proveedor: part.proveedor || null,
+          lead_time_dias: Number(part.leadTimeDias||0),
+          costo: Number(part.costo||0), precio: Number(part.precio||0),
+        };
+
+        if(part.id){
+          const { error } = await sb.from('parts')
+            .update(base)
+            .eq('id', part.id).eq('org_id', orgId());
+          if(error) throw error;
+          return part.id;
+        }else{
+          // ... (o restante do 'else' continua igual, não precisa alterar a lógica de insert, pois 'base' já tem a descrição)
+          const initialQty = Number(part.stock || 0);
+          const rowInsert = {
+            ...base,
+            stock: 0,
+            consumo_diario: 0,
+            stock_min: 0,
+          };
+          const { data: created, error } = await sb
+            .from('parts')
+            .insert(rowInsert)
+            .select('id, codigo, nombre, almacen')
+            .maybeSingle();
+          if(error) throw error;
+
+          if(initialQty > 0){
+            await createInitialLotForPart({
+              partRow: created,
+              qty: initialQty,
+              costo: part.costo,
+              precio: part.precio
+            });
+          }
+          return created.id;
+        }
       }
 
       // ---- Lotes ----
@@ -1974,13 +2030,15 @@
 
           const tdAct = document.createElement('td');
           tdAct.className = 'num';
-          tdAct.innerHTML = `
+                    tdAct.innerHTML = `
             <div class="row-actions" style="justify-content:flex-end">
-              <button class="btn" data-act="img" data-id="${p.id}">Imagen</button>
+              <button class="btn" data-act="img" data-id="${p.id}" title="Imágenes">📷</button>
+              <button class="btn" data-act="desc" data-id="${p.id}" title="Descripción">📝</button>
               <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
               <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
             </div>
           `;
+
           tr.appendChild(tdAct);
 
           tbody.appendChild(tr);
@@ -2113,13 +2171,15 @@
         await renderList();
       }
 
-      form.addEventListener('submit', async (e)=>{
+            form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(form);
         const part = {
           id: fd.get('id') || undefined,
           codigo: String(fd.get('codigo')).trim(),
           nombre: String(fd.get('nombre')).trim(),
+          // NOVA LINHA AQUI: Captura a descrição do formulário
+          descripcion: String(fd.get('descripcion')||'').trim(), 
           categoria: String(fd.get('categoria')||'').trim(),
           ubicacion: String(fd.get('ubicacion')||'').trim(),
           almacen: String(fd.get('almacen')||'').trim(),
@@ -2198,11 +2258,12 @@
       });
       // *** FIM DO BLOCO NOVO ***
 
-      // Ações por fila (Imagen/Editar/Eliminar)
+           // Ações por fila (Imagen/Editar/Eliminar/Descricao)
       document.getElementById('partsTbody').addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-act]'); if(!btn) return;
         const id = btn.dataset.id; const act = btn.dataset.act;
 
+        // 1. AÇÃO: IMAGEM
         if(act === 'img'){
           const p = parts.find(x => x.id === id) || await DB.getPartById(id);
           if(!p){ alert('Pieza no encontrada'); return; }
@@ -2210,12 +2271,18 @@
           return;
         }
 
+        // 2. AÇÃO: EDITAR (Aqui está o PASSO B - Carregar a descrição)
         if(act === 'edit'){
           const p = parts.find(x => x.id === id) || await DB.getPartById(id); if(!p) return;
           formWrap.open = true; summary.textContent = `Editar: ${p.nombre}`;
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
           form.querySelector('input[name="nombre"]').value = p.nombre;
+          
+          // --- LINHA NOVA DO PASSO B ---
+          form.querySelector('textarea[name="descripcion"]').value = p.descripcion || ''; 
+          // -----------------------------
+
           form.querySelector('input[name="categoria"]').value = p.categoria || '';
           form.querySelector('input[name="ubicacion"]').value = p.ubicacion || '';
           form.querySelector('input[name="almacen"]').value = p.almacen || '';
@@ -2228,6 +2295,53 @@
           form.querySelector('input[name="precio"]').value = p.precio;
         }
 
+        // 3. AÇÃO: DESCRIÇÃO (Aqui está o PASSO C - Nova janela)
+        if(act === 'desc'){
+          const p = parts.find(x => x.id === id);
+          
+          // Cria modal simples dinamicamente
+          const overlay = document.createElement('div');
+          overlay.className = 'modal';
+          overlay.innerHTML = `
+            <div class="box" style="max-width:500px">
+              <header>
+                <h3>Descripción: ${escapeHtml(p.codigo)}</h3>
+                <button class="btn btn-ghost" id="closeDesc">✕</button>
+              </header>
+              <div style="padding:16px; display:flex; flex-direction:column; gap:12px">
+                <textarea id="descText" class="input" rows="8" placeholder="Escriba los detalles técnicos aquí...">${escapeHtml(p.descripcion||'')}</textarea>
+                <div class="row-actions" style="justify-content:flex-end">
+                  <button class="btn btn-primary" id="saveDesc">Guardar Descripción</button>
+                </div>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(overlay);
+
+          const close = () => overlay.remove();
+          overlay.querySelector('#closeDesc').onclick = close;
+          overlay.addEventListener('click', (ev)=>{ if(ev.target===overlay) close(); });
+
+          // Salvar apenas a descrição
+          overlay.querySelector('#saveDesc').onclick = async () => {
+             const newDesc = overlay.querySelector('#descText').value.trim();
+             try {
+               const pFull = await DB.getPartById(id); 
+               await DB.upsertPart({ ...pFull, descripcion: newDesc });
+               
+               // Atualiza lista local
+               const localPart = parts.find(x=>x.id===id);
+               if(localPart) localPart.descripcion = newDesc;
+               
+               alert('Descripción guardada');
+               close();
+             } catch(err) {
+               alert('Error: ' + err.message);
+             }
+          };
+        }
+
+        // 4. AÇÃO: ELIMINAR
         if(act === 'del'){
           const p = parts.find(x => x.id === id);
           if(!confirm('¿Eliminar esta pieza? Esto borrará también sus lotes y movimientos.')) return;
@@ -2238,53 +2352,6 @@
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
-
-     // handler único, aceita múltiplos arquivos e NÃO apaga imagens antigas
-imagePicker.onchange = async ()=>{
-  const files = Array.from(imagePicker.files || []);
-  if (!files.length) return;
-
-  // se, por alguma razão, o alvo não foi definido, apenas limpa e sai em silêncio
-  if (!imageTargetPart) {
-    imagePicker.value = '';
-    return;
-  }
-
-  try {
-    // Se a peça ainda não tem principal, tornamos a primeira enviada a principal.
-    // Caso já tenha, apenas subimos as demais como adicionais.
-    let setouPrincipalNestaRodada = false;
-
-    for (const f of files) {
-      const up = await DB.uploadPartImage(imageTargetPart.id, f);
-
-      // 1) Se não havia principal: define a primeira como principal
-      if (!imageTargetPart.imagePath && !setouPrincipalNestaRodada) {
-        await DB.trySetPartImage(imageTargetPart.id, up.url, up.path);
-        imageTargetPart.imagePath = up.path;
-        imageTargetPart.imageUrl  = up.url;
-        setouPrincipalNestaRodada = true;
-      }
-      // 2) Se já havia principal, só mantém a imagem extra no Storage
-      // (nenhuma ação adicional necessária aqui)
-    }
-
-    // Atualiza listagem e modal, se aberto
-    parts = await DB.listParts();
-    await paint();
-    if (typeof window.__imgModalRefresh === 'function') {
-      await window.__imgModalRefresh();
-    }
-
-    alert(files.length > 1 ? 'Imágenes subidas' : 'Imagen subida');
-  } catch (e) {
-    alert(e.message || 'No se pudo subir la(s) imagen(es)');
-  } finally {
-    imageTargetPart = null;
-    imagePicker.value = '';
-    window.__imgModalRefresh = null;
-  }
-};
 
       // Importador CSV (usa parseLocaleNumber p/ custo/preço)
       importCSV.addEventListener('change', ()=>{
