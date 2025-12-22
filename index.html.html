@@ -1944,6 +1944,47 @@
 
       const imagePicker = document.getElementById('imagePicker');
       let imageTargetPart = null;
+      
+            // =========================================================
+      // CORREÇÃO: OUVINTE PARA O UPLOAD DE IMAGEM
+      // =========================================================
+      imagePicker.addEventListener('change', async ()=>{
+        const file = imagePicker.files[0];
+        if(!file || !imageTargetPart) return;
+
+        try{
+          // Feedback visual simples
+          const prevTitle = document.title;
+          document.title = "Subiendo imagen...";
+
+          // 1. Subir ao Supabase Storage
+          const { path, url } = await DB.uploadPartImage(imageTargetPart.id, file);
+
+          // 2. Atualizar o registro da peça no Banco de Dados
+          await DB.trySetPartImage(imageTargetPart.id, url, path);
+
+          // 3. Atualizar o objeto localmente para ver a mudança na hora
+          imageTargetPart.imageUrl = url;
+          imageTargetPart.imagePath = path;
+
+          // 4. Atualizar a lista do modal (se estiver aberta)
+          if(window.__imgModalRefresh) await window.__imgModalRefresh();
+          
+          // 5. Atualizar a tabela principal (para aparecer a miniatura)
+          parts = await DB.listParts();
+          await paint();
+
+          alert('Imagen subida con éxito.');
+        } catch(err){
+          console.error(err);
+          alert('Error al subir imagen: ' + (err.message || err));
+        } finally {
+          imagePicker.value = ''; // Limpar para permitir selecionar a mesma foto se necessário
+          document.title = "Gestión de Inventario — Autopartes";
+        }
+      });
+      // =========================================================
+
 
       let parts = await DB.listParts();
 
