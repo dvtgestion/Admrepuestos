@@ -1121,7 +1121,12 @@
 
           // actualizar saldo de la pieza
           const { error: upErr } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) + q })
+            .update({ 
+  stock: Number(p.stock||0) + q,
+  costo: c,
+  precio: pr
+})
+
             .eq('id', p.id).eq('org_id', orgId());
           if(upErr) throw upErr;
 
