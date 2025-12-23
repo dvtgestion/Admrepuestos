@@ -1559,6 +1559,47 @@
         const video = document.getElementById('cam'); if(video){ video.srcObject = null; }
       }catch(e){}
     }
+   // ==========================================================
+// >>> CORREÇÃO: Variáveis globais para upload de imagens
+// ==========================================================
+let _globalImageTargetPart = null;
+let _globalImgModalRefresh = null;
+const globalImagePicker = document.getElementById('imagePicker');
+
+// Configurar o listener UMA ÚNICA VEZ (fora de renderInventario)
+globalImagePicker.addEventListener('change', async ()=>{
+  const file = globalImagePicker.files[0];
+  if(!file || !_globalImageTargetPart) return;
+
+  try{
+    const prevTitle = document.title;
+    document.title = "Subiendo imagen...";
+
+    // 1. Upload ao Storage
+    const { path, url } = await DB.uploadPartImage(_globalImageTargetPart.id, file);
+
+    // 2. Atualizar peça no banco
+    await DB.trySetPartImage(_globalImageTargetPart.id, url, path);
+
+    // 3. Atualizar objeto local
+    _globalImageTargetPart.imageUrl = url;
+    _globalImageTargetPart.imagePath = path;
+
+    // 4. Atualizar o modal aberto
+    if(_globalImgModalRefresh) await _globalImgModalRefresh();
+    
+    // 5. Atualizar a lista principal (opcional, força repaint visual se necessário)
+    // Se a variável 'parts' estiver acessível, poderíamos atualizar, mas o modal já resolve visualmente.
+
+    alert('Imagen subida con éxito.');
+  } catch(err){
+    console.error(err);
+    alert('Error al subir imagen: ' + (err.message || err));
+  } finally {
+    globalImagePicker.value = '';
+    document.title = "Gestión de Inventario — Autopartes";
+  }
+});
 
     async function init(){
       await Auth.init();
@@ -1950,44 +1991,7 @@
       const imagePicker = document.getElementById('imagePicker');
       let imageTargetPart = null;
       
-            // =========================================================
-      // CORREÇÃO: OUVINTE PARA O UPLOAD DE IMAGEM
-      // =========================================================
-      imagePicker.addEventListener('change', async ()=>{
-        const file = imagePicker.files[0];
-        if(!file || !imageTargetPart) return;
-
-        try{
-          // Feedback visual simples
-          const prevTitle = document.title;
-          document.title = "Subiendo imagen...";
-
-          // 1. Subir ao Supabase Storage
-          const { path, url } = await DB.uploadPartImage(imageTargetPart.id, file);
-
-          // 2. Atualizar o registro da peça no Banco de Dados
-          await DB.trySetPartImage(imageTargetPart.id, url, path);
-
-          // 3. Atualizar o objeto localmente para ver a mudança na hora
-          imageTargetPart.imageUrl = url;
-          imageTargetPart.imagePath = path;
-
-          // 4. Atualizar a lista do modal (se estiver aberta)
-          if(window.__imgModalRefresh) await window.__imgModalRefresh();
-          
-          // 5. Atualizar a tabela principal (para aparecer a miniatura)
-          parts = await DB.listParts();
-          await paint();
-
-          alert('Imagen subida con éxito.');
-        } catch(err){
-          console.error(err);
-          alert('Error al subir imagen: ' + (err.message || err));
-        } finally {
-          imagePicker.value = ''; // Limpar para permitir selecionar a mesma foto se necessário
-          document.title = "Gestión de Inventario — Autopartes";
-        }
-      });
+    
       // =========================================================
 
 
@@ -2213,11 +2217,15 @@
         });
 
         btnUpload.addEventListener('click', ()=>{
-          imageTargetPart = part;
-          window.__imgModalRefresh = renderList;
-          imagePicker.value = '';
-          imagePicker.click();
-        });
+  // Usa as novas variáveis globais
+  _globalImageTargetPart = part;
+  _globalImgModalRefresh = renderList;
+  
+  // Usa o novo seletor global
+  globalImagePicker.value = '';
+  globalImagePicker.click();
+});
+
 
         await renderList();
       }
