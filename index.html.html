@@ -2625,7 +2625,8 @@ globalImagePicker.addEventListener('change', async ()=>{
       toggleMoveFields();
 
       // ============================================================
-      // AQUI ESTÁ A CORREÇÃO PRINCIPAL
+            // ============================================================
+      // FUNÇÃO paintMoves ATUALIZADA (Busca em TODAS as colunas)
       // ============================================================
       function paintMoves(){
         tbody.innerHTML = '';
@@ -2636,24 +2637,32 @@ globalImagePicker.addEventListener('change', async ()=>{
         const fAlm = (almFilter.value || '(Todos)').toLowerCase();
 
         const filteredMoves = moves.filter(m => {
-          // 1. Filtro de Texto (Prioridade Máxima)
+          // 1. Filtro de Texto (Expandido para Usuario e Almacen)
           let textMatch = true;
           if (q) {
             const ref = String(m.referencia || '').toLowerCase();
             const cod = String(m.codigo || '').toLowerCase();
             const nom = String(m.nombre || '').toLowerCase();
-            // Se NÃO tiver o texto em nenhum campo, falha.
-            if (!ref.includes(q) && !cod.includes(q) && !nom.includes(q)) textMatch = false;
+            const usu = String(m.usuario || '').toLowerCase(); // NOVO: Busca no usuário
+            const alm = String(m.almacen || '').toLowerCase(); // NOVO: Busca no armazém
+
+            // Se NÃO encontrar o texto em NENHUM desses campos, falha.
+            if (!ref.includes(q) && 
+                !cod.includes(q) && 
+                !nom.includes(q) && 
+                !usu.includes(q) && 
+                !alm.includes(q)) {
+                textMatch = false;
+            }
           }
 
           // 2. Filtro de Data
-          // LÓGICA CORRIGIDA: Se tiver texto de busca (q), ignoramos a data.
-          // Se NÃO tiver texto, obedecemos a data rigorosamente.
+          // Se tiver busca (q), ignora a data. Se não tiver, respeita a data.
           let dateMatch = true;
           const dt = new Date(m.fecha);
           if(!q && (dt < dFrom || dt > dTo)) dateMatch = false; 
 
-          // 3. Filtro de Almacén (Adicionado)
+          // 3. Filtro de Almacén (Select)
           let almMatch = true;
           if(fAlm !== '(todos)' && String(m.almacen||'').toLowerCase() !== fAlm) almMatch = false;
 
@@ -2681,6 +2690,7 @@ globalImagePicker.addEventListener('change', async ()=>{
            tbody.innerHTML = '<tr><td colspan="11" class="muted" style="text-align:center; padding:20px">No se encontraron movimientos.</td></tr>';
         }
       }
+
 
       paintMoves();
       
