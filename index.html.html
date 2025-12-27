@@ -2445,16 +2445,17 @@ globalImagePicker.addEventListener('change', async ()=>{
       });
     }
 
-           // ---- Movimientos ----
+       // ---- Movimientos ----
     async function renderMovimientos(){
       const tpl = document.getElementById('tpl-movimientos').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
 
       const moveForm = document.getElementById('moveForm');
       
-      // Inputs ocultos e visíveis para seleção de peça
-      const partIdInput = document.getElementById('movePartId');      
-      const partDisplay = document.getElementById('movePartDisplay'); 
+      // --- ALTERADO: Pegamos os novos inputs em vez do select antigo ---
+      const partIdInput = document.getElementById('movePartId');      // Oculto (ID)
+      const partDisplay = document.getElementById('movePartDisplay'); // Visível (Texto)
+      // ----------------------------------------------------------------
 
       const tipoSel = document.getElementById('moveTipo');
       const entradaFields = document.getElementById('entradaFields');
@@ -2466,23 +2467,23 @@ globalImagePicker.addEventListener('change', async ()=>{
       const tbody = document.getElementById('movesTbody');
       const exportBtn = document.getElementById('exportCSV');
       const undoBtn = document.getElementById('undoLast');
-      
-      // Filtros
-      const almFilter = document.getElementById('moveAlmacenFilter'); 
-      const moveDesde = document.getElementById('moveDesde');
-      const moveHasta = document.getElementById('moveHasta');
-      const moveSearchFilter = document.getElementById('moveSearchFilter');
+      const almFilter = document.getElementById('moveAlmacenFilter'); // Filtro de armazém geral
 
       // Calculadora de saida
       const outCalcCosto = document.getElementById('outCalcCosto');
       const outCalcMargen = document.getElementById('outCalcMargen');
       const outCalcPrecio = document.getElementById('outCalcPrecio');
 
+      // Filtros da tabela
+      const moveDesde = document.getElementById('moveDesde');
+      const moveHasta = document.getElementById('moveHasta');
+      const moveSearchFilter = document.getElementById('moveSearchFilter');
+
       let parts = await DB.listParts();
-      let moves = await DB.listMoves(2000); // Carrega os últimos 2000 movimentos
+      let moves = await DB.listMoves(2000);
       let currentLots = []; 
 
-      // Datas padrão: últimos 30 dias
+      // Datas padrão
       const today = new Date();
       const d0 = new Date(Date.now() - 29*24*3600*1000);
       moveDesde.value = d0.toISOString().slice(0,10);
@@ -2496,14 +2497,21 @@ globalImagePicker.addEventListener('change', async ()=>{
       }
       buildAlmacenOptions();
 
-      // --- SELETOR DE PEÇAS (MODAL) ---
+      // --- NOVO: LÓGICA DO SELETOR DE PEÇAS (MODAL) ---
+      
+      // Função para abrir o modal de busca
       function openPartSelector(){
-        const selectedAlmacen = almFilter.value; 
+        const selectedAlmacen = almFilter.value; // Respeita o filtro de armazém selecionado lá em cima
+
+        // Cria o modal dinamicamente
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.innerHTML = `
           <div class="box" style="height:80vh; max-width:500px">
-            <header><h3>Buscar Pieza</h3><button class="btn btn-ghost" id="closePartSel">Cerrar</button></header>
+            <header>
+              <h3>Buscar Pieza</h3>
+              <button class="btn btn-ghost" id="closePartSel">Cerrar</button>
+            </header>
             <div style="padding:12px; border-bottom:1px solid var(--border)">
               <input type="text" id="partSearchInput" class="input" placeholder="Escriba código o nombre..." autocomplete="off">
             </div>
@@ -2516,7 +2524,7 @@ globalImagePicker.addEventListener('change', async ()=>{
         const list = modal.querySelector('#partResults');
         const closeBtn = modal.querySelector('#closePartSel');
 
-        // Filtra as peças candidato baseado no armazém selecionado no topo
+        // Filtra as peças baseado no armazém selecionado no topo
         let candidates = parts;
         if(selectedAlmacen !== '(Todos)'){
            candidates = parts.filter(p => String(p.almacen||'').toLowerCase() === selectedAlmacen.toLowerCase());
@@ -2526,11 +2534,12 @@ globalImagePicker.addEventListener('change', async ()=>{
           list.innerHTML = '';
           const q = query.toLowerCase().trim();
           
+          // Filtra: se busca estiver vazia, mostra tudo (limitado a 50). Se tiver texto, filtra.
           const matches = candidates.filter(p => {
              if(!q) return true;
              const text = `${p.codigo} ${p.nombre} ${p.almacen||''}`.toLowerCase();
-             return text.includes(q);
-          }).slice(0, 100);
+             return text.includes(q); // Busca em qualquer parte do texto (incluindo espaço)
+          }).slice(0, 100); // Limita para não travar se tiver mil peças
 
           if(matches.length === 0){
             list.innerHTML = '<div style="padding:16px; text-align:center; color:gray">No se encontraron piezas.</div>';
@@ -2540,44 +2549,63 @@ globalImagePicker.addEventListener('change', async ()=>{
           matches.forEach(p => {
             const el = document.createElement('div');
             el.className = 'search-item';
-            el.innerHTML = `<strong>${escapeHtml(p.codigo)} — ${escapeHtml(p.nombre)}</strong><span>Stock: ${p.stock} · ${p.almacen || 'Sin almacén'} · ${fmtMoney(p.precio)}</span>`;
+            el.innerHTML = `
+               <strong>${escapeHtml(p.codigo)} — ${escapeHtml(p.nombre)}</strong>
+               <span>Stock: ${p.stock} · ${p.almacen || 'Sin almacén'} · ${fmtMoney(p.precio)}</span>
+            `;
             el.onclick = () => selectPart(p);
             list.appendChild(el);
           });
         }
 
         function selectPart(p){
+          // Atualiza os inputs do formulário principal
           partIdInput.value = p.id;
           partDisplay.value = `${p.codigo} — ${p.nombre}`;
+          
+          // Fecha modal
           modal.remove();
+
+          // Se for saída, carrega os lotes
           if(tipoSel.value === 'salida') fillMoveLots();
         }
 
-        input.focus();
+        // Eventos do modal
+        input.focus(); // Foca direto no input para digitar
         input.addEventListener('input', (e) => renderList(e.target.value));
         closeBtn.onclick = () => modal.remove();
+        
+        // Renderiza lista inicial
         renderList('');
       }
 
+      // Ao clicar no input de "Peça", abre o seletor
       partDisplay.addEventListener('click', openPartSelector);
       
+      // Ao mudar o filtro de armazém lá em cima, limpa a seleção atual para evitar erros
       almFilter.addEventListener('change', ()=>{
          partIdInput.value = '';
          partDisplay.value = '';
          salidaLoteSel.innerHTML = '';
          salidaLotesInfo.textContent = '';
-         paintMoves(); // Atualiza a tabela ao mudar o filtro de armazém
       });
 
-      // --- Lógica de Lotes ---
+      // ----------------------------------------------------
+
       async function fillMoveLots(){
         if(tipoSel.value !== 'salida'){ salidaFields.style.display='none'; return; }
-        const partId = partIdInput.value;
-        outCalcCosto.value = ''; outCalcMargen.value = ''; outCalcPrecio.value = '';
+        
+        const partId = partIdInput.value; // Pega do hidden input
+        
+        // Reset calculadora
+        outCalcCosto.value = ''; 
+        outCalcMargen.value = ''; 
+        outCalcPrecio.value = '';
         currentLots = [];
 
         if(!partId){ salidaLoteSel.innerHTML = ''; salidaLotesInfo.textContent = ''; return; }
         
+        // Carrega lotes
         const lots = await DB.listLots(partId);
         currentLots = lots;
 
@@ -2586,9 +2614,12 @@ globalImagePicker.addEventListener('change', async ()=>{
           salidaLotesInfo.textContent = 'Sin lotes disponibles para esta pieza.';
           return;
         }
-        salidaLoteSel.innerHTML = lots.map((l,idx)=>`<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`).join('');
+        salidaLoteSel.innerHTML = lots.map((l,idx)=>{
+          return `<option value="${l.id}">Lote ${idx+1} — Disp: ${l.qty} — C: ${fmtMoney(l.costo_unit)} — P: ${fmtMoney(l.precio_unit)}</option>`;
+        }).join('');
         const totalDisp = lots.reduce((s,x)=>s+Number(x.qty||0),0);
         salidaLotesInfo.textContent = `Lotes: ${lots.length} | Disponible total: ${totalDisp}`;
+        
         updateOutCalcBase();
       }
 
@@ -2603,70 +2634,62 @@ globalImagePicker.addEventListener('change', async ()=>{
             if(cost > 0) {
                 const mg = ((price / cost) - 1) * 100;
                 outCalcMargen.value = mg.toFixed(2);
-            } else { outCalcMargen.value = '0'; }
+            } else {
+                outCalcMargen.value = '0';
+            }
         }
       }
 
       salidaLoteSel.addEventListener('change', updateOutCalcBase);
+
       outCalcMargen.addEventListener('input', ()=>{
-         const cost = parseFloat(outCalcCosto.value); const margin = parseFloat(outCalcMargen.value);
-         if(!isNaN(cost) && !isNaN(margin)){ outCalcPrecio.value = (cost * (1 + (margin/100))).toFixed(2); }
+         const cost = parseFloat(outCalcCosto.value);
+         const margin = parseFloat(outCalcMargen.value);
+         if(!isNaN(cost) && !isNaN(margin)){
+             const price = cost * (1 + (margin/100));
+             outCalcPrecio.value = price.toFixed(2);
+         }
       });
+
       outCalcPrecio.addEventListener('input', ()=>{
-          const cost = parseFloat(outCalcCosto.value); const price = parseFloat(outCalcPrecio.value);
-          if(!isNaN(cost) && cost > 0 && !isNaN(price)){ outCalcMargen.value = (((price / cost) - 1) * 100).toFixed(2); }
+          const cost = parseFloat(outCalcCosto.value);
+          const price = parseFloat(outCalcPrecio.value);
+          if(!isNaN(cost) && cost > 0 && !isNaN(price)){
+              const margin = ((price / cost) - 1) * 100;
+              outCalcMargen.value = margin.toFixed(2);
+          }
       });
+
 
       function toggleMoveFields(){
         const t = tipoSel.value;
-        if(t==='entrada'){ entradaFields.style.display = ''; salidaFields.style.display = 'none'; }
-        else{ entradaFields.style.display = 'none'; salidaFields.style.display = ''; fillMoveLots(); }
+        if(t==='entrada'){
+          entradaFields.style.display = '';
+          salidaFields.style.display = 'none';
+        }else{
+          entradaFields.style.display = 'none';
+          salidaFields.style.display = '';
+          fillMoveLots();
+        }
       }
       toggleMoveFields();
 
-      // ============================================================
-            // ============================================================
-      // FUNÇÃO paintMoves ATUALIZADA (Busca em TODAS as colunas)
-      // ============================================================
       function paintMoves(){
         tbody.innerHTML = '';
-        
         const dFrom = new Date(moveDesde.value + 'T00:00:00');
         const dTo   = new Date(moveHasta.value + 'T23:59:59');
         const q = (moveSearchFilter.value || '').trim().toLowerCase();
-        const fAlm = (almFilter.value || '(Todos)').toLowerCase();
-
+        
         const filteredMoves = moves.filter(m => {
-          // 1. Filtro de Texto (Expandido para Usuario e Almacen)
-          let textMatch = true;
-          if (q) {
+          const dt = new Date(m.fecha);
+          if(dt < dFrom || dt > dTo) return false;
+          if (q) { 
             const ref = String(m.referencia || '').toLowerCase();
             const cod = String(m.codigo || '').toLowerCase();
             const nom = String(m.nombre || '').toLowerCase();
-            const usu = String(m.usuario || '').toLowerCase(); // NOVO: Busca no usuário
-            const alm = String(m.almacen || '').toLowerCase(); // NOVO: Busca no armazém
-
-            // Se NÃO encontrar o texto em NENHUM desses campos, falha.
-            if (!ref.includes(q) && 
-                !cod.includes(q) && 
-                !nom.includes(q) && 
-                !usu.includes(q) && 
-                !alm.includes(q)) {
-                textMatch = false;
-            }
+            if (!ref.includes(q) && !cod.includes(q) && !nom.includes(q)) return false;
           }
-
-          // 2. Filtro de Data
-          // Se tiver busca (q), ignora a data. Se não tiver, respeita a data.
-          let dateMatch = true;
-          const dt = new Date(m.fecha);
-          if(!q && (dt < dFrom || dt > dTo)) dateMatch = false; 
-
-          // 3. Filtro de Almacén (Select)
-          let almMatch = true;
-          if(fAlm !== '(todos)' && String(m.almacen||'').toLowerCase() !== fAlm) almMatch = false;
-
-          return textMatch && dateMatch && almMatch;
+          return true;
         });
 
         filteredMoves.forEach(m=>{
@@ -2679,33 +2702,26 @@ globalImagePicker.addEventListener('change', async ()=>{
             <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
             <td class="num">${m.cantidad}</td>
             <td class="num">${fmtMoney(m.costo_unit)}</td>
-            <td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td> 
-            <td>${escapeHtml(m.referencia||'')}</td>
+            <td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td> <td>${escapeHtml(m.referencia||'')}</td>
             <td>${escapeHtml(m.usuario||'')}</td>
             <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
           tbody.appendChild(tr);
         });
-        
-        if(filteredMoves.length === 0){
-           tbody.innerHTML = '<tr><td colspan="11" class="muted" style="text-align:center; padding:20px">No se encontraron movimientos.</td></tr>';
-        }
       }
-
-
       paintMoves();
       
-      // Listeners
       moveDesde.addEventListener('change', paintMoves);
       moveHasta.addEventListener('change', paintMoves);
       moveSearchFilter.addEventListener('input', paintMoves);
-      almFilter.addEventListener('change', paintMoves); 
       
       tipoSel.addEventListener('change', toggleMoveFields);
 
       moveForm.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const fd = new FormData(moveForm);
+        // --- ALTERADO: Usar o valor do input hidden ---
         const piezaId = partIdInput.value; 
+        // ----------------------------------------------
         const tipo = fd.get('tipo');
         const cantidad = Number(fd.get('cantidad')); 
         const referencia = String(fd.get('referencia')||'').trim();
@@ -2719,12 +2735,14 @@ globalImagePicker.addEventListener('change', async ()=>{
           if(tipo==='entrada'){
             payload.costoUnit = (entradaCosto.value !== '') ? Number(entradaCosto.value) : null;
             payload.precioUnit = (entradaPrecio.value !== '') ? Number(entradaPrecio.value) : null;
-          }else{ 
+          }else{ // salida
             const loteId = salidaLoteSel.value;
             if(!loteId){ alert('Seleccione un lote para la salida'); return; }
             payload.loteId = loteId;
             const calcPrice = parseFloat(outCalcPrecio.value);
-            if(!isNaN(calcPrice) && calcPrice >= 0){ payload.precioUnit = calcPrice; }
+            if(!isNaN(calcPrice) && calcPrice >= 0){
+                payload.precioUnit = calcPrice;
+            }
           }
 
           await DB.applyMovement(payload);
@@ -2732,8 +2750,13 @@ globalImagePicker.addEventListener('change', async ()=>{
           moves = await DB.listMoves(2000); 
           paintMoves(); 
           alert('Movimiento registrado');
+          
+          // Reset
           moveForm.reset(); 
-          partIdInput.value = ''; partDisplay.value = '';
+          // Limpa inputs manuais da peça
+          partIdInput.value = '';
+          partDisplay.value = '';
+          
           toggleMoveFields();
         }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
       });
@@ -2741,9 +2764,10 @@ globalImagePicker.addEventListener('change', async ()=>{
       tbody.addEventListener('click', async (e)=>{
         const btn = e.target.closest('button[data-undo]');
         if(!btn) return;
+        const id = btn.getAttribute('data-undo');
         if(!confirm('¿Deshacer este movimiento?')) return;
         try{
-          await DB.undoMovementById(btn.getAttribute('data-undo'));
+          await DB.undoMovementById(id);
           moves = await DB.listMoves(2000);
           paintMoves();
           alert('Movimiento deshecho');
@@ -2759,12 +2783,20 @@ globalImagePicker.addEventListener('change', async ()=>{
         const p = await DB.listParts();
         const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
         const rows = p.map(pt=>{
-          const row = {id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria, almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias, consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock, stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio};
+          const row = {
+            id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria,
+            almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias,
+            consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock,
+            stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio
+          };
           return head.map(k=>csvCell(row[k] ?? '')).join(',');
         });
-        const blob = new Blob([head.join(',') + '\n' + rows.join('\n')], {type:'text/csv;charset=utf-8;'});
+        const csv = head.join(',') + '\n' + rows.join('\n');
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
         const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = `inventario_${new Date().toISOString().slice(0,10)}.csv`;
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
+        a.href = url; a.download = `inventario_${stamp}.csv`;
         document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       });
 
@@ -2795,7 +2827,10 @@ globalImagePicker.addEventListener('change', async ()=>{
       }
       if(imp2Calcular) imp2Calcular.addEventListener('click', runImpCalc2);
       if(imp2Limpiar) imp2Limpiar.addEventListener('click', ()=>{
-        if(imp2CostoBRL) imp2CostoBRL.value = ''; if(imp2LogisticaBs) imp2LogisticaBs.value = ''; if(imp2Margen) imp2Margen.value = ''; if(imp2Preview) imp2Preview.textContent = '';
+        if(imp2CostoBRL) imp2CostoBRL.value = '';
+        if(imp2LogisticaBs) imp2LogisticaBs.value = '';
+        if(imp2Margen) imp2Margen.value = '';
+        if(imp2Preview) imp2Preview.textContent = '';
       });
     }
 
