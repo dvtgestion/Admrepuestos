@@ -676,11 +676,22 @@
       </div>
 
       <div class="card" style="display:flex; flex-direction:column; gap:8px;">
-        <h3>Herramientas de Corrección</h3>
-        <p class="muted xs">Si actualizó precios en el inventario pero los movimientos de salida siguen mostrando precios antiguos, use este botón para forzar que todos los lotes existentes adopten el precio actual de la pieza.</p>
-        <div>
-          <button id="syncLotsBtn" class="btn btn-warning">Sincronizar Precios de Lotes</button>
-        </div>
+  <h3>Herramientas de Corrección</h3>
+
+  <p class="muted xs">
+    1) “Reparar lotes” restaura el costo/precio de cada lote usando movimientos de ENTRADA (lote_id).<br>
+    2) “Actualizar base” actualiza costo/precio BASE de la pieza usando el ÚLTIMO lote (no cambia los lotes).
+  </p>
+
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    <button id="repairLotsBtn" class="btn btn-warning">Reparar lotes desde entradas</button>
+    <button id="syncBaseBtn" class="btn btn-primary">Actualizar costo/precio base (último lote)</button>
+  </div>
+
+  <p class="muted xs">
+    <strong>Orden recomendado:</strong> primero “Reparar lotes…” (una sola vez) y después “Actualizar costo/precio base…”.
+  </p>
+</div>
       </div>
     </section>
   </template>
@@ -872,52 +883,6 @@
         };
       }
 
-
-      // Upsert de piezas
-      async function upsertPart(part){
-        const base = {
-          org_id: orgId(),
-          codigo: part.codigo, nombre: part.nombre,
-          descripcion: part.descripcion || null, // ADICIONADO
-          categoria: part.categoria || null, ubicacion: part.ubicacion || null,
-          almacen: part.almacen || null, proveedor: part.proveedor || null,
-          lead_time_dias: Number(part.leadTimeDias||0),
-          costo: Number(part.costo||0), precio: Number(part.precio||0),
-        };
-
-        if(part.id){
-          const { error } = await sb.from('parts')
-            .update(base)
-            .eq('id', part.id).eq('org_id', orgId());
-          if(error) throw error;
-          return part.id;
-        }else{
-          // ... (o restante do 'else' continua igual, não precisa alterar a lógica de insert, pois 'base' já tem a descrição)
-          const initialQty = Number(part.stock || 0);
-          const rowInsert = {
-            ...base,
-            stock: 0,
-            consumo_diario: 0,
-            stock_min: 0,
-          };
-          const { data: created, error } = await sb
-            .from('parts')
-            .insert(rowInsert)
-            .select('id, codigo, nombre, almacen')
-            .maybeSingle();
-          if(error) throw error;
-
-          if(initialQty > 0){
-            await createInitialLotForPart({
-              partRow: created,
-              qty: initialQty,
-              costo: part.costo,
-              precio: part.precio
-            });
-          }
-          return created.id;
-        }
-      }
 
       // ---- Lotes ----
       async function listLots(partId){
@@ -1501,38 +1466,94 @@
         if(upErr) throw upErr;
       }
 
-      // =================================================
-      // 🔧 NOVA FUNÇÃO: Sincronizar Preços dos Lotes
-      // =================================================
-      async function syncLotPrices(){
-        const parts = await listParts(); // Pega todas as peças com preço atual
-        let count = 0;
-        
-        // Itera sobre cada peça e atualiza todos os seus lotes para usar o novo preço
-        for(const p of parts){
-           const { error } = await sb.from('part_lots')
-             .update({ costo_unit: Number(p.costo||0), precio_unit: Number(p.precio||0) })
-             .eq('org_id', orgId())
-             .eq('part_id', p.id);
-           if(!error) count++;
-        }
-        return count;
-      }
+      // ======================================================
+// ✅ FERRAMENTAS DE CORREÇÃO (OPÇÃO A)
+// ======================================================
+      // ======================================================
+// ✅ CORREÇÃO 1: Restaurar preços dos LOTES usando
+// movimentos de ENTRADA (cada entrada tem lote_id)
+// ======================================================
+async function repairLotsFromEntradaMovements(){
+  const { data: moves, error } = await sb.from('movements')
+    .select('lote_id, costo_unit, precio_unit')
+    .eq('org_id', orgId())
+    .eq('tipo', 'entrada')
+    .not('lote_id', 'is', null)
+    .order('fecha', { ascending: true })
+    .limit(50000);
+
+  if(error) throw error;
+
+  let updated = 0;
+  for(const m of (moves || [])){
+    const { error: e2 } = await sb.from('part_lots')
+      .update({
+        costo_unit: Number(m.costo_unit || 0),
+        precio_unit: Number(m.precio_unit || 0),
+      })
+      .eq('org_id', orgId())
+      .eq('id', m.lote_id);
+
+    if(e2) throw e2;
+    updated++;
+  }
+
+  return updated;
+}
+
+// ======================================================
+// ✅ CORREÇÃO 2: Atualizar custo/preço BASE da peça
+// usando o ÚLTIMO LOTE (não mexe nos lotes)
+// ======================================================
+async function syncPartBaseFromLastLot(){
+  const parts = await listParts();
+  let count = 0;
+
+  for(const p of parts){
+    const { data: lot, error } = await sb.from('part_lots')
+      .select('costo_unit, precio_unit')
+      .eq('org_id', orgId())
+      .eq('part_id', p.id)
+      .gt('qty', 0)
+      .order('id', { ascending: false }) // último lote
+      .limit(1)
+      .maybeSingle();
+
+    if(error) throw error;
+    if(!lot) continue;
+
+    const { error: e2 } = await sb.from('parts')
+      .update({
+        costo: Number(lot.costo_unit || 0),
+        precio: Number(lot.precio_unit || 0),
+      })
+      .eq('org_id', orgId())
+      .eq('id', p.id);
+
+    if(e2) throw e2;
+    count++;
+  }
+
+  return count;
+}
 
       return {
-        listParts, getPartById, upsertPart, deletePart,
-        listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
-        listLots, listAllLots, getInventoryValueByLots,
-        addPriceHistory, listPriceHistory,
-        uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
-        // Finanzas
-        listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
-        backupAll, restoreAll, wipeCurrentOrg,
-        recomputeMetrics,
-        // Nova função
-        syncLotPrices
-      };
-    })();
+  listParts, getPartById, upsertPart, deletePart,
+  listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
+  listLots, listAllLots, getInventoryValueByLots,
+  addPriceHistory, listPriceHistory,
+  uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
+  // Finanzas
+  listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
+  backupAll, restoreAll, wipeCurrentOrg,
+  recomputeMetrics,
+
+  // ✅ NOVAS FUNÇÕES (PARTE 3.2)
+  repairLotsFromEntradaMovements,
+  syncPartBaseFromLastLot
+};
+})();
+        
     
     /* ===== App / Navegação ===== */
     const appEl = document.getElementById('app');
@@ -2898,24 +2919,43 @@ globalImagePicker.addEventListener('change', async ()=>{
       const orgSelect = document.getElementById('orgSelect');
       const orgNewBtn = document.getElementById('orgNewBtn');
 
-      // Botão de Sync
-      const syncLotsBtn = document.getElementById('syncLotsBtn');
+      // Botões de correção
+const repairLotsBtn = document.getElementById('repairLotsBtn');
+const syncBaseBtn   = document.getElementById('syncBaseBtn');
 
-      (async ()=>{
-        const orgs = await Org.myOrgs();
-        const cur = Org.get();
-        orgName.textContent = cur?.nombre || '—';
-        orgSelect.innerHTML = orgs.map(o => `<option value="${o.id}" ${o.id===cur.id?'selected':''}>${escapeHtml(o.nombre)}</option>`).join('');
-      })();
+if(repairLotsBtn){
+  repairLotsBtn.addEventListener('click', async ()=>{
+    if(!confirm('¿Seguro? Esto intentará restaurar el costo/precio de cada lote usando los movimientos de ENTRADA.')) return;
+    try{
+      repairLotsBtn.disabled = true;
+      repairLotsBtn.textContent = 'Reparando...';
+      const updated = await DB.repairLotsFromEntradaMovements();
+      alert(`Éxito: ${updated} lotes restaurados desde movimientos de entrada.`);
+    }catch(err){
+      alert('Error: ' + (err.message || err));
+    }finally{
+      repairLotsBtn.disabled = false;
+      repairLotsBtn.textContent = 'Reparar lotes desde entradas';
+    }
+  });
+}
 
-      orgSelect.addEventListener('change', async ()=>{
-        const id = orgSelect.value;
-        const { data, error } = await sb.from('orgs').select('id,nombre').eq('id', id).maybeSingle();
-        if(error || !data){ alert('No se pudo cambiar de empresa'); return; }
-        Org.set(data);
-        alert('Empresa cambiada a: ' + data.nombre);
-        location.hash = '#/reportes'; await route();
-      });
+if(syncBaseBtn){
+  syncBaseBtn.addEventListener('click', async ()=>{
+    if(!confirm('¿Seguro? Esto actualizará el costo/precio BASE de cada pieza usando el ÚLTIMO lote (no cambia los lotes).')) return;
+    try{
+      syncBaseBtn.disabled = true;
+      syncBaseBtn.textContent = 'Actualizando...';
+      const count = await DB.syncPartBaseFromLastLot();
+      alert(`Éxito: ${count} piezas actualizadas con costo/precio base del último lote.`);
+    }catch(err){
+      alert('Error: ' + (err.message || err));
+    }finally{
+      syncBaseBtn.disabled = false;
+      syncBaseBtn.textContent = 'Actualizar costo/precio base (último lote)';
+    }
+  });
+}
 
       orgNewBtn.addEventListener('click', async ()=>{
         const nombre = prompt('Nombre de la nueva empresa:'); if(!nombre) return;
@@ -2952,23 +2992,7 @@ globalImagePicker.addEventListener('change', async ()=>{
         try{ await DB.wipeCurrentOrg(); alert('Datos borrados de la empresa actual'); location.hash = '#/reportes'; await route(); }
         catch(e){ alert(e.message || 'No se pudo borrar'); }
       });
-
-      // Lógica do Sync
-      syncLotsBtn.addEventListener('click', async ()=>{
-         if(!confirm('¿Seguro? Esto actualizará el precio de TODOS los lotes existentes para que coincidan con el precio actual del inventario.')) return;
-         try{
-            syncLotsBtn.disabled = true;
-            syncLotsBtn.textContent = 'Sincronizando...';
-            const count = await DB.syncLotPrices();
-            alert(`Éxito: ${count} piezas actualizadas en sus lotes.`);
-         }catch(err){
-            alert('Error: ' + err.message);
-         }finally{
-            syncLotsBtn.disabled = false;
-            syncLotsBtn.textContent = 'Sincronizar Precios de Lotes';
-         }
-      });
-    }
+	}
 
     // ---- Historial ----
     async function renderHistorial(){
