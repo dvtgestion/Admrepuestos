@@ -1138,14 +1138,14 @@
 
           // registrar el movimiento
           const { error: insErr2 } = await sb.from('movements').insert({
-            org_id: orgId(),
-            pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
-            almacen: p.almacen || '', tipo: 'salida', cantidad: q,
-            referencia: referencia || '', usuario: usuarioEmail || '',
-            costo_unit: Number(p.costo||0), // Mantém custo base do inventário
-            precio_unit: finalPrice,        // Usa o preço calculado (com desconto/margem)
-            lote_id: lot.id
-          });
+  org_id: orgId(),
+  pieza_id: p.id, codigo: p.codigo, nombre: p.nombre,
+  almacen: p.almacen || '', tipo: 'salida', cantidad: q,
+  referencia: referencia || '', usuario: usuarioEmail || '',
+  costo_unit: Number(lot.costo_unit || 0),
+  precio_unit: finalPrice,
+  lote_id: lot.id
+});
           if(insErr2) throw insErr2;
         }
 
