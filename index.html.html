@@ -2605,11 +2605,12 @@ globalImagePicker.addEventListener('change', async ()=>{
       
       // Ao mudar o filtro de armazém lá em cima, limpa a seleção atual para evitar erros
       almFilter.addEventListener('change', ()=>{
-         partIdInput.value = '';
-         partDisplay.value = '';
-         salidaLoteSel.innerHTML = '';
-         salidaLotesInfo.textContent = '';
-      });
+   partIdInput.value = '';
+   partDisplay.value = '';
+   salidaLoteSel.innerHTML = '';
+   salidaLotesInfo.textContent = '';
+   paintMoves();
+});
 
       // ----------------------------------------------------
 
@@ -2702,16 +2703,26 @@ globalImagePicker.addEventListener('change', async ()=>{
         const q = (moveSearchFilter.value || '').trim().toLowerCase();
         
         const filteredMoves = moves.filter(m => {
-          const dt = new Date(m.fecha);
-          if(dt < dFrom || dt > dTo) return false;
-          if (q) { 
-            const ref = String(m.referencia || '').toLowerCase();
-            const cod = String(m.codigo || '').toLowerCase();
-            const nom = String(m.nombre || '').toLowerCase();
-            if (!ref.includes(q) && !cod.includes(q) && !nom.includes(q)) return false;
-          }
-          return true;
-        });
+  const dt = new Date(m.fecha);
+  if (dt < dFrom || dt > dTo) return false;
+
+  const selectedAlmacen = almFilter.value || '(Todos)';
+  if (
+    selectedAlmacen !== '(Todos)' &&
+    String(m.almacen || '').toLowerCase() !== selectedAlmacen.toLowerCase()
+  ) {
+    return false;
+  }
+
+  if (q) {
+    const ref = String(m.referencia || '').toLowerCase();
+    const cod = String(m.codigo || '').toLowerCase();
+    const nom = String(m.nombre || '').toLowerCase();
+    if (!ref.includes(q) && !cod.includes(q) && !nom.includes(q)) return false;
+  }
+
+  return true;
+});
 
         filteredMoves.forEach(m=>{
           const tr = document.createElement('tr');
