@@ -402,7 +402,7 @@
         <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas, lotes y estado de stock.</p></div>
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
-          <input id="searchParts" class="input" placeholder="Buscar por código, nombre o categoría…" />
+          <input id="searchParts" class="input" placeholder="Buscar por código, nombre o motor…" />
           <label class="btn" for="importCSV">Importar CSV</label>
           <input id="importCSV" type="file" accept=".csv" style="display:none" />
           <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
@@ -420,7 +420,7 @@
             <video id="cam" playsinline></video>
           </label>
           <label class="field"><span>Nombre</span><input name="nombre" required placeholder="Filtro de aceite" /></label>
-          <label class="field"><span>Categoría</span><input name="categoria" placeholder="Motor, Suspensión, Frenos…" /></label>
+          <label class="field"><span>MOTOR</span><input name="categoria" placeholder="Escriba el motor…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
           <label class="field"><span>Almacén</span>
@@ -497,7 +497,7 @@
         <div class="table-wrap">
           <table class="table compact" id="partsTable">
             <thead><tr>
-              <th>Código</th><th>Nombre</th><th>Categoría</th><th>Almacén</th><th>Ubicación</th>
+              <th>Código</th><th>Nombre</th><th>MOTOR</th><th>Almacén</th><th>Ubicación</th>
               <th class="num">Stock</th><th class="num">Mín</th>
               <th class="num">Costo base</th><th class="num">Precio base</th>
               <th>Lotes</th><th></th>
