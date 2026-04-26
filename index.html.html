@@ -1118,20 +1118,26 @@
           if(!lot) throw new Error('Lote no encontrado');
           if(Number(lot.qty||0) < q) throw new Error('Cantidad supera el disponible del lote');
 
-          // decrementar lote
-          const { error: updLot } = await sb.from('part_lots')
-            .update({ qty: Number(lot.qty||0) - q })
-            .eq('org_id', orgId())
-            .eq('id', lot.id);
-          if(updLot) throw updLot;
+          // validar stock antes de alterar qualquer coisa no banco
+if(Number(p.stock || 0) < q) {
+  throw new Error('Stock insuficiente para la salida');
+}
 
-          // actualizar saldo de la pieza
-          if(Number(p.stock||0) < q) throw new Error('Stock insuficiente para la salida');
-          const { error: upErr2 } = await sb.from('parts')
-            .update({ stock: Number(p.stock||0) - q })
-            .eq('org_id', orgId())
-            .eq('id', p.id);
-          if(upErr2) throw upErr2;
+// decrementar lote
+const { error: updLot } = await sb.from('part_lots')
+  .update({ qty: Number(lot.qty || 0) - q })
+  .eq('org_id', orgId())
+  .eq('id', lot.id);
+
+if(updLot) throw updLot;
+
+// actualizar saldo de la pieza
+const { error: upErr2 } = await sb.from('parts')
+  .update({ stock: Number(p.stock || 0) - q })
+  .eq('org_id', orgId())
+  .eq('id', p.id);
+
+if(upErr2) throw upErr2;
 
           // MODIFICAÇÃO: Usar o preço unitário passado no formulário (se houver),
           // caso contrário, usa o preço padrão da peça.
