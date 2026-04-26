@@ -1328,7 +1328,9 @@ if(upErr2) throw upErr2;
 
         const q = Number(m.cantidad||0);
         if(!(q>0)) throw new Error('Cantidad inválida');
-
+				if(m.tipo === 'ajuste'){
+  throw new Error('Los movimientos de ajuste son registros de auditoría y no se pueden deshacer.');
+}
         let lot = null;
         if(m.lote_id){
           const lr = await sb.from('part_lots')
