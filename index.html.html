@@ -937,6 +937,83 @@
         if(error) throw error;
       }
 
+async function removeLotWithAudit(lotId){
+  if(!lotId) throw new Error('Lote inválido');
+
+  // Buscar lote
+  const { data: lot, error: e1 } = await sb.from('part_lots')
+    .select('id, part_id, qty, costo_unit, precio_unit')
+    .eq('org_id', orgId())
+    .eq('id', lotId)
+    .maybeSingle();
+
+  if(e1) throw e1;
+  if(!lot) throw new Error('Lote no encontrado');
+
+  const qtyToRemove = Number(lot.qty || 0);
+
+  if(qtyToRemove <= 0){
+    throw new Error('Este lote ya está vacío.');
+  }
+
+  // Buscar peça
+  const { data: part, error: e2 } = await sb.from('parts')
+    .select('id, codigo, nombre, almacen, stock')
+    .eq('org_id', orgId())
+    .eq('id', lot.part_id)
+    .maybeSingle();
+
+  if(e2) throw e2;
+  if(!part) throw new Error('Pieza no encontrada');
+
+  const currentStock = Number(part.stock || 0);
+  const newStock = Math.max(0, currentStock - qtyToRemove);
+
+  // Zerar o lote em vez de apagar definitivamente
+  const { error: e3 } = await sb.from('part_lots')
+    .update({ qty: 0 })
+    .eq('org_id', orgId())
+    .eq('id', lot.id);
+
+  if(e3) throw e3;
+
+  // Atualizar stock da peça
+  const { error: e4 } = await sb.from('parts')
+    .update({ stock: newStock })
+    .eq('org_id', orgId())
+    .eq('id', part.id);
+
+  if(e4) throw e4;
+
+  // Registrar auditoria em movements
+  const u = Auth.currentUser();
+
+  const { error: e5 } = await sb.from('movements').insert({
+    org_id: orgId(),
+    pieza_id: part.id,
+    codigo: part.codigo,
+    nombre: part.nombre,
+    almacen: part.almacen || '',
+    tipo: 'ajuste',
+    cantidad: qtyToRemove,
+    referencia: `AJUSTE: eliminación manual del lote ${lot.id}`,
+    usuario: u ? u.email : '',
+    costo_unit: Number(lot.costo_unit || 0),
+    precio_unit: Number(lot.precio_unit || 0),
+    lote_id: lot.id
+  });
+
+  if(e5) throw e5;
+
+  await recomputeMetrics(part.id);
+
+  return {
+    partId: part.id,
+    qtyRemoved: qtyToRemove,
+    newStock
+  };
+}
+
       // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
         const q = Number(qty || 0);
@@ -1627,7 +1704,7 @@ async function syncPartBaseFromLastLot(){
       return {
   listParts, getPartById, upsertPart, deletePart,
   listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
-  listLots, listAllLots, getInventoryValueByLots,
+  listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit,
   addPriceHistory, listPriceHistory,
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
   // Finanzas
@@ -2155,8 +2232,18 @@ globalImagePicker.addEventListener('change', async ()=>{
           if(det.open && !loaded){
             const lots = await DB.listLots(p.id);
             box.innerHTML = lots.length
-              ? lots.map(l=> `<span class="lot-chip"><b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}</span>`).join('')
-              : '<span class="muted xs">Sin lotes disponibles</span>';
+  ? lots.map(l=> `
+      <span class="lot-chip">
+        <b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}
+        <button 
+          class="btn btn-danger"
+          data-remove-lot="${l.id}"
+          style="height:28px; padding:2px 8px; font-size:12px; margin-left:6px;">
+          Eliminar lote
+        </button>
+      </span>
+    `).join('')
+  : '<span class="muted xs">Sin lotes disponibles</span>';
             loaded = true;
           }
         });
@@ -2230,6 +2317,30 @@ globalImagePicker.addEventListener('change', async ()=>{
         formWrap.open = false;
       });
       document.getElementById('scanBtn').addEventListener('click', startScan);
+
+tbody.addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-remove-lot]');
+  if(!btn) return;
+
+  const lotId = btn.getAttribute('data-remove-lot');
+
+  if(!confirm('¿Eliminar este lote? Se reducirá el stock y quedará registrado en Movimientos como AJUSTE.')) {
+    return;
+  }
+
+  try{
+    await DB.removeLotWithAudit(lotId);
+
+    parts = await DB.listParts();
+    buildFilters();
+    buildSuggestors();
+    await paint();
+
+    alert('Lote eliminado y registrado como ajuste.');
+  }catch(err){
+    alert(err.message || 'No se pudo eliminar el lote');
+  }
+});
 
       // ===== Visor de imágenes =====
       async function openImageModal(part){
@@ -2812,22 +2923,37 @@ globalImagePicker.addEventListener('change', async ()=>{
 });
 
         filteredMoves.forEach(m=>{
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td>${fmtDate(m.fecha)}</td>
-            <td>${escapeHtml(m.codigo)}</td>
-            <td>${escapeHtml(m.nombre)}</td>
-            <td>${escapeHtml(m.almacen||'')}</td>
-            <td>${m.tipo === 'entrada' ? 'Entrada' : 'Salida'}</td>
-            <td class="num">${m.cantidad}</td>
-<td class="num">${fmtMoney(m.costo_unit)}</td>
-<td class="num">${fmtMoney(m.precio_unit)}</td>
-<td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td> <td>${escapeHtml(m.referencia||'')}</td>
-            <td>${escapeHtml(m.usuario||'')}</td>
-            <td class="num"><button class="btn btn-danger" data-undo="${m.id}">Deshacer</button></td>`;
-          tbody.appendChild(tr);
-        });
+  const tr = document.createElement('tr');
+
+  tr.innerHTML = `
+    <td>${fmtDate(m.fecha)}</td>
+    <td>${escapeHtml(m.codigo)}</td>
+    <td>${escapeHtml(m.nombre)}</td>
+    <td>${escapeHtml(m.almacen||'')}</td>
+    <td>${
+      m.tipo === 'entrada'
+        ? 'Entrada'
+        : m.tipo === 'salida'
+          ? 'Salida'
+          : 'Ajuste'
+    }</td>
+    <td class="num">${m.cantidad}</td>
+    <td class="num">${fmtMoney(m.costo_unit)}</td>
+    <td class="num">${fmtMoney(m.precio_unit)}</td>
+    <td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td>
+    <td>${escapeHtml(m.referencia||'')}</td>
+    <td>${escapeHtml(m.usuario||'')}</td>
+    <td class="num">
+      ${
+        m.tipo === 'ajuste'
+          ? '<span class="muted xs">Auditoría</span>'
+          : `<button class="btn btn-danger" data-undo="${m.id}">Deshacer</button>`
       }
+    </td>`;
+
+  tbody.appendChild(tr);
+});
+}
       paintMoves();
       
       moveDesde.addEventListener('change', paintMoves);
