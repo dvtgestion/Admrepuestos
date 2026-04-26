@@ -997,37 +997,117 @@
         };
 
         if(part.id){
-          const { error } = await sb.from('parts')
-            .update(base)
-            .eq('id', part.id).eq('org_id', orgId());
-          if(error) throw error;
-          return part.id;
-        }else{
-          const initialQty = Number(part.stock || 0);
-          const rowInsert = {
-            ...base,
-            stock: 0,
-            consumo_diario: 0,
-            stock_min: 0,
-          };
-          const { data: created, error } = await sb
-            .from('parts')
-            .insert(rowInsert)
-            .select('id, codigo, nombre, almacen')
-            .maybeSingle();
-          if(error) throw error;
+  // Buscar dados atuais antes de alterar
+  const { data: prev, error: prevErr } = await sb.from('parts')
+    .select('id, stock, costo, precio')
+    .eq('id', part.id)
+    .eq('org_id', orgId())
+    .maybeSingle();
 
-          if(initialQty > 0){
-            await createInitialLotForPart({
-              partRow: created,
-              qty: initialQty,
-              costo: part.costo,
-              precio: part.precio
-            });
-          }
-          return created.id;
-        }
-      }
+  if(prevErr) throw prevErr;
+  if(!prev) throw new Error('Pieza no encontrada');
+
+  const newStock = Number(part.stock || 0);
+  const oldStock = Number(prev.stock || 0);
+  const diffStock = newStock - oldStock;
+
+  // Se o stock vai diminuir, primeiro valida se há lotes suficientes
+  if(diffStock < 0){
+    const lotsCheck = await listLots(part.id);
+    const totalDisponible = lotsCheck.reduce((s, lot) => s + Number(lot.qty || 0), 0);
+
+    if(totalDisponible < Math.abs(diffStock)){
+      throw new Error('No hay cantidad suficiente en los lotes para reducir este stock.');
+    }
+  }
+
+  // Se o stock aumentou manualmente, cria um lote de ajuste
+  if(diffStock > 0){
+    await createLot({
+      partId: part.id,
+      qty: diffStock,
+      costo_unit: Number(part.costo || 0),
+      precio_unit: Number(part.precio || 0)
+    });
+  }
+
+  // Se o stock diminuiu manualmente, reduz dos lotes existentes
+  if(diffStock < 0){
+    let toRemove = Math.abs(diffStock);
+
+    const lots = await listLots(part.id);
+
+    // remove primeiro dos lotes mais recentes
+    lots.sort((a, b) => String(b.id).localeCompare(String(a.id)));
+
+    for(const lot of lots){
+      if(toRemove <= 0) break;
+
+      const available = Number(lot.qty || 0);
+      const removeQty = Math.min(available, toRemove);
+      const newQty = available - removeQty;
+
+      await updateLot({
+        id: lot.id,
+        qty: newQty
+      });
+
+      toRemove -= removeQty;
+    }
+  }
+
+  // Atualiza custo/preço dos lotes ativos da peça
+  const activeLots = await listLots(part.id);
+
+  for(const lot of activeLots){
+    await updateLot({
+      id: lot.id,
+      costo_unit: Number(part.costo || 0),
+      precio_unit: Number(part.precio || 0)
+    });
+  }
+
+  // Atualiza a peça base somente depois de ajustar os lotes
+  const { error } = await sb.from('parts')
+    .update({
+      ...base,
+      stock: newStock
+    })
+    .eq('id', part.id)
+    .eq('org_id', orgId());
+
+  if(error) throw error;
+
+  return part.id;
+}else{
+  const initialQty = Number(part.stock || 0);
+  const rowInsert = {
+    ...base,
+    stock: 0,
+    consumo_diario: 0,
+    stock_min: 0,
+  };
+
+  const { data: created, error } = await sb
+    .from('parts')
+    .insert(rowInsert)
+    .select('id, codigo, nombre, almacen')
+    .maybeSingle();
+
+  if(error) throw error;
+
+  if(initialQty > 0){
+    await createInitialLotForPart({
+      partRow: created,
+      qty: initialQty,
+      costo: part.costo,
+      precio: part.precio
+    });
+  }
+
+    return created.id;
+}
+}
 
       // >>> AJUSTADO para apagar também lotes, movimentos e historial de precios da peça
       async function deletePart(id){
