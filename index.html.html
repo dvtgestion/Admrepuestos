@@ -1049,17 +1049,23 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
   if(e2) throw e2;
   if(!part) throw new Error('Pieza no encontrada');
 
-  // Atualizar somente este lote
-  const { error: e3 } = await sb.from('part_lots')
+  // Atualizar o lote e confirmar que foi atualizado
+  const { data: updatedLot, error: e3 } = await sb.from('part_lots')
     .update({
       qty: newQty,
       costo_unit: newCosto,
       precio_unit: newPrecio
     })
     .eq('org_id', orgId())
-    .eq('id', lot.id);
+    .eq('id', lot.id)
+    .select('id, part_id, qty, costo_unit, precio_unit')
+    .maybeSingle();
 
   if(e3) throw e3;
+
+  if(!updatedLot){
+    throw new Error('El lote no fue actualizado. Revise permisos/RLS o el ID del lote.');
+  }
 
   // Recalcular stock total da peça pela soma dos lotes
   const { data: allLots, error: e4 } = await sb.from('part_lots')
@@ -1071,12 +1077,12 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
 
   const totalStock = (allLots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
 
-  // Atualizar stock da peça e também custo/preço base com o lote editado
+  // Atualizar stock da peça e costo/precio base usando o lote realmente atualizado
   const { error: e5 } = await sb.from('parts')
     .update({
       stock: totalStock,
-      costo: newCosto,
-      precio: newPrecio
+      costo: Number(updatedLot.costo_unit || 0),
+      precio: Number(updatedLot.precio_unit || 0)
     })
     .eq('org_id', orgId())
     .eq('id', part.id);
@@ -1087,6 +1093,10 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
   const u = Auth.currentUser();
   const diffQty = newQty - oldQty;
 
+  const qtyAudit = Math.abs(diffQty) > 0
+    ? Math.abs(diffQty)
+    : Math.max(1, newQty);
+
   const { error: e6 } = await sb.from('movements').insert({
     org_id: orgId(),
     pieza_id: part.id,
@@ -1094,11 +1104,11 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
     nombre: part.nombre,
     almacen: part.almacen || '',
     tipo: 'ajuste',
-    cantidad: Math.abs(diffQty),
+    cantidad: qtyAudit,
     referencia: `AJUSTE: edición manual del lote ${lot.id} | Cantidad: ${oldQty} → ${newQty} | Costo: ${oldCosto} → ${newCosto} | Precio: ${oldPrecio} → ${newPrecio}`,
     usuario: u ? u.email : '',
-    costo_unit: newCosto,
-    precio_unit: newPrecio,
+    costo_unit: Number(updatedLot.costo_unit || 0),
+    precio_unit: Number(updatedLot.precio_unit || 0),
     lote_id: lot.id
   });
 
@@ -1110,9 +1120,14 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
     partId: part.id,
     oldQty,
     newQty,
+    oldCosto,
+    newCosto: Number(updatedLot.costo_unit || 0),
+    oldPrecio,
+    newPrecio: Number(updatedLot.precio_unit || 0),
     totalStock
   };
 }
+
 
       // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
