@@ -1209,16 +1209,35 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
 
   const totalStock = (lots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
 
+  const nuevoCosto = Number(part.costo || 0);
+  const nuevoPrecio = Number(part.precio || 0);
+
   // Atualiza dados da peça, mas o stock vem dos lotes
   const { error } = await sb.from('parts')
     .update({
       ...base,
-      stock: totalStock
+      stock: totalStock,
+      costo: nuevoCosto,
+      precio: nuevoPrecio
     })
     .eq('id', part.id)
     .eq('org_id', orgId());
 
   if(error) throw error;
+
+  // IMPORTANTE:
+  // Atualiza também custo/preço dos lotes ativos.
+  // Assim "Ver lotes" e "Movimientos > Salida" mostram o valor novo.
+  const { error: lotUpdateErr } = await sb.from('part_lots')
+    .update({
+      costo_unit: nuevoCosto,
+      precio_unit: nuevoPrecio
+    })
+    .eq('org_id', orgId())
+    .eq('part_id', part.id)
+    .gt('qty', 0);
+
+  if(lotUpdateErr) throw lotUpdateErr;
 
   return part.id;
 
