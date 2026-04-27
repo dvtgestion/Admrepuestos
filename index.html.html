@@ -1088,31 +1088,34 @@ async function removeLotWithAudit(lotId){
   const oldStock = Number(prev.stock || 0);
   const diffStock = newStock - oldStock;
 
-  // Se o stock vai diminuir, primeiro valida se há lotes suficientes
-  if(diffStock < 0){
-    const lotsCheck = await listLots(part.id);
-    const totalDisponible = lotsCheck.reduce((s, lot) => s + Number(lot.qty || 0), 0);
+  // Buscar lotes ativos existentes
+  let lots = await listLots(part.id);
 
-    if(totalDisponible < Math.abs(diffStock)){
-      throw new Error('No hay cantidad suficiente en los lotes para reducir este stock.');
-    }
+  // Se alterou stock, precisa existir pelo menos um lote ativo
+  if(diffStock !== 0 && !lots.length){
+    throw new Error('No hay lote activo para ajustar el stock. Use Movimientos > Entrada para crear un lote.');
   }
 
-  // Se o stock aumentou manualmente, cria um lote de ajuste
+  // Se o stock aumentou, soma a diferença no último lote ativo
   if(diffStock > 0){
-    await createLot({
-      partId: part.id,
-      qty: diffStock,
-      costo_unit: Number(part.costo || 0),
-      precio_unit: Number(part.precio || 0)
+    const sortedLots = [...lots].sort((a, b) => String(b.id).localeCompare(String(a.id)));
+    const targetLot = sortedLots[0];
+
+    await updateLot({
+      id: targetLot.id,
+      qty: Number(targetLot.qty || 0) + diffStock
     });
   }
 
-  // Se o stock diminuiu manualmente, reduz dos lotes existentes
+  // Se o stock diminuiu, reduz dos lotes existentes
   if(diffStock < 0){
     let toRemove = Math.abs(diffStock);
 
-    const lots = await listLots(part.id);
+    const totalDisponible = lots.reduce((s, lot) => s + Number(lot.qty || 0), 0);
+
+    if(totalDisponible < toRemove){
+      throw new Error('No hay cantidad suficiente en los lotes para reducir este stock.');
+    }
 
     // remove primeiro dos lotes mais recentes
     lots.sort((a, b) => String(b.id).localeCompare(String(a.id)));
@@ -1133,9 +1136,10 @@ async function removeLotWithAudit(lotId){
     }
   }
 
-  // Atualiza custo/preço dos lotes ativos da peça
+  // Depois do ajuste de stock, buscar novamente os lotes ativos
   const activeLots = await listLots(part.id);
 
+  // Atualiza custo/preço dos lotes ativos da peça
   for(const lot of activeLots){
     await updateLot({
       id: lot.id,
@@ -1144,7 +1148,7 @@ async function removeLotWithAudit(lotId){
     });
   }
 
-  // Atualiza a peça base somente depois de ajustar os lotes
+  // Atualiza a peça base
   const { error } = await sb.from('parts')
     .update({
       ...base,
@@ -1156,6 +1160,7 @@ async function removeLotWithAudit(lotId){
   if(error) throw error;
 
   return part.id;
+
 }else{
   const initialQty = Number(part.stock || 0);
   const rowInsert = {
