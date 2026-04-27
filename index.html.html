@@ -1101,27 +1101,9 @@ async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
     throw new Error('El lote no fue actualizado. Revise permisos/RLS o el ID del lote.');
   }
 
-  // Recalcular stock total da peça pela soma dos lotes
-  const { data: allLots, error: e4 } = await sb.from('part_lots')
-    .select('qty')
-    .eq('org_id', orgId())
-    .eq('part_id', part.id);
-
-  if(e4) throw e4;
-
-  const totalStock = (allLots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
-
-  // Atualizar stock da peça e costo/precio base usando o lote realmente atualizado
-  const { error: e5 } = await sb.from('parts')
-    .update({
-      stock: totalStock,
-      costo: Number(updatedLot.costo_unit || 0),
-      precio: Number(updatedLot.precio_unit || 0)
-    })
-    .eq('org_id', orgId())
-    .eq('id', part.id);
-
-  if(e5) throw e5;
+  // Recalcular stock, costo e precio base usando os lotes ativos
+const synced = await syncPartStockAndBaseFromLots(part.id);
+const totalStock = synced.stock;
 
   // Registrar auditoria em Movimientos
   const u = Auth.currentUser();
@@ -1407,13 +1389,8 @@ const { error: updLot } = await sb.from('part_lots')
 
 if(updLot) throw updLot;
 
-// actualizar saldo de la pieza
-const { error: upErr2 } = await sb.from('parts')
-  .update({ stock: Number(p.stock || 0) - q })
-  .eq('org_id', orgId())
-  .eq('id', p.id);
-
-if(upErr2) throw upErr2;
+// Recalcular stock, costo e precio base usando os lotes ativos restantes
+await syncPartStockAndBaseFromLots(p.id);
 
           // MODIFICAÇÃO: Usar o preço unitário passado no formulário (se houver),
           // caso contrário, usa o preço padrão da peça.
@@ -1526,7 +1503,10 @@ if(upErr2) throw upErr2;
           .eq('id', m.id);
         if(del.error) throw del.error;
 
-        if(piezaId){ await recomputeMetrics(piezaId); }
+        if(piezaId){
+  await syncPartStockAndBaseFromLots(piezaId);
+  await recomputeMetrics(piezaId);
+}
       }
 
       async function undoLastMovement(){
