@@ -1014,6 +1014,106 @@ async function removeLotWithAudit(lotId){
   };
 }
 
+async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
+  if(!lotId) throw new Error('Lote inválido');
+
+  const newQty = Number(qty || 0);
+  const newCosto = Number(costo_unit || 0);
+  const newPrecio = Number(precio_unit || 0);
+
+  if(newQty < 0){
+    throw new Error('La cantidad del lote no puede ser negativa.');
+  }
+
+  // Buscar lote actual
+  const { data: lot, error: e1 } = await sb.from('part_lots')
+    .select('id, part_id, qty, costo_unit, precio_unit')
+    .eq('org_id', orgId())
+    .eq('id', lotId)
+    .maybeSingle();
+
+  if(e1) throw e1;
+  if(!lot) throw new Error('Lote no encontrado');
+
+  const oldQty = Number(lot.qty || 0);
+  const oldCosto = Number(lot.costo_unit || 0);
+  const oldPrecio = Number(lot.precio_unit || 0);
+
+  // Buscar pieza
+  const { data: part, error: e2 } = await sb.from('parts')
+    .select('id, codigo, nombre, almacen')
+    .eq('org_id', orgId())
+    .eq('id', lot.part_id)
+    .maybeSingle();
+
+  if(e2) throw e2;
+  if(!part) throw new Error('Pieza no encontrada');
+
+  // Atualizar somente este lote
+  const { error: e3 } = await sb.from('part_lots')
+    .update({
+      qty: newQty,
+      costo_unit: newCosto,
+      precio_unit: newPrecio
+    })
+    .eq('org_id', orgId())
+    .eq('id', lot.id);
+
+  if(e3) throw e3;
+
+  // Recalcular stock total da peça pela soma dos lotes
+  const { data: allLots, error: e4 } = await sb.from('part_lots')
+    .select('qty')
+    .eq('org_id', orgId())
+    .eq('part_id', part.id);
+
+  if(e4) throw e4;
+
+  const totalStock = (allLots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
+
+  // Atualizar stock da peça e também custo/preço base com o lote editado
+  const { error: e5 } = await sb.from('parts')
+    .update({
+      stock: totalStock,
+      costo: newCosto,
+      precio: newPrecio
+    })
+    .eq('org_id', orgId())
+    .eq('id', part.id);
+
+  if(e5) throw e5;
+
+  // Registrar auditoria em Movimientos
+  const u = Auth.currentUser();
+  const diffQty = newQty - oldQty;
+
+  const { error: e6 } = await sb.from('movements').insert({
+    org_id: orgId(),
+    pieza_id: part.id,
+    codigo: part.codigo,
+    nombre: part.nombre,
+    almacen: part.almacen || '',
+    tipo: 'ajuste',
+    cantidad: Math.abs(diffQty),
+    referencia: `AJUSTE: edición manual del lote ${lot.id} | Cantidad: ${oldQty} → ${newQty} | Costo: ${oldCosto} → ${newCosto} | Precio: ${oldPrecio} → ${newPrecio}`,
+    usuario: u ? u.email : '',
+    costo_unit: newCosto,
+    precio_unit: newPrecio,
+    lote_id: lot.id
+  });
+
+  if(e6) throw e6;
+
+  await recomputeMetrics(part.id);
+
+  return {
+    partId: part.id,
+    oldQty,
+    newQty,
+    totalStock
+  };
+}
+
       // Crear lote + movimiento de ENTRADA para pieza recién creada (stock inicial)
       async function createInitialLotForPart({ partRow, qty, costo, precio }) {
         const q = Number(qty || 0);
@@ -1076,7 +1176,7 @@ async function removeLotWithAudit(lotId){
         if(part.id){
   // Buscar dados atuais antes de alterar
   const { data: prev, error: prevErr } = await sb.from('parts')
-    .select('id, stock, costo, precio')
+    .select('id, costo, precio')
     .eq('id', part.id)
     .eq('org_id', orgId())
     .maybeSingle();
@@ -1084,75 +1184,21 @@ async function removeLotWithAudit(lotId){
   if(prevErr) throw prevErr;
   if(!prev) throw new Error('Pieza no encontrada');
 
-  const newStock = Number(part.stock || 0);
-  const oldStock = Number(prev.stock || 0);
-  const diffStock = newStock - oldStock;
+  // Recalcular stock pela soma dos lotes
+  const { data: lots, error: lotsErr } = await sb.from('part_lots')
+    .select('qty')
+    .eq('org_id', orgId())
+    .eq('part_id', part.id);
 
-  // Buscar lotes ativos existentes
-  let lots = await listLots(part.id);
+  if(lotsErr) throw lotsErr;
 
-  // Se alterou stock, precisa existir pelo menos um lote ativo
-  if(diffStock !== 0 && !lots.length){
-    throw new Error('No hay lote activo para ajustar el stock. Use Movimientos > Entrada para crear un lote.');
-  }
+  const totalStock = (lots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
 
-  // Se o stock aumentou, soma a diferença no último lote ativo
-  if(diffStock > 0){
-    const sortedLots = [...lots].sort((a, b) => String(b.id).localeCompare(String(a.id)));
-    const targetLot = sortedLots[0];
-
-    await updateLot({
-      id: targetLot.id,
-      qty: Number(targetLot.qty || 0) + diffStock
-    });
-  }
-
-  // Se o stock diminuiu, reduz dos lotes existentes
-  if(diffStock < 0){
-    let toRemove = Math.abs(diffStock);
-
-    const totalDisponible = lots.reduce((s, lot) => s + Number(lot.qty || 0), 0);
-
-    if(totalDisponible < toRemove){
-      throw new Error('No hay cantidad suficiente en los lotes para reducir este stock.');
-    }
-
-    // remove primeiro dos lotes mais recentes
-    lots.sort((a, b) => String(b.id).localeCompare(String(a.id)));
-
-    for(const lot of lots){
-      if(toRemove <= 0) break;
-
-      const available = Number(lot.qty || 0);
-      const removeQty = Math.min(available, toRemove);
-      const newQty = available - removeQty;
-
-      await updateLot({
-        id: lot.id,
-        qty: newQty
-      });
-
-      toRemove -= removeQty;
-    }
-  }
-
-  // Depois do ajuste de stock, buscar novamente os lotes ativos
-  const activeLots = await listLots(part.id);
-
-  // Atualiza custo/preço dos lotes ativos da peça
-  for(const lot of activeLots){
-    await updateLot({
-      id: lot.id,
-      costo_unit: Number(part.costo || 0),
-      precio_unit: Number(part.precio || 0)
-    });
-  }
-
-  // Atualiza a peça base
+  // Atualiza dados da peça, mas o stock vem dos lotes
   const { error } = await sb.from('parts')
     .update({
       ...base,
-      stock: newStock
+      stock: totalStock
     })
     .eq('id', part.id)
     .eq('org_id', orgId());
@@ -1711,7 +1757,7 @@ async function syncPartBaseFromLastLot(){
       return {
   listParts, getPartById, upsertPart, deletePart,
   listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
-  listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit,
+  listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   addPriceHistory, listPriceHistory,
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
   // Finanzas
@@ -2242,6 +2288,17 @@ globalImagePicker.addEventListener('change', async ()=>{
   ? lots.map(l=> `
       <span class="lot-chip">
         <b>${l.qty}</b> unid · C: ${fmtMoney(l.costo_unit)} · P: ${fmtMoney(l.precio_unit)}
+
+        <button 
+          class="btn"
+          data-edit-lot="${l.id}"
+          data-lot-qty="${l.qty}"
+          data-lot-costo="${l.costo_unit}"
+          data-lot-precio="${l.precio_unit}"
+          style="height:28px; padding:2px 8px; font-size:12px; margin-left:6px;">
+          Editar lote
+        </button>
+
         <button 
           class="btn btn-danger"
           data-remove-lot="${l.id}"
@@ -2310,10 +2367,12 @@ globalImagePicker.addEventListener('change', async ()=>{
       filterAlm.addEventListener('change', paint);
 
       const resetFormToNew = ()=>{
-        form.reset();
-        form.querySelector('input[name="id"]').value = '';
-        summary.textContent = 'Nueva pieza';
-      };
+  form.reset();
+  form.querySelector('input[name="id"]').value = '';
+  form.querySelector('input[name="stock"]').readOnly = false;
+  form.querySelector('input[name="stock"]').title = '';
+  summary.textContent = 'Nueva pieza';
+};
 
       addBtn.addEventListener('click', ()=>{
         resetFormToNew();
@@ -2326,26 +2385,92 @@ globalImagePicker.addEventListener('change', async ()=>{
       document.getElementById('scanBtn').addEventListener('click', startScan);
 
 tbody.addEventListener('click', async (e)=>{
-  const btn = e.target.closest('button[data-remove-lot]');
-  if(!btn) return;
+  const btnRemove = e.target.closest('button[data-remove-lot]');
+  const btnEdit = e.target.closest('button[data-edit-lot]');
 
-  const lotId = btn.getAttribute('data-remove-lot');
+  // Editar lote específico
+  if(btnEdit){
+    const lotId = btnEdit.getAttribute('data-edit-lot');
 
-  if(!confirm('¿Eliminar este lote? Se reducirá el stock y quedará registrado en Movimientos como AJUSTE.')) {
+    const currentQty = btnEdit.getAttribute('data-lot-qty') || '0';
+    const currentCosto = btnEdit.getAttribute('data-lot-costo') || '0';
+    const currentPrecio = btnEdit.getAttribute('data-lot-precio') || '0';
+
+    const qtyRaw = prompt('Nueva cantidad del lote:', currentQty);
+    if(qtyRaw === null) return;
+
+    const costoRaw = prompt('Nuevo costo unitario (Bs):', currentCosto);
+    if(costoRaw === null) return;
+
+    const precioRaw = prompt('Nuevo precio unitario (Bs):', currentPrecio);
+    if(precioRaw === null) return;
+
+    const qty = parseLocaleNumber(qtyRaw);
+    const costo = parseLocaleNumber(costoRaw);
+    const precio = parseLocaleNumber(precioRaw);
+
+    if(!Number.isFinite(qty) || qty < 0){
+      alert('Cantidad inválida.');
+      return;
+    }
+
+    if(!Number.isFinite(costo) || costo < 0){
+      alert('Costo inválido.');
+      return;
+    }
+
+    if(!Number.isFinite(precio) || precio < 0){
+      alert('Precio inválido.');
+      return;
+    }
+
+    if(!confirm('¿Guardar cambios en este lote? Quedará registrado en Movimientos como AJUSTE.')){
+      return;
+    }
+
+    try{
+      await DB.editLotWithAudit({
+        lotId,
+        qty,
+        costo_unit: costo,
+        precio_unit: precio
+      });
+
+      parts = await DB.listParts();
+      buildFilters();
+      buildSuggestors();
+      await paint();
+
+      alert('Lote editado y registrado como ajuste.');
+    }catch(err){
+      alert(err.message || 'No se pudo editar el lote');
+    }
+
     return;
   }
 
-  try{
-    await DB.removeLotWithAudit(lotId);
+  // Eliminar lote
+  if(btnRemove){
+    const lotId = btnRemove.getAttribute('data-remove-lot');
 
-    parts = await DB.listParts();
-    buildFilters();
-    buildSuggestors();
-    await paint();
+    if(!confirm('¿Eliminar este lote? Se reducirá el stock y quedará registrado en Movimientos como AJUSTE.')) {
+      return;
+    }
 
-    alert('Lote eliminado y registrado como ajuste.');
-  }catch(err){
-    alert(err.message || 'No se pudo eliminar el lote');
+    try{
+      await DB.removeLotWithAudit(lotId);
+
+      parts = await DB.listParts();
+      buildFilters();
+      buildSuggestors();
+      await paint();
+
+      alert('Lote eliminado y registrado como ajuste.');
+    }catch(err){
+      alert(err.message || 'No se pudo eliminar el lote');
+    }
+
+    return;
   }
 });
 
@@ -2575,9 +2700,13 @@ tbody.addEventListener('click', async (e)=>{
           form.querySelector('input[name="leadTimeDias"]').value = p.leadTimeDias || 0;
           form.querySelector('input[name="consumoDiario"]').value = p.consumoDiario || 0;
           form.querySelector('input[name="stockMin"]').value = p.stockMin || 0;
-          form.querySelector('input[name="stock"]').value = p.stock;
-          form.querySelector('input[name="costo"]').value = p.costo;
-          form.querySelector('input[name="precio"]').value = p.precio;
+
+form.querySelector('input[name="stock"]').value = p.stock;
+form.querySelector('input[name="stock"]').readOnly = true;
+form.querySelector('input[name="stock"]').title = 'El stock se calcula por los lotes. Para cambiarlo, edite un lote específico.';
+
+form.querySelector('input[name="costo"]').value = p.costo;
+form.querySelector('input[name="precio"]').value = p.precio;
         }
 
         // 3. AÇÃO: DESCRIÇÃO (Aqui está o PASSO C - Nova janela)
