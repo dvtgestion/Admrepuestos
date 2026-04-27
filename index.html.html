@@ -227,6 +227,45 @@
 .search-item strong { color: var(--primary); font-size: 15px; }
 .search-item span { font-size: 13px; color: var(--muted); }
 
+/* === Stock detenido en Reportes === */
+.stock-stopped-row td{
+  vertical-align:middle;
+}
+
+.badge.stopped{
+  background:#fff7ed;
+  color:#c2410c;
+  border-color:#fed7aa;
+}
+
+.badge.never-sold{
+  background:#fef2f2;
+  color:#b91c1c;
+  border-color:#fecaca;
+}
+
+.stock-det-controls{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  align-items:flex-end;
+}
+
+.stock-det-controls .input{
+  min-width:160px;
+}
+
+@media (max-width:600px){
+  .stock-det-controls{
+    width:100%;
+  }
+
+  .stock-det-controls .input,
+  .stock-det-controls .field{
+    width:100%;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -319,6 +358,79 @@
           <canvas id="chartDia" height="150"></canvas>
         </div>
       </div>
+      <div class="card">
+  <header class="toolbar">
+    <div class="left">
+      <h3 style="margin:0 0 6px">Stock detenido</h3>
+      <p class="muted" style="margin:0">
+        Piezas con stock disponible que no registran salidas según los días seleccionados.
+      </p>
+    </div>
+
+    <div class="right stock-det-controls">
+      <label class="field">
+        <span class="xs muted">Sin salida desde</span>
+        <select id="stDays" class="input">
+          <option value="30">30 días</option>
+          <option value="60">60 días</option>
+          <option value="90" selected>90 días</option>
+          <option value="120">120 días</option>
+          <option value="180">180 días</option>
+          <option value="365">365 días</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="xs muted">Almacén</span>
+        <select id="stAlmacen" class="input">
+          <option value="(Todos)">(Todos)</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="xs muted">Buscar</span>
+        <input id="stSearch" class="input" placeholder="Código, nombre o motor…" />
+      </label>
+
+      <label class="field">
+        <span class="xs muted">Ordenar por</span>
+        <select id="stSort" class="input">
+          <option value="valor_desc">Mayor valor detenido</option>
+          <option value="dias_desc">Más días sin salida</option>
+          <option value="stock_desc">Mayor stock</option>
+          <option value="nombre_asc">Nombre A-Z</option>
+        </select>
+      </label>
+    </div>
+  </header>
+
+  <div class="kpis">
+    <div class="card"><h3>Piezas detenidas</h3><strong id="stKpiPiezas">—</strong></div>
+    <div class="card"><h3>Unidades detenidas</h3><strong id="stKpiUnidades">—</strong></div>
+    <div class="card"><h3>Valor detenido</h3><strong id="stKpiValor">—</strong></div>
+    <div class="card"><h3>Nunca vendidas</h3><strong id="stKpiNunca">—</strong></div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:12px">
+    <table class="table compact" id="stockDetenidoTable">
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nombre</th>
+          <th>MOTOR</th>
+          <th>Almacén</th>
+          <th class="num">Stock</th>
+          <th class="num">Costo base</th>
+          <th class="num">Valor detenido</th>
+          <th>Última salida</th>
+          <th class="num">Días sin salida</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody id="stockDetenidoTbody"></tbody>
+    </table>
+  </div>
+</div>
     </section>
   </template>
 
@@ -2028,9 +2140,193 @@ globalImagePicker.addEventListener('change', async ()=>{
       const elSaf   = document.getElementById('kpiSafety');
       const elSkus  = document.getElementById('kpiSkus');
       const elMovs  = document.getElementById('kpiMovs');
+      
+      // Elementos de Stock detenido
+const stDays = document.getElementById('stDays');
+const stAlmacen = document.getElementById('stAlmacen');
+const stSearch = document.getElementById('stSearch');
+const stSort = document.getElementById('stSort');
+
+const stKpiPiezas = document.getElementById('stKpiPiezas');
+const stKpiUnidades = document.getElementById('stKpiUnidades');
+const stKpiValor = document.getElementById('stKpiValor');
+const stKpiNunca = document.getElementById('stKpiNunca');
+const stockDetenidoTbody = document.getElementById('stockDetenidoTbody');
+
+let reportPartsCache = [];
+let reportMovesCache = [];
+
+function buildStockDetenidoAlmacenes(parts){
+  if(!stAlmacen) return;
+
+  const current = stAlmacen.value || '(Todos)';
+  const set = new Set(['(Todos)']);
+
+  parts.forEach(p=>{
+    const alm = String(p.almacen || '').trim();
+    if(alm) set.add(alm);
+  });
+
+  stAlmacen.innerHTML = Array.from(set)
+    .sort()
+    .map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`)
+    .join('');
+
+  if(Array.from(set).includes(current)){
+    stAlmacen.value = current;
+  }
+}
+
+function daysWithoutSale(lastDate){
+  if(!lastDate) return null;
+  const ms = Date.now() - lastDate.getTime();
+  return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
+}
+
+function getStockDetenidoRows(parts, moves){
+  const threshold = Number(stDays?.value || 90);
+
+  const lastSalidaByPart = new Map();
+
+  for(const m of moves){
+    if(m.tipo !== 'salida') continue;
+    if(!m.pieza_id) continue;
+
+    const dt = new Date(m.fecha);
+    const prev = lastSalidaByPart.get(m.pieza_id);
+
+    if(!prev || dt > prev){
+      lastSalidaByPart.set(m.pieza_id, dt);
+    }
+  }
+
+  return parts
+    .filter(p => Number(p.stock || 0) > 0)
+    .map(p=>{
+      const lastSalida = lastSalidaByPart.get(p.id) || null;
+      const diasSinSalida = daysWithoutSale(lastSalida);
+      const nuncaVendida = !lastSalida;
+      const detenida = nuncaVendida || diasSinSalida >= threshold;
+      const valorDetenido = Number(p.stock || 0) * Number(p.costo || 0);
+
+      return {
+        ...p,
+        lastSalida,
+        diasSinSalida,
+        nuncaVendida,
+        detenida,
+        valorDetenido
+      };
+    })
+    .filter(p => p.detenida);
+}
+
+function paintStockDetenido(){
+  if(!stockDetenidoTbody) return;
+
+  let rows = getStockDetenidoRows(reportPartsCache, reportMovesCache);
+
+  const alm = stAlmacen?.value || '(Todos)';
+  const q = String(stSearch?.value || '').trim().toLowerCase();
+  const sort = stSort?.value || 'valor_desc';
+
+  if(alm !== '(Todos)'){
+    rows = rows.filter(p => String(p.almacen || '').toLowerCase() === alm.toLowerCase());
+  }
+
+  if(q){
+    rows = rows.filter(p=>{
+      const text = [
+        p.codigo,
+        p.nombre,
+        p.categoria,
+        p.almacen,
+        p.ubicacion,
+        p.proveedor
+      ].map(x=>String(x || '').toLowerCase()).join(' ');
+
+      return text.includes(q);
+    });
+  }
+
+  rows.sort((a,b)=>{
+    if(sort === 'valor_desc'){
+      return Number(b.valorDetenido || 0) - Number(a.valorDetenido || 0);
+    }
+
+    if(sort === 'dias_desc'){
+      const da = a.diasSinSalida == null ? 999999 : a.diasSinSalida;
+      const db = b.diasSinSalida == null ? 999999 : b.diasSinSalida;
+      return db - da;
+    }
+
+    if(sort === 'stock_desc'){
+      return Number(b.stock || 0) - Number(a.stock || 0);
+    }
+
+    if(sort === 'nombre_asc'){
+      return String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es');
+    }
+
+    return 0;
+  });
+
+  const totalPiezas = rows.length;
+  const totalUnidades = rows.reduce((s,p)=>s + Number(p.stock || 0), 0);
+  const totalValor = rows.reduce((s,p)=>s + Number(p.valorDetenido || 0), 0);
+  const totalNunca = rows.filter(p=>p.nuncaVendida).length;
+
+  stKpiPiezas.textContent = String(totalPiezas);
+  stKpiUnidades.textContent = String(totalUnidades);
+  stKpiValor.textContent = fmtMoney(totalValor);
+  stKpiNunca.textContent = String(totalNunca);
+
+  stockDetenidoTbody.innerHTML = '';
+
+  if(!rows.length){
+    stockDetenidoTbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="muted" style="text-align:center; padding:18px">
+          No hay piezas detenidas con los filtros seleccionados.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  rows.forEach(p=>{
+    const tr = document.createElement('tr');
+    tr.className = 'stock-stopped-row';
+
+    const ultimaSalida = p.lastSalida ? fmtDate(p.lastSalida) : 'Nunca';
+    const diasLabel = p.diasSinSalida == null ? 'Nunca' : String(p.diasSinSalida);
+
+    const estado = p.nuncaVendida
+      ? '<span class="badge never-sold">Nunca vendida</span>'
+      : '<span class="badge stopped">Sin salida</span>';
+
+    tr.innerHTML = `
+      <td>${escapeHtml(p.codigo || '')}</td>
+      <td>${escapeHtml(p.nombre || '')}</td>
+      <td>${escapeHtml(p.categoria || '')}</td>
+      <td>${escapeHtml(p.almacen || '')}</td>
+      <td class="num">${Number(p.stock || 0)}</td>
+      <td class="num">${fmtMoney(p.costo)}</td>
+      <td class="num">${fmtMoney(p.valorDetenido)}</td>
+      <td>${escapeHtml(ultimaSalida)}</td>
+      <td class="num">${escapeHtml(diasLabel)}</td>
+      <td>${estado}</td>
+    `;
+
+    stockDetenidoTbody.appendChild(tr);
+  });
+}
 
       async function run(){
         const parts = await DB.listParts();
+        reportPartsCache = parts;
+reportMovesCache = await DB.listMoves(50000);
+buildStockDetenidoAlmacenes(parts);
 
         // Período
         const dFrom = new Date(repDesde.value + 'T00:00:00');
@@ -2106,14 +2402,22 @@ globalImagePicker.addEventListener('change', async ()=>{
 
         const ctxDia = document.getElementById('chartDia');
         chartDia = new Chart(ctxDia, {
-          type: 'line',
-          data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
-        });
+  type: 'line',
+  data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
+  options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
+});
+
+paintStockDetenido();
       }
 
       document.getElementById('repAplicar').addEventListener('click', run);
-      await run();
+
+if(stDays) stDays.addEventListener('change', paintStockDetenido);
+if(stAlmacen) stAlmacen.addEventListener('change', paintStockDetenido);
+if(stSearch) stSearch.addEventListener('input', paintStockDetenido);
+if(stSort) stSort.addEventListener('change', paintStockDetenido);
+
+await run();
     }
 
     // ---- Finanzas (UI) ----
