@@ -936,6 +936,47 @@
           .eq('id', id);
         if(error) throw error;
       }
+      
+      async function syncPartStockAndBaseFromLots(partId){
+  if(!partId) throw new Error('Pieza inválida');
+
+  const { data: lots, error } = await sb.from('part_lots')
+    .select('id, qty, costo_unit, precio_unit')
+    .eq('org_id', orgId())
+    .eq('part_id', partId)
+    .gt('qty', 0)
+    .order('id', { ascending: false });
+
+  if(error) throw error;
+
+  const activeLots = lots || [];
+  const totalStock = activeLots.reduce((s, l) => s + Number(l.qty || 0), 0);
+
+  const patch = {
+    stock: totalStock
+  };
+
+  // Se ainda existe lote ativo, o inventário reflete o último lote ativo
+  if(activeLots.length){
+    const lastLot = activeLots[0];
+
+    patch.costo = Number(lastLot.costo_unit || 0);
+    patch.precio = Number(lastLot.precio_unit || 0);
+  }
+
+  const { error: upErr } = await sb.from('parts')
+    .update(patch)
+    .eq('org_id', orgId())
+    .eq('id', partId);
+
+  if(upErr) throw upErr;
+
+  return {
+    stock: totalStock,
+    costo: patch.costo,
+    precio: patch.precio
+  };
+}
 
 async function removeLotWithAudit(lotId){
   if(!lotId) throw new Error('Lote inválido');
@@ -966,10 +1007,7 @@ async function removeLotWithAudit(lotId){
   if(e2) throw e2;
   if(!part) throw new Error('Pieza no encontrada');
 
-  const currentStock = Number(part.stock || 0);
-  const newStock = Math.max(0, currentStock - qtyToRemove);
-
-  // Zerar o lote em vez de apagar definitivamente
+    // Zerar o lote em vez de apagar definitivamente
   const { error: e3 } = await sb.from('part_lots')
     .update({ qty: 0 })
     .eq('org_id', orgId())
@@ -977,13 +1015,9 @@ async function removeLotWithAudit(lotId){
 
   if(e3) throw e3;
 
-  // Atualizar stock da peça
-  const { error: e4 } = await sb.from('parts')
-    .update({ stock: newStock })
-    .eq('org_id', orgId())
-    .eq('id', part.id);
-
-  if(e4) throw e4;
+  // Recalcular stock, costo e precio base usando os lotes ativos restantes
+  const synced = await syncPartStockAndBaseFromLots(part.id);
+  const newStock = synced.stock;
 
   // Registrar auditoria em movements
   const u = Auth.currentUser();
@@ -1792,6 +1826,7 @@ async function syncPartBaseFromLastLot(){
   listParts, getPartById, upsertPart, deletePart,
   listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
   listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
+  syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
   // Finanzas
