@@ -3070,19 +3070,25 @@ form.querySelector('input[name="precio"]').value = p.precio;
           const overlay = document.createElement('div');
           overlay.className = 'modal';
           overlay.innerHTML = `
-            <div class="box" style="max-width:500px">
-              <header>
-                <h3>Descripción: ${escapeHtml(p.codigo)}</h3>
-                <button class="btn btn-ghost" id="closeDesc">✕</button>
-              </header>
-              <div style="padding:16px; display:flex; flex-direction:column; gap:12px">
-                <textarea id="descText" class="input" rows="8" placeholder="Escriba los detalles técnicos aquí...">${escapeHtml(p.descripcion||'')}</textarea>
-                <div class="row-actions" style="justify-content:flex-end">
-                  <button class="btn btn-primary" id="saveDesc">Guardar Descripción</button>
-                </div>
-              </div>
-            </div>
-          `;
+  <div class="box" style="max-width:800px; width:min(95vw, 800px);">
+    <header>
+      <h3>Descripción: ${escapeHtml(p.codigo)}</h3>
+      <button class="btn btn-ghost" id="closeDesc">✕</button>
+    </header>
+    <div style="padding:16px; display:flex; flex-direction:column; gap:12px">
+      <textarea 
+        id="descText" 
+        class="input" 
+        placeholder="Escriba los detalles técnicos aquí..."
+        style="height:320px; min-height:220px; resize:vertical; line-height:1.4;"
+      >${escapeHtml(p.descripcion||'')}</textarea>
+
+      <div class="row-actions" style="justify-content:flex-end">
+        <button class="btn btn-primary" id="saveDesc">Guardar Descripción</button>
+      </div>
+    </div>
+  </div>
+`;
           document.body.appendChild(overlay);
 
           const close = () => overlay.remove();
