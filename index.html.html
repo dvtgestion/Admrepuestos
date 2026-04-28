@@ -3064,11 +3064,12 @@ form.querySelector('input[name="precio"]').value = p.precio;
 
         // 3. AÇÃO: DESCRIÇÃO (Aqui está o PASSO C - Nova janela)
         if(act === 'desc'){
+          document.querySelectorAll('.desc-modal').forEach(m => m.remove());
           const p = parts.find(x => x.id === id);
           
           // Cria modal simples dinamicamente
           const overlay = document.createElement('div');
-          overlay.className = 'modal';
+          overlay.className = 'modal desc-modal';
           overlay.innerHTML = `
   <div class="box" style="max-width:800px; width:min(95vw, 800px);">
     <header>
@@ -3112,6 +3113,7 @@ form.querySelector('input[name="precio"]').value = p.precio;
                alert('Error: ' + err.message);
              }
           };
+          return;
         }
 
         // 4. AÇÃO: ELIMINAR
