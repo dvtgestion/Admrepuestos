@@ -1381,20 +1381,6 @@ const totalStock = synced.stock;
 
   if(error) throw error;
 
-  // IMPORTANTE:
-  // Atualiza também custo/preço dos lotes ativos.
-  // Assim "Ver lotes" e "Movimientos > Salida" mostram o valor novo.
-  const { error: lotUpdateErr } = await sb.from('part_lots')
-    .update({
-      costo_unit: nuevoCosto,
-      precio_unit: nuevoPrecio
-    })
-    .eq('org_id', orgId())
-    .eq('part_id', part.id)
-    .gt('qty', 0);
-
-  if(lotUpdateErr) throw lotUpdateErr;
-
   return part.id;
 
 }else{
