@@ -5101,13 +5101,22 @@ async function renderProformas(){
 
       <div class="card">
         <header class="toolbar">
-          <div class="left">
-            <h3 style="margin:0 0 6px">Proformas activas</h3>
-            <p class="muted xs" style="margin:0">
-              Solo se muestran proformas dentro de su período de validez.
-            </p>
-          </div>
-        </header>
+  <div class="left">
+    <h3 style="margin:0 0 6px">Proformas activas</h3>
+    <p class="muted xs" style="margin:0">
+      Solo se muestran proformas dentro de su período de validez.
+    </p>
+  </div>
+
+  <div class="right">
+    <input
+      id="proSearchActivas"
+      class="input"
+      placeholder="Buscar por N.º, cliente o celular…"
+      style="min-width:260px"
+    />
+  </div>
+</header>
 
         <div class="table-wrap">
           <table class="table compact">
@@ -5157,6 +5166,7 @@ async function renderProformas(){
   const proInventarioTbody = document.getElementById('proInventarioTbody');
 
   const proformasTbody = document.getElementById('proformasTbody');
+  const proSearchActivas = document.getElementById('proSearchActivas');
 
     let proformasActivas = [];
   let proPartesInventario = [];
@@ -5437,20 +5447,39 @@ async function renderProformas(){
   }
 
   function pintarProformasActivas(){
+        const busqueda = String(proSearchActivas.value || '')
+      .trim()
+      .toLowerCase();
+
+    const proformasFiltradas = proformasActivas.filter(proforma => {
+      const numero = String(proforma.numero_proforma || 0);
+      const numeroCompleto = numero.padStart(6, '0');
+      const cliente = String(proforma.cliente || '').toLowerCase();
+      const celular = String(proforma.celular || '').toLowerCase();
+
+      return !busqueda
+        || numero.includes(busqueda)
+        || numeroCompleto.includes(busqueda)
+        || cliente.includes(busqueda)
+        || celular.includes(busqueda);
+    });
     proformasTbody.innerHTML = '';
 
-    if(!proformasActivas.length){
+    if(!proformasFiltradas.length){
       proformasTbody.innerHTML = `
         <tr>
           <td colspan="8" class="muted" style="text-align:center; padding:18px">
-            Aún no existen proformas activas.
+            ${proformasActivas.length
+  ? 'No se encontraron proformas activas con esa búsqueda.'
+  : 'Aún no existen proformas activas.'
+}
           </td>
         </tr>
       `;
       return;
     }
 
-    proformasActivas.forEach(proforma => {
+    proformasFiltradas.forEach(proforma => {
       const tr = document.createElement('tr');
 
       tr.innerHTML = `
@@ -5906,6 +5935,7 @@ async function renderProformas(){
     proValidez.addEventListener('change', actualizarValidez);
 
 proSearchInventario.addEventListener('input', pintarInventarioBuscado);
+proSearchActivas.addEventListener('input', pintarProformasActivas);
 
 proInventarioTbody.addEventListener('click', (e) => {
   const agregarBtn = e.target.closest(
