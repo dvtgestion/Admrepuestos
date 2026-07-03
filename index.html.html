@@ -4031,9 +4031,9 @@ alert('Movimiento deshecho');
                     <div class="card" style="order:2">
             <header class="toolbar">
               <div class="left">
-                <h3 style="margin:0 0 6px">Recibos emitidos</h3>
+                <h3 style="margin:0 0 6px">Recibos registrados</h3>
                 <p class="muted xs" style="margin:0">
-                  Desde aquí podrá imprimir, guardar como PDF o descargar el documento Word.
+                  Desde aquí podrá imprimir los recibos emitidos o anular los creados por error.
                 </p>
               </div>
             </header>
@@ -4197,25 +4197,24 @@ alert('Movimiento deshecho');
           recibosTbody.innerHTML = `
             <tr>
               <td colspan="8" class="muted" style="text-align:center; padding:18px">
-                Aún no existen recibos emitidos.
+                Aún no existen recibos registrados.
               </td>
             </tr>
           `;
           return;
         }
 
-        recibos.forEach(r => {
+                recibos.forEach(r => {
           const tr = document.createElement('tr');
+          const isAnulado = String(r.estado || 'emitido') === 'anulado';
 
-          tr.innerHTML = `
-            <td>${fmtDate(r.fecha)}</td>
-            <td>N.º ${formatNumeroRecibo(r.numero_recibo)}</td>
-            <td>${escapeHtml(r.cliente || '')}</td>
-            <td>${escapeHtml(r.celular || '')}</td>
-            <td class="num">${Number(r.cantidad_items || 0)}</td>
-            <td class="num">${fmtMoney(r.total)}</td>
-            <td>${escapeHtml(r.usuario || '')}</td>
-            <td class="num">
+          const estadoHtml = isAnulado
+            ? '<span class="badge" style="background:#fef2f2;color:#b91c1c;border-color:#fecaca">Anulado</span>'
+            : '<span class="badge" style="background:#ecfdf5;color:#047857;border-color:#a7f3d0">Emitido</span>';
+
+          const actionsHtml = isAnulado
+            ? '<span class="muted xs">Recibo anulado</span>'
+            : `
               <div class="row-actions" style="justify-content:flex-end">
                 <button
                   class="btn"
@@ -4232,8 +4231,29 @@ alert('Movimiento deshecho');
                 >
                   Descargar Word
                 </button>
+
+                <button
+                  class="btn btn-danger"
+                  type="button"
+                  data-anular-recibo="${escapeHtml(r.id)}"
+                >
+                  Anular recibo
+                </button>
               </div>
+            `;
+
+          tr.innerHTML = `
+            <td>${fmtDate(r.fecha)}</td>
+            <td>
+              N.º ${formatNumeroRecibo(r.numero_recibo)}
+              <div style="margin-top:5px">${estadoHtml}</div>
             </td>
+            <td>${escapeHtml(r.cliente || '')}</td>
+            <td>${escapeHtml(r.celular || '')}</td>
+            <td class="num">${Number(r.cantidad_items || 0)}</td>
+            <td class="num">${fmtMoney(r.total)}</td>
+            <td>${escapeHtml(r.usuario || '')}</td>
+            <td class="num">${actionsHtml}</td>
           `;
 
           recibosTbody.appendChild(tr);
@@ -4512,9 +4532,50 @@ alert('Movimiento deshecho');
         }
       });
 
-      recibosTbody.addEventListener('click', async (e) => {
+            recibosTbody.addEventListener('click', async (e) => {
+        const annulBtn = e.target.closest('button[data-anular-recibo]');
         const printBtn = e.target.closest('button[data-print-recibo]');
         const wordBtn = e.target.closest('button[data-word-recibo]');
+
+        if(annulBtn){
+          const reciboId = annulBtn.getAttribute('data-anular-recibo');
+          const recibo = recibos.find(r => String(r.id) === String(reciboId));
+          const numero = recibo
+            ? `N.º ${formatNumeroRecibo(recibo.numero_recibo)}`
+            : '';
+
+          if(!confirm(
+            `¿Anular el recibo ${numero}?\n\nLas salidas volverán a estar disponibles para crear otro recibo. Esto no modifica Movimientos, stock ni reportes.`
+          )){
+            return;
+          }
+
+          const originalText = annulBtn.textContent;
+
+          try{
+            annulBtn.disabled = true;
+            annulBtn.textContent = 'Anulando...';
+
+            await DB.anularReciboVenta(reciboId);
+
+            alert(
+              `Recibo ${numero} anulado correctamente.\nLas salidas ya están disponibles para crear otro recibo.`
+            );
+
+            await refreshRecibos();
+
+          }catch(err){
+            alert(err.message || 'No se pudo anular el recibo.');
+
+          }finally{
+            if(annulBtn.isConnected){
+              annulBtn.disabled = false;
+              annulBtn.textContent = originalText;
+            }
+          }
+
+          return;
+        }
 
         if(printBtn){
           const reciboId = printBtn.getAttribute('data-print-recibo');
