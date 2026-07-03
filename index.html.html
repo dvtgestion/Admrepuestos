@@ -5150,12 +5150,16 @@ async function renderProformas(){
   const proItemsInfo = document.getElementById('proItemsInfo');
   const proTotal = document.getElementById('proTotal');
   const proClearBtn = document.getElementById('proClearBtn');
-  const proCliente = document.getElementById('proCliente');
+    const proCliente = document.getElementById('proCliente');
   const proCreateBtn = document.getElementById('proCreateBtn');
+
+  const proSearchInventario = document.getElementById('proSearchInventario');
+  const proInventarioTbody = document.getElementById('proInventarioTbody');
 
   const proformasTbody = document.getElementById('proformasTbody');
 
-  let proformasActivas = [];
+    let proformasActivas = [];
+  let proPartesInventario = [];
 
   let proItems = [];
 
@@ -5312,6 +5316,91 @@ async function renderProformas(){
     actualizarResumenItems();
   }
   
+    function pintarInventarioBuscado(){
+    const busqueda = String(proSearchInventario.value || '')
+      .trim()
+      .toLowerCase();
+
+    proInventarioTbody.innerHTML = '';
+
+    if(!busqueda){
+      proInventarioTbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="muted" style="text-align:center; padding:18px">
+            Busque un repuesto para agregarlo a la proforma.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    const resultados = proPartesInventario
+      .filter(parte => {
+        const codigo = String(parte.codigo || '').toLowerCase();
+        const nombre = String(parte.nombre || '').toLowerCase();
+        const descripcion = String(parte.descripcion || '').toLowerCase();
+
+        return codigo.includes(busqueda)
+          || nombre.includes(busqueda)
+          || descripcion.includes(busqueda);
+      })
+      .slice(0, 30);
+
+    if(!resultados.length){
+      proInventarioTbody.innerHTML = `
+        <tr>
+          <td colspan="5" class="muted" style="text-align:center; padding:18px">
+            No se encontraron repuestos en el inventario.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    resultados.forEach(parte => {
+      const stock = Number(parte.stock || 0);
+      const precio = Number(parte.precio || 0);
+
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${escapeHtml(parte.codigo || '')}</td>
+
+        <td>
+          ${escapeHtml(parte.nombre || '')}
+          ${
+            parte.descripcion
+              ? `<div class="muted xs" style="margin-top:3px">${
+                  escapeHtml(parte.descripcion)
+                }</div>`
+              : ''
+          }
+        </td>
+
+        <td class="num">${
+          stock
+        }</td>
+
+        <td class="num">${
+          fmtMoney(precio)
+        }</td>
+
+        <td class="num">
+          <button
+            class="btn btn-primary"
+            type="button"
+            data-pro-agregar-inventario="${escapeHtml(parte.id)}"
+            style="height:36px; padding:8px 12px"
+          >
+            Agregar
+          </button>
+        </td>
+      `;
+
+      proInventarioTbody.appendChild(tr);
+    });
+  }
+  
     function mostrarFechaProforma(valor){
     const texto = String(valor || '').trim();
 
@@ -5378,6 +5467,7 @@ async function renderProformas(){
   }
 
     proValidez.addEventListener('change', actualizarValidez);
+    proSearchInventario.addEventListener('input', pintarInventarioBuscado);
       proCliente.addEventListener('input', actualizarBotonCrear);
   proValidaHasta.addEventListener('change', actualizarBotonCrear);
 
@@ -5544,13 +5634,19 @@ async function renderProformas(){
   });
 
       actualizarValidez();
-  actualizarBotonManual();
-  pintarItems();
-  actualizarBotonCrear();
+actualizarBotonManual();
+pintarItems();
+actualizarBotonCrear();
 
-  await cargarProformasActivas();
+try{
+  proPartesInventario = await DB.listParts();
+}catch(err){
+  console.error(err);
+  proPartesInventario = [];
 }
 
+await cargarProformasActivas();
+}
     // ---- Sugerencias ----
 
     // ---- Sugerencias ----
