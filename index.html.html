@@ -2126,6 +2126,7 @@ globalImagePicker.addEventListener('change', async ()=>{
         case 'finanzas': await renderFinanzas(); break;
         case 'inventario': await renderInventario(); break;
         case 'movimientos': await renderMovimientos(); break;
+        case 'recibos': await renderRecibos(); break;
         case 'sugerencias': await renderSugerencias(); break;
         case 'ajustes': await renderAjustes(); break;
         case 'historial': await renderHistorial(); break;
@@ -3779,6 +3780,29 @@ alert('Movimiento deshecho');
         if(imp2Margen) imp2Margen.value = '';
         if(imp2Preview) imp2Preview.textContent = '';
       });
+    }
+
+    // ---- Recibos ----
+    async function renderRecibos(){
+      view.innerHTML = `
+        <section class="stack">
+          <header class="toolbar">
+            <div class="left">
+              <h2>Recibos</h2>
+              <p class="muted">
+                Seleccione salidas registradas para crear un recibo de venta.
+              </p>
+            </div>
+          </header>
+
+          <div class="card">
+            <h3 style="margin-top:0">Recibos de venta</h3>
+            <p class="muted">
+              Esta sección estará destinada a agrupar salidas ya registradas en Movimientos.
+            </p>
+          </div>
+        </section>
+      `;
     }
 
 
