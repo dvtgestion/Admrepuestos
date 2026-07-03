@@ -5461,8 +5461,38 @@ async function renderProformas(){
         <td>${mostrarFechaProforma(proforma.valida_hasta)}</td>
         <td class="num">${Number(proforma.cantidad_items || 0)}</td>
         <td class="num">${fmtMoney(proforma.total)}</td>
-        <td class="num">
-          <span class="muted xs">Sin acciones todavía</span>
+                <td class="num">
+          <div
+            class="row-actions"
+            style="justify-content:flex-end; min-width:max-content"
+          >
+            <button
+              class="btn"
+              type="button"
+              data-pro-imprimir="${escapeHtml(proforma.id)}"
+              style="height:36px; padding:8px 12px"
+            >
+              Imprimir / PDF
+            </button>
+
+            <button
+              class="btn btn-ghost"
+              type="button"
+              data-pro-word="${escapeHtml(proforma.id)}"
+              style="height:36px; padding:8px 12px"
+            >
+              Descargar Word
+            </button>
+
+            <button
+              class="btn btn-danger"
+              type="button"
+              data-pro-eliminar-documento="${escapeHtml(proforma.id)}"
+              style="height:36px; padding:8px 12px"
+            >
+              Eliminar proforma
+            </button>
+          </div>
         </td>
       `;
 
