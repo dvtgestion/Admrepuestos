@@ -5127,7 +5127,76 @@ async function renderProformas(){
       </div>
     </section>
   `;
+
+  const proValidez = document.getElementById('proValidez');
+  const proValidaHasta = document.getElementById('proValidaHasta');
+
+  const proManualNombre = document.getElementById('proManualNombre');
+  const proManualCantidad = document.getElementById('proManualCantidad');
+  const proManualPrecio = document.getElementById('proManualPrecio');
+  const proAddManualBtn = document.getElementById('proAddManualBtn');
+
+  function fechaISOlocal(date){
+    const año = date.getFullYear();
+    const mes = String(date.getMonth() + 1).padStart(2, '0');
+    const dia = String(date.getDate()).padStart(2, '0');
+    return `${año}-${mes}-${dia}`;
+  }
+
+  function sumarDias(fechaBase, dias){
+    const copia = new Date(fechaBase);
+    copia.setDate(copia.getDate() + Number(dias || 0));
+    return copia;
+  }
+
+  function actualizarValidez(){
+    const valor = String(proValidez.value || '3');
+
+    if(valor === 'personalizada'){
+      proValidaHasta.disabled = false;
+
+      if(!proValidaHasta.value){
+        proValidaHasta.value = fechaISOlocal(sumarDias(new Date(), 3));
+      }
+
+      return;
+    }
+
+    proValidaHasta.value = fechaISOlocal(
+      sumarDias(new Date(), Number(valor))
+    );
+
+    proValidaHasta.disabled = true;
+  }
+
+  function actualizarBotonManual(){
+    const nombreValido = String(proManualNombre.value || '').trim().length > 0;
+    const cantidadValida = Number(proManualCantidad.value || 0) > 0;
+    const precioValido = Number(proManualPrecio.value || 0) >= 0
+      && String(proManualPrecio.value || '').trim() !== '';
+
+    proAddManualBtn.disabled = !(
+      nombreValido
+      && cantidadValida
+      && precioValido
+    );
+  }
+
+  proValidez.addEventListener('change', actualizarValidez);
+
+  [
+    proManualNombre,
+    proManualCantidad,
+    proManualPrecio
+  ].forEach(el => {
+    el.addEventListener('input', actualizarBotonManual);
+  });
+
+  actualizarValidez();
+  actualizarBotonManual();
 }
+
+    // ---- Sugerencias ----
 
     // ---- Sugerencias ----
     async function renderSugerencias(){
