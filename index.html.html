@@ -5401,6 +5401,76 @@ async function renderProformas(){
     pintarItems();
   });
 
+  proCreateBtn.addEventListener('click', async () => {
+    const cliente = String(proCliente.value || '').trim();
+    const celular = String(
+      document.getElementById('proCelular').value || ''
+    ).trim();
+
+    const comentarios = String(
+      document.getElementById('proComentarios').value || ''
+    ).trim();
+
+    const validaHasta = String(proValidaHasta.value || '').trim();
+
+    if(!cliente){
+      alert('Ingrese el nombre del cliente.');
+      proCliente.focus();
+      return;
+    }
+
+    if(!validaHasta){
+      alert('Seleccione la fecha de validez de la proforma.');
+      proValidaHasta.focus();
+      return;
+    }
+
+    if(!proItems.length){
+      alert('Agregue al menos un repuesto a la proforma.');
+      return;
+    }
+
+    const originalText = proCreateBtn.textContent;
+
+    try{
+      proCreateBtn.disabled = true;
+      proCreateBtn.textContent = 'Generando...';
+
+      const creada = await DB.crearProforma({
+        cliente,
+        celular,
+        comentarios,
+        validaHasta,
+        items: proItems
+      });
+
+      const numero = creada && creada.numero_proforma
+        ? String(creada.numero_proforma).padStart(6, '0')
+        : '';
+
+      alert(
+        `Proforma N.º ${numero} creada correctamente.`
+      );
+
+      proCliente.value = '';
+      document.getElementById('proCelular').value = '';
+      document.getElementById('proComentarios').value = '';
+
+      proValidez.value = '3';
+      actualizarValidez();
+
+      proItems = [];
+      pintarItems();
+
+    }catch(err){
+      alert(err.message || 'No se pudo crear la proforma.');
+
+    }finally{
+      proCreateBtn.textContent = originalText;
+      actualizarBotonCrear();
+    }
+  });
+
     actualizarValidez();
   actualizarBotonManual();
   pintarItems();
