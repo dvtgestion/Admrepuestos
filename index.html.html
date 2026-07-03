@@ -5954,12 +5954,34 @@ async function renderProformas(){
       </div>
     `;
 
-    document.body.appendChild(modal);
+    const scrollY = window.scrollY;
+
+const estiloBodyOriginal = {
+  overflow: document.body.style.overflow,
+  position: document.body.style.position,
+  top: document.body.style.top,
+  width: document.body.style.width
+};
+
+document.body.style.overflow = 'hidden';
+document.body.style.position = 'fixed';
+document.body.style.top = `-${scrollY}px`;
+document.body.style.width = '100%';
+
+document.body.appendChild(modal);
 
     const cerrar = () => {
-      document.removeEventListener('keydown', cerrarConEscape);
-      modal.remove();
-    };
+  document.removeEventListener('keydown', cerrarConEscape);
+
+  document.body.style.overflow = estiloBodyOriginal.overflow;
+  document.body.style.position = estiloBodyOriginal.position;
+  document.body.style.top = estiloBodyOriginal.top;
+  document.body.style.width = estiloBodyOriginal.width;
+
+  modal.remove();
+
+  window.scrollTo(0, scrollY);
+};
 
     const cerrarConEscape = (e) => {
       if(e.key === 'Escape'){
