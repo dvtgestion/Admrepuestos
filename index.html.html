@@ -1662,6 +1662,97 @@ const totalStock = synced.stock;
         await undoMovementById(last.id);
       }
 
+      // ---- Recibos ----
+      async function listRecibos(limit=500){
+        const { data, error } = await sb
+          .from('recibos')
+          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario')
+          .eq('org_id', orgId())
+          .order('fecha', { ascending:false })
+          .limit(limit);
+
+        if(error) throw error;
+        return data || [];
+      }
+
+      async function listReciboMovimientoIds(){
+        const { data, error } = await sb
+          .from('recibo_items')
+          .select('movimiento_id')
+          .eq('org_id', orgId())
+          .limit(50000);
+
+        if(error) throw error;
+
+        return new Set(
+          (data || [])
+            .map(r => String(r.movimiento_id || ''))
+            .filter(Boolean)
+        );
+      }
+
+      async function listReciboItems(reciboId){
+        const { data, error } = await sb
+          .from('recibo_items')
+          .select(`
+            id,
+            movimiento_id,
+            fecha_movimiento,
+            codigo,
+            nombre,
+            almacen,
+            cantidad,
+            precio_unit,
+            subtotal,
+            referencia,
+            created_at
+          `)
+          .eq('org_id', orgId())
+          .eq('recibo_id', reciboId)
+          .order('created_at', { ascending:true });
+
+        if(error) throw error;
+        return data || [];
+      }
+
+      async function getReciboDetalle(reciboId){
+        const { data: recibo, error } = await sb
+          .from('recibos')
+          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario')
+          .eq('org_id', orgId())
+          .eq('id', reciboId)
+          .maybeSingle();
+
+        if(error) throw error;
+        if(!recibo) throw new Error('Recibo no encontrado.');
+
+        const items = await listReciboItems(reciboId);
+
+        return { recibo, items };
+      }
+
+      async function crearReciboVenta({
+        cliente,
+        celular,
+        comentarios,
+        movimientosIds
+      }){
+        const u = Auth.currentUser();
+
+        const { data, error } = await sb.rpc('crear_recibo_venta', {
+          p_org_id: orgId(),
+          p_cliente: String(cliente || '').trim(),
+          p_celular: String(celular || '').trim(),
+          p_comentarios: String(comentarios || '').trim(),
+          p_usuario: u ? u.email : '',
+          p_movimientos: movimientosIds
+        });
+
+        if(error) throw error;
+
+        return Array.isArray(data) ? data[0] : data;
+      }
+
       // ---- Historial de precios ----
       async function listPriceHistory(limit=500){
         const { data, error } = await sb.from('price_history')
@@ -1957,7 +2048,8 @@ async function syncPartBaseFromLastLot(){
 
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
-  listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
+listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
+listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta,
   listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
