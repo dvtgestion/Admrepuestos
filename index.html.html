@@ -5773,6 +5773,135 @@ async function renderProformas(){
 </html>
     `;
   }
+  
+    proformasTbody.addEventListener('click', async (e) => {
+    const printBtn = e.target.closest('button[data-pro-imprimir]');
+    const wordBtn = e.target.closest('button[data-pro-word]');
+    const eliminarBtn = e.target.closest(
+      'button[data-pro-eliminar-documento]'
+    );
+
+    if(!printBtn && !wordBtn && !eliminarBtn) return;
+
+    const proformaId = (
+      printBtn
+      || wordBtn
+      || eliminarBtn
+    ).getAttribute(
+      printBtn
+        ? 'data-pro-imprimir'
+        : wordBtn
+          ? 'data-pro-word'
+          : 'data-pro-eliminar-documento'
+    );
+
+    const proformaLista = proformasActivas.find(
+      p => String(p.id) === String(proformaId)
+    );
+
+    const numero = proformaLista
+      ? `N.º ${String(
+          proformaLista.numero_proforma || 0
+        ).padStart(6, '0')}`
+      : '';
+
+    if(eliminarBtn){
+      if(!confirm(
+        `¿Eliminar definitivamente la proforma ${numero}?\n\nEsta acción no modifica el inventario, el stock ni los movimientos.`
+      )){
+        return;
+      }
+
+      const originalText = eliminarBtn.textContent;
+
+      try{
+        eliminarBtn.disabled = true;
+        eliminarBtn.textContent = 'Eliminando...';
+
+        await DB.eliminarProforma(proformaId);
+
+        alert(
+          `Proforma ${numero} eliminada correctamente.`
+        );
+
+        await cargarProformasActivas();
+
+      }catch(err){
+        alert(err.message || 'No se pudo eliminar la proforma.');
+
+      }finally{
+        if(eliminarBtn.isConnected){
+          eliminarBtn.disabled = false;
+          eliminarBtn.textContent = originalText;
+        }
+      }
+
+      return;
+    }
+
+    try{
+      const detalle = await DB.getProformaDetalle(proformaId);
+
+      const html = buildProformaHtml(
+        detalle.proforma,
+        detalle.items
+      );
+
+      const numeroArchivo = String(
+        detalle.proforma.numero_proforma || 0
+      ).padStart(6, '0');
+
+      if(printBtn){
+        const ventana = window.open('', '_blank');
+
+        if(!ventana){
+          alert(
+            'El navegador bloqueó la ventana de impresión. Permita ventanas emergentes e intente nuevamente.'
+          );
+          return;
+        }
+
+        ventana.document.open();
+        ventana.document.write(html);
+        ventana.document.close();
+
+        ventana.focus();
+
+        setTimeout(() => {
+          ventana.print();
+        }, 350);
+
+        return;
+      }
+
+      if(wordBtn){
+        const blob = new Blob(
+          ['\ufeff', html],
+          { type:'application/msword' }
+        );
+
+        const url = URL.createObjectURL(blob);
+        const enlace = document.createElement('a');
+
+        enlace.href = url;
+        enlace.download = `Proforma_${numeroArchivo}.doc`;
+
+        document.body.appendChild(enlace);
+        enlace.click();
+        enlace.remove();
+
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
+
+    }catch(err){
+      alert(
+        err.message
+        || 'No se pudo generar el documento de la proforma.'
+      );
+    }
+  });
 
     proValidez.addEventListener('change', actualizarValidez);
 
