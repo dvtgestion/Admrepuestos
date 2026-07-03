@@ -4835,27 +4835,299 @@ alert('Movimiento deshecho');
     }
 
     // ---- Proformas ----
-    async function renderProformas(){
-      view.innerHTML = `
-        <section class="stack">
-          <header class="toolbar">
-            <div class="left">
-              <h2>Proformas</h2>
-              <p class="muted">
-                Cotizaciones sin venta ni salida de stock.
-              </p>
-            </div>
-          </header>
+async function renderProformas(){
+  view.innerHTML = `
+    <section class="stack">
+      <header class="toolbar">
+        <div class="left">
+          <h2>Proformas</h2>
+          <p class="muted">
+            Cotizaciones sin venta ni salida de stock.
+          </p>
+        </div>
+      </header>
 
-          <div class="card">
-            <h3 style="margin-top:0">Proformas</h3>
-            <p class="muted" style="margin-bottom:0">
-              Próximamente podrá crear proformas con repuestos del inventario o repuestos ingresados manualmente.
+      <div class="card">
+        <h3 style="margin-top:0">Crear proforma</h3>
+
+        <p class="muted xs" style="margin-top:-4px">
+          Esta proforma no constituye una venta ni reserva el stock.
+          Los precios y la disponibilidad están sujetos a confirmación.
+        </p>
+
+        <div class="grid" style="margin-top:16px">
+          <label class="field">
+            <span>Cliente</span>
+            <input
+              id="proCliente"
+              class="input"
+              placeholder="Nombre del cliente"
+            />
+          </label>
+
+          <label class="field">
+            <span>Celular</span>
+            <input
+              id="proCelular"
+              class="input"
+              placeholder="Ej.: 78798194"
+            />
+          </label>
+
+          <label class="field">
+            <span>Validez</span>
+            <select id="proValidez" class="input">
+              <option value="1">1 día</option>
+              <option value="3" selected>3 días</option>
+              <option value="7">7 días</option>
+              <option value="15">15 días</option>
+              <option value="personalizada">Fecha personalizada</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Válida hasta</span>
+            <input
+              id="proValidaHasta"
+              class="input"
+              type="date"
+            />
+          </label>
+
+          <label class="field" style="grid-column:1/-1">
+            <span>Comentarios o instrucciones</span>
+            <textarea
+              id="proComentarios"
+              class="input"
+              rows="3"
+              placeholder="Escriba aquí cualquier observación para la proforma…"
+              style="height:92px; resize:vertical"
+            ></textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="toolbar">
+          <div class="left">
+            <h3 style="margin:0 0 6px">Agregar repuesto desde inventario</h3>
+            <p class="muted xs" style="margin:0">
+              Seleccione un repuesto existente sin descontar stock.
             </p>
           </div>
-        </section>
-      `;
-    }
+
+          <div class="right">
+            <input
+              id="proSearchInventario"
+              class="input"
+              placeholder="Buscar código o repuesto…"
+              style="min-width:260px"
+            />
+          </div>
+        </header>
+
+        <div class="table-wrap">
+          <table class="table compact">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Repuesto</th>
+                <th class="num">Stock disponible</th>
+                <th class="num">Precio de venta</th>
+                <th class="num">Acción</th>
+              </tr>
+            </thead>
+
+            <tbody id="proInventarioTbody">
+              <tr>
+                <td colspan="5" class="muted" style="text-align:center; padding:18px">
+                  Busque un repuesto para agregarlo a la proforma.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="toolbar">
+          <div class="left">
+            <h3 style="margin:0 0 6px">Agregar repuesto manual</h3>
+            <p class="muted xs" style="margin:0">
+              Para repuestos que todavía no están registrados en el inventario.
+            </p>
+          </div>
+        </header>
+
+        <div class="grid">
+          <label class="field">
+            <span>Código</span>
+            <input
+              id="proManualCodigo"
+              class="input"
+              placeholder="Opcional"
+            />
+          </label>
+
+          <label class="field">
+            <span>Nombre del repuesto</span>
+            <input
+              id="proManualNombre"
+              class="input"
+              placeholder="Ej.: Bomba de combustible"
+            />
+          </label>
+
+          <label class="field">
+            <span>Cantidad</span>
+            <input
+              id="proManualCantidad"
+              class="input"
+              type="number"
+              min="1"
+              step="1"
+              value="1"
+            />
+          </label>
+
+          <label class="field">
+            <span>Precio unitario</span>
+            <input
+              id="proManualPrecio"
+              class="input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0,00"
+            />
+          </label>
+        </div>
+
+        <div class="toolbar" style="margin:14px 0 0">
+          <div class="muted xs">
+            El precio ingresado se guardará solamente en esta proforma.
+          </div>
+
+          <div class="right">
+            <button
+              id="proAddManualBtn"
+              class="btn btn-primary"
+              type="button"
+              disabled
+            >
+              Agregar repuesto manual
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="toolbar">
+          <div class="left">
+            <h3 style="margin:0 0 6px">Ítems de la proforma</h3>
+            <p class="muted xs" style="margin:0">
+              Puede modificar cantidad y precio antes de generar la proforma.
+            </p>
+          </div>
+        </header>
+
+        <div class="table-wrap">
+          <table class="table compact">
+            <thead>
+              <tr>
+                <th>Código</th>
+                <th>Repuesto</th>
+                <th>Origen</th>
+                <th class="num">Cantidad</th>
+                <th class="num">Precio unit.</th>
+                <th class="num">Subtotal</th>
+                <th class="num">Acción</th>
+              </tr>
+            </thead>
+
+            <tbody id="proItemsTbody">
+              <tr>
+                <td colspan="7" class="muted" style="text-align:center; padding:18px">
+                  Aún no agregó repuestos a la proforma.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          class="toolbar"
+          style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border)"
+        >
+          <div>
+            <strong id="proItemsInfo">0 repuestos agregados</strong>
+
+            <div class="muted xs" style="margin-top:4px">
+              Total de la proforma:
+              <strong id="proTotal">Bs 0,00</strong>
+            </div>
+          </div>
+
+          <div class="right">
+            <button
+              id="proClearBtn"
+              class="btn btn-ghost"
+              type="button"
+              disabled
+            >
+              Limpiar proforma
+            </button>
+
+            <button
+              id="proCreateBtn"
+              class="btn btn-primary"
+              type="button"
+              disabled
+            >
+              Generar proforma
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="toolbar">
+          <div class="left">
+            <h3 style="margin:0 0 6px">Proformas activas</h3>
+            <p class="muted xs" style="margin:0">
+              Solo se muestran proformas dentro de su período de validez.
+            </p>
+          </div>
+        </header>
+
+        <div class="table-wrap">
+          <table class="table compact">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>N.º</th>
+                <th>Cliente</th>
+                <th>Celular</th>
+                <th>Válida hasta</th>
+                <th class="num">Ítems</th>
+                <th class="num">Total</th>
+                <th class="num">Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody id="proformasTbody">
+              <tr>
+                <td colspan="8" class="muted" style="text-align:center; padding:18px">
+                  Aún no existen proformas activas.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  `;
+}
 
     // ---- Sugerencias ----
     async function renderSugerencias(){
