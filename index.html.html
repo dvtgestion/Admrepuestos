@@ -3874,7 +3874,7 @@ alert('Movimiento deshecho');
       });
     }
 
-        // ---- Recibos ----
+            // ---- Recibos ----
     async function renderRecibos(){
       view.innerHTML = `
         <section class="stack">
@@ -3991,13 +3991,7 @@ alert('Movimiento deshecho');
                   </tr>
                 </thead>
 
-                <tbody id="recAvailableTbody">
-                  <tr>
-                    <td colspan="9" class="muted" style="text-align:center; padding:18px">
-                      Las salidas registradas aparecerán aquí en el próximo paso.
-                    </td>
-                  </tr>
-                </tbody>
+                <tbody id="recAvailableTbody"></tbody>
               </table>
             </div>
           </div>
@@ -4007,7 +4001,7 @@ alert('Movimiento deshecho');
               <div class="left">
                 <h3 style="margin:0 0 6px">Recibos emitidos</h3>
                 <p class="muted xs" style="margin:0">
-                  Desde aquí podrá abrir, imprimir o guardar cada recibo como PDF.
+                  Desde aquí podrá imprimir, guardar como PDF o descargar el documento Word.
                 </p>
               </div>
             </header>
@@ -4020,25 +4014,566 @@ alert('Movimiento deshecho');
                     <th>N.º</th>
                     <th>Cliente</th>
                     <th>Celular</th>
-                    <th class="num">Artículos</th>
+                    <th class="num">Ítems</th>
                     <th class="num">Total</th>
                     <th>Usuario</th>
                     <th></th>
                   </tr>
                 </thead>
 
-                <tbody id="recibosTbody">
-                  <tr>
-                    <td colspan="8" class="muted" style="text-align:center; padding:18px">
-                      Aún no existen recibos emitidos.
-                    </td>
-                  </tr>
-                </tbody>
+                <tbody id="recibosTbody"></tbody>
               </table>
             </div>
           </div>
         </section>
       `;
+
+      const recCliente = document.getElementById('recCliente');
+      const recCelular = document.getElementById('recCelular');
+      const recComentarios = document.getElementById('recComentarios');
+
+      const recSearch = document.getElementById('recSearch');
+      const recAvailableTbody = document.getElementById('recAvailableTbody');
+      const recibosTbody = document.getElementById('recibosTbody');
+
+      const recSelectedInfo = document.getElementById('recSelectedInfo');
+      const recTotal = document.getElementById('recTotal');
+      const recClearSelection = document.getElementById('recClearSelection');
+      const recCreateBtn = document.getElementById('recCreateBtn');
+
+      let moves = [];
+      let recibos = [];
+      let usedMovementIds = new Set();
+      let selectedMovementIds = new Set();
+
+      function formatNumeroRecibo(numero){
+        return String(numero || 0).padStart(6, '0');
+      }
+
+      function formatFechaRecibo(fecha){
+        return new Date(fecha).toLocaleString('es-BO', {
+          year:'numeric',
+          month:'2-digit',
+          day:'2-digit',
+          hour:'2-digit',
+          minute:'2-digit'
+        });
+      }
+
+      function getSelectedMoves(){
+        return moves.filter(m =>
+          selectedMovementIds.has(String(m.id))
+        );
+      }
+
+      function updateSelectionSummary(){
+        const selected = getSelectedMoves();
+
+        const total = selected.reduce((sum, m) => {
+          return sum
+            + Number(m.cantidad || 0)
+            * Number(m.precio_unit || 0);
+        }, 0);
+
+        recSelectedInfo.textContent =
+          `${selected.length} salida${selected.length === 1 ? '' : 's'} seleccionada${selected.length === 1 ? '' : 's'}`;
+
+        recTotal.textContent = fmtMoney(total);
+
+        recClearSelection.disabled = selected.length === 0;
+        recCreateBtn.disabled = selected.length === 0;
+      }
+
+      function getAvailableMoves(){
+        const query = String(recSearch.value || '')
+          .trim()
+          .toLowerCase();
+
+        return moves.filter(m => {
+          if(m.tipo !== 'salida') return false;
+
+          if(usedMovementIds.has(String(m.id))) return false;
+
+          if(query){
+            const searchable = [
+              m.codigo,
+              m.nombre,
+              m.almacen,
+              m.referencia
+            ]
+              .map(x => String(x || '').toLowerCase())
+              .join(' ');
+
+            if(!searchable.includes(query)) return false;
+          }
+
+          return true;
+        });
+      }
+
+      function paintAvailableMoves(){
+        const availableMoves = getAvailableMoves();
+
+        recAvailableTbody.innerHTML = '';
+
+        if(!availableMoves.length){
+          recAvailableTbody.innerHTML = `
+            <tr>
+              <td colspan="9" class="muted" style="text-align:center; padding:18px">
+                No hay salidas disponibles para recibo.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        availableMoves.forEach(m => {
+          const tr = document.createElement('tr');
+          const movementId = String(m.id);
+          const checked = selectedMovementIds.has(movementId);
+
+          const subtotal =
+            Number(m.cantidad || 0)
+            * Number(m.precio_unit || 0);
+
+          tr.innerHTML = `
+            <td>
+              <input
+                type="checkbox"
+                data-rec-movement="${escapeHtml(movementId)}"
+                ${checked ? 'checked' : ''}
+              />
+            </td>
+            <td>${fmtDate(m.fecha)}</td>
+            <td>${escapeHtml(m.codigo || '')}</td>
+            <td>${escapeHtml(m.nombre || '')}</td>
+            <td>${escapeHtml(m.almacen || '')}</td>
+            <td class="num">${Number(m.cantidad || 0)}</td>
+            <td class="num">${fmtMoney(m.precio_unit)}</td>
+            <td class="num">${fmtMoney(subtotal)}</td>
+            <td>${escapeHtml(m.referencia || '')}</td>
+          `;
+
+          recAvailableTbody.appendChild(tr);
+        });
+      }
+
+      function paintRecibos(){
+        recibosTbody.innerHTML = '';
+
+        if(!recibos.length){
+          recibosTbody.innerHTML = `
+            <tr>
+              <td colspan="8" class="muted" style="text-align:center; padding:18px">
+                Aún no existen recibos emitidos.
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        recibos.forEach(r => {
+          const tr = document.createElement('tr');
+
+          tr.innerHTML = `
+            <td>${fmtDate(r.fecha)}</td>
+            <td>N.º ${formatNumeroRecibo(r.numero_recibo)}</td>
+            <td>${escapeHtml(r.cliente || '')}</td>
+            <td>${escapeHtml(r.celular || '')}</td>
+            <td class="num">${Number(r.cantidad_items || 0)}</td>
+            <td class="num">${fmtMoney(r.total)}</td>
+            <td>${escapeHtml(r.usuario || '')}</td>
+            <td class="num">
+              <div class="row-actions" style="justify-content:flex-end">
+                <button
+                  class="btn"
+                  type="button"
+                  data-print-recibo="${escapeHtml(r.id)}"
+                >
+                  Imprimir / PDF
+                </button>
+
+                <button
+                  class="btn btn-ghost"
+                  type="button"
+                  data-word-recibo="${escapeHtml(r.id)}"
+                >
+                  Descargar Word
+                </button>
+              </div>
+            </td>
+          `;
+
+          recibosTbody.appendChild(tr);
+        });
+      }
+
+      function buildReceiptHtml(recibo, items, autoPrint=false){
+        const itemRows = items.map(item => `
+          <tr>
+            <td>${escapeHtml(item.codigo || '')}</td>
+            <td>${escapeHtml(item.nombre || '')}</td>
+            <td style="text-align:right">${Number(item.cantidad || 0)}</td>
+            <td style="text-align:right">${fmtMoney(item.precio_unit)}</td>
+            <td style="text-align:right">${fmtMoney(item.subtotal)}</td>
+          </tr>
+        `).join('');
+
+        const comentarios = escapeHtml(recibo.comentarios || '')
+          .replace(/\n/g, '<br>');
+
+        const printScript = autoPrint
+          ? '<script>window.addEventListener("load",function(){setTimeout(function(){window.print();},250);});<\/script>'
+          : '';
+
+        return `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Recibo de venta N.º ${formatNumeroRecibo(recibo.numero_recibo)}</title>
+  <style>
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      padding:32px;
+      background:#fff;
+      color:#111827;
+      font-family:Arial, Helvetica, sans-serif;
+    }
+    .page{
+      max-width:820px;
+      margin:0 auto;
+    }
+    .header{
+      display:flex;
+      justify-content:space-between;
+      gap:20px;
+      padding-bottom:14px;
+      margin-bottom:20px;
+      border-bottom:2px solid #111827;
+    }
+    .company{
+      font-size:24px;
+      font-weight:700;
+      letter-spacing:.4px;
+    }
+    .phone{
+      margin-top:5px;
+      font-size:14px;
+    }
+    .document-title{
+      font-size:20px;
+      font-weight:700;
+      text-align:right;
+    }
+    .number{
+      margin-top:6px;
+      font-size:14px;
+      text-align:right;
+    }
+    .info{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:10px 24px;
+      margin-bottom:20px;
+      font-size:14px;
+    }
+    .info strong{
+      display:inline-block;
+      min-width:65px;
+    }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:10px;
+      font-size:13px;
+    }
+    th,td{
+      padding:8px;
+      border:1px solid #1f2937;
+      vertical-align:top;
+    }
+    th{
+      background:#f3f4f6;
+      text-align:left;
+    }
+    .total{
+      display:flex;
+      justify-content:flex-end;
+      margin-top:14px;
+      font-size:18px;
+      font-weight:700;
+    }
+    .comments-title{
+      margin-top:34px;
+      font-size:14px;
+      font-weight:700;
+    }
+    .comments-content{
+      min-height:32px;
+      margin-top:8px;
+      font-size:14px;
+    }
+    .line{
+      height:26px;
+      border-bottom:1px solid #6b7280;
+    }
+    .footer{
+      margin-top:34px;
+      color:#4b5563;
+      font-size:11px;
+      text-align:center;
+    }
+    @media print{
+      body{padding:12mm}
+      .page{max-width:none}
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="header">
+      <div>
+        <div class="company">TVD REPUESTOS</div>
+        <div class="phone">Tel.: 78798194</div>
+      </div>
+
+      <div>
+        <div class="document-title">RECIBO DE VENTA</div>
+        <div class="number">N.º ${formatNumeroRecibo(recibo.numero_recibo)}</div>
+      </div>
+    </div>
+
+    <div class="info">
+      <div><strong>Cliente:</strong> ${escapeHtml(recibo.cliente || '')}</div>
+      <div><strong>Celular:</strong> ${escapeHtml(recibo.celular || '')}</div>
+      <div><strong>Fecha:</strong> ${formatFechaRecibo(recibo.fecha)}</div>
+      <div><strong>Ítems:</strong> ${Number(recibo.cantidad_items || 0)}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Descripción</th>
+          <th style="text-align:right">Cantidad</th>
+          <th style="text-align:right">Precio unitario</th>
+          <th style="text-align:right">Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${itemRows}
+      </tbody>
+    </table>
+
+    <div class="total">
+      TOTAL: ${fmtMoney(recibo.total)}
+    </div>
+
+    <div class="comments-title">Comentarios o instrucciones:</div>
+    <div class="comments-content">${comentarios || '&nbsp;'}</div>
+    <div class="line"></div>
+    <div class="line"></div>
+    <div class="line"></div>
+
+    <div class="footer">
+      TVD REPUESTOS — Tel.: 78798194
+    </div>
+  </main>
+
+  ${printScript}
+</body>
+</html>
+        `;
+      }
+
+      async function refreshRecibos(){
+        moves = await DB.listMoves(50000);
+        recibos = await DB.listRecibos(1000);
+        usedMovementIds = await DB.listReciboMovimientoIds();
+
+        selectedMovementIds = new Set(
+          Array.from(selectedMovementIds)
+            .filter(id => !usedMovementIds.has(String(id)))
+        );
+
+        paintAvailableMoves();
+        paintRecibos();
+        updateSelectionSummary();
+      }
+
+      recSearch.addEventListener('input', paintAvailableMoves);
+
+      recAvailableTbody.addEventListener('change', (e) => {
+        const checkbox = e.target.closest('input[data-rec-movement]');
+        if(!checkbox) return;
+
+        const movementId = String(
+          checkbox.getAttribute('data-rec-movement') || ''
+        );
+
+        if(!movementId) return;
+
+        if(checkbox.checked){
+          selectedMovementIds.add(movementId);
+        }else{
+          selectedMovementIds.delete(movementId);
+        }
+
+        updateSelectionSummary();
+      });
+
+      recClearSelection.addEventListener('click', () => {
+        selectedMovementIds.clear();
+        paintAvailableMoves();
+        updateSelectionSummary();
+      });
+
+      recCreateBtn.addEventListener('click', async () => {
+        const cliente = String(recCliente.value || '').trim();
+        const celular = String(recCelular.value || '').trim();
+        const comentarios = String(recComentarios.value || '').trim();
+
+        const movimientosIds = Array.from(selectedMovementIds)
+          .map(id => Number(id))
+          .filter(id => Number.isFinite(id));
+
+        if(!cliente){
+          alert('Escriba el nombre del cliente.');
+          recCliente.focus();
+          return;
+        }
+
+        if(!movimientosIds.length){
+          alert('Seleccione al menos una salida.');
+          return;
+        }
+
+        try{
+          recCreateBtn.disabled = true;
+          recCreateBtn.textContent = 'Creando recibo...';
+
+          const result = await DB.crearReciboVenta({
+            cliente,
+            celular,
+            comentarios,
+            movimientosIds
+          });
+
+          alert(
+            `Recibo de venta N.º ${formatNumeroRecibo(result.numero_recibo)} creado correctamente.\nTotal: ${fmtMoney(result.total)}`
+          );
+
+          selectedMovementIds.clear();
+          recCliente.value = '';
+          recCelular.value = '';
+          recComentarios.value = '';
+
+          await refreshRecibos();
+
+        }catch(err){
+          alert(err.message || 'No se pudo crear el recibo.');
+        }finally{
+          recCreateBtn.textContent = 'Crear recibo de venta';
+          updateSelectionSummary();
+        }
+      });
+
+      recibosTbody.addEventListener('click', async (e) => {
+        const printBtn = e.target.closest('button[data-print-recibo]');
+        const wordBtn = e.target.closest('button[data-word-recibo]');
+
+        if(printBtn){
+          const reciboId = printBtn.getAttribute('data-print-recibo');
+
+          const printWindow = window.open('', '_blank');
+
+          if(!printWindow){
+            alert('El navegador bloqueó la ventana de impresión. Permita ventanas emergentes e intente nuevamente.');
+            return;
+          }
+
+          printWindow.document.write(
+            '<p style="font-family:Arial;padding:20px">Preparando recibo...</p>'
+          );
+
+          try{
+            const detail = await DB.getReciboDetalle(reciboId);
+
+            printWindow.document.open();
+            printWindow.document.write(
+              buildReceiptHtml(detail.recibo, detail.items, true)
+            );
+            printWindow.document.close();
+
+          }catch(err){
+            printWindow.close();
+            alert(err.message || 'No se pudo abrir el recibo.');
+          }
+
+          return;
+        }
+
+        if(wordBtn){
+          const reciboId = wordBtn.getAttribute('data-word-recibo');
+
+          try{
+            const detail = await DB.getReciboDetalle(reciboId);
+
+            const html = buildReceiptHtml(
+              detail.recibo,
+              detail.items,
+              false
+            );
+
+            const blob = new Blob(
+              ['\ufeff', html],
+              { type:'application/msword;charset=utf-8' }
+            );
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+
+            a.href = url;
+            a.download =
+              `recibo_de_venta_${formatNumeroRecibo(detail.recibo.numero_recibo)}.doc`;
+
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+          }catch(err){
+            alert(err.message || 'No se pudo descargar el documento Word.');
+          }
+        }
+      });
+
+      try{
+        await refreshRecibos();
+      }catch(err){
+        console.error(err);
+
+        recAvailableTbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="muted" style="text-align:center; padding:18px">
+              No se pudieron cargar las salidas. Revise la conexión e intente nuevamente.
+            </td>
+          </tr>
+        `;
+
+        recibosTbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="muted" style="text-align:center; padding:18px">
+              No se pudieron cargar los recibos.
+            </td>
+          </tr>
+        `;
+
+        alert(err.message || 'No se pudieron cargar los datos de recibos.');
+      }
     }
 
     // ---- Sugerencias ----
