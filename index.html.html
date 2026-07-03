@@ -5131,10 +5131,18 @@ async function renderProformas(){
   const proValidez = document.getElementById('proValidez');
   const proValidaHasta = document.getElementById('proValidaHasta');
 
+    const proManualCodigo = document.getElementById('proManualCodigo');
   const proManualNombre = document.getElementById('proManualNombre');
   const proManualCantidad = document.getElementById('proManualCantidad');
   const proManualPrecio = document.getElementById('proManualPrecio');
   const proAddManualBtn = document.getElementById('proAddManualBtn');
+
+  const proItemsTbody = document.getElementById('proItemsTbody');
+  const proItemsInfo = document.getElementById('proItemsInfo');
+  const proTotal = document.getElementById('proTotal');
+  const proClearBtn = document.getElementById('proClearBtn');
+
+  let proItems = [];
 
   function fechaISOlocal(date){
     const año = date.getFullYear();
@@ -5181,8 +5189,102 @@ async function renderProformas(){
       && precioValido
     );
   }
+  
+    function actualizarResumenItems(){
+    const total = proItems.reduce((acumulado, item) => {
+      return acumulado + (
+        Number(item.cantidad || 0)
+        * Number(item.precio_unit || 0)
+      );
+    }, 0);
 
-  proValidez.addEventListener('change', actualizarValidez);
+    proItemsInfo.textContent = `${
+      proItems.length
+    } repuesto${proItems.length === 1 ? '' : 's'} agregado${
+      proItems.length === 1 ? '' : 's'
+    }`;
+
+    proTotal.textContent = fmtMoney(total);
+    proClearBtn.disabled = proItems.length === 0;
+  }
+
+  function pintarItems(){
+    proItemsTbody.innerHTML = '';
+
+    if(!proItems.length){
+      proItemsTbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="muted" style="text-align:center; padding:18px">
+            Aún no agregó repuestos a la proforma.
+          </td>
+        </tr>
+      `;
+
+      actualizarResumenItems();
+      return;
+    }
+
+    proItems.forEach((item, index) => {
+      const cantidad = Number(item.cantidad || 0);
+      const precioUnit = Number(item.precio_unit || 0);
+      const subtotal = cantidad * precioUnit;
+
+      const origen = item.origen === 'inventario'
+        ? 'Inventario'
+        : 'Manual';
+
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${escapeHtml(item.codigo || '')}</td>
+        <td>${escapeHtml(item.nombre || '')}</td>
+        <td>${origen}</td>
+
+        <td class="num">
+          <input
+            class="input"
+            type="number"
+            min="1"
+            step="1"
+            value="${cantidad}"
+            data-pro-cantidad="${index}"
+            style="height:36px; min-width:78px; text-align:right"
+          />
+        </td>
+
+        <td class="num">
+          <input
+            class="input"
+            type="number"
+            min="0"
+            step="0.01"
+            value="${precioUnit}"
+            data-pro-precio="${index}"
+            style="height:36px; min-width:100px; text-align:right"
+          />
+        </td>
+
+        <td class="num">${fmtMoney(subtotal)}</td>
+
+        <td class="num">
+          <button
+            class="btn btn-danger"
+            type="button"
+            data-pro-eliminar="${index}"
+            style="height:36px; padding:8px 12px"
+          >
+            Eliminar
+          </button>
+        </td>
+      `;
+
+      proItemsTbody.appendChild(tr);
+    });
+
+    actualizarResumenItems();
+  }
+
+    proValidez.addEventListener('change', actualizarValidez);
 
   [
     proManualNombre,
@@ -5192,8 +5294,90 @@ async function renderProformas(){
     el.addEventListener('input', actualizarBotonManual);
   });
 
+  proAddManualBtn.addEventListener('click', () => {
+    const codigo = String(proManualCodigo.value || '').trim();
+    const nombre = String(proManualNombre.value || '').trim();
+    const cantidad = Math.floor(Number(proManualCantidad.value || 0));
+    const precioUnit = Number(proManualPrecio.value || 0);
+
+    if(!nombre || cantidad <= 0 || !Number.isFinite(precioUnit) || precioUnit < 0){
+      alert('Complete correctamente el nombre, la cantidad y el precio unitario.');
+      return;
+    }
+
+    proItems.push({
+      origen: 'manual',
+      pieza_id: null,
+      codigo,
+      nombre,
+      cantidad,
+      precio_unit: precioUnit
+    });
+
+    proManualCodigo.value = '';
+    proManualNombre.value = '';
+    proManualCantidad.value = '1';
+    proManualPrecio.value = '';
+
+    actualizarBotonManual();
+    pintarItems();
+  });
+
+  proItemsTbody.addEventListener('change', (e) => {
+    const cantidadInput = e.target.closest('input[data-pro-cantidad]');
+    const precioInput = e.target.closest('input[data-pro-precio]');
+
+    if(cantidadInput){
+      const index = Number(cantidadInput.getAttribute('data-pro-cantidad'));
+      const cantidad = Math.floor(Number(cantidadInput.value || 0));
+
+      if(proItems[index] && cantidad > 0){
+        proItems[index].cantidad = cantidad;
+      }
+
+      pintarItems();
+      return;
+    }
+
+    if(precioInput){
+      const index = Number(precioInput.getAttribute('data-pro-precio'));
+      const precioUnit = Number(precioInput.value || 0);
+
+      if(proItems[index] && Number.isFinite(precioUnit) && precioUnit >= 0){
+        proItems[index].precio_unit = precioUnit;
+      }
+
+      pintarItems();
+    }
+  });
+
+  proItemsTbody.addEventListener('click', (e) => {
+    const eliminarBtn = e.target.closest('button[data-pro-eliminar]');
+
+    if(!eliminarBtn) return;
+
+    const index = Number(eliminarBtn.getAttribute('data-pro-eliminar'));
+
+    if(!Number.isInteger(index) || !proItems[index]) return;
+
+    proItems.splice(index, 1);
+    pintarItems();
+  });
+
+  proClearBtn.addEventListener('click', () => {
+    if(!proItems.length) return;
+
+    if(!confirm('¿Limpiar todos los repuestos agregados a esta proforma?')){
+      return;
+    }
+
+    proItems = [];
+    pintarItems();
+  });
+
   actualizarValidez();
   actualizarBotonManual();
+  pintarItems();
 }
 
     // ---- Sugerencias ----
