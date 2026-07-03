@@ -5261,16 +5261,40 @@ async function renderProformas(){
       const precioUnit = Number(item.precio_unit || 0);
       const subtotal = cantidad * precioUnit;
 
-      const origen = item.origen === 'inventario'
+            const origen = item.origen === 'inventario'
         ? 'Inventario'
         : 'Manual';
+
+      const parteInventario = item.origen === 'inventario'
+        ? proPartesInventario.find(
+            parte => String(parte.id) === String(item.pieza_id)
+          )
+        : null;
+
+      const stockDisponible = parteInventario
+        ? Number(parteInventario.stock || 0)
+        : null;
+
+      const avisoStock = (
+        stockDisponible !== null
+        && cantidad > stockDisponible
+      )
+        ? `
+          <div class="xs" style="margin-top:4px; color:#b91c1c; font-weight:600">
+            Stock insuficiente: disponible ${stockDisponible}, cotizado ${cantidad}
+          </div>
+        `
+        : '';
 
       const tr = document.createElement('tr');
 
       tr.innerHTML = `
         <td>${escapeHtml(item.codigo || '')}</td>
         <td>${escapeHtml(item.nombre || '')}</td>
-        <td>${origen}</td>
+                <td>
+          ${origen}
+          ${avisoStock}
+        </td>
 
         <td class="num">
           <input
