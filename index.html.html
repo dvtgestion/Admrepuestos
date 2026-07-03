@@ -2415,7 +2415,8 @@ globalImagePicker.addEventListener('change', async ()=>{
         case 'inventario': await renderInventario(); break;
         case 'movimientos': await renderMovimientos(); break;
         case 'recibos': await renderRecibos(); break;
-        case 'sugerencias': await renderSugerencias(); break;
+case 'proformas': await renderProformas(); break;
+case 'sugerencias': await renderSugerencias(); break;
         case 'ajustes': await renderAjustes(); break;
         case 'historial': await renderHistorial(); break;
         default:
@@ -4831,6 +4832,29 @@ alert('Movimiento deshecho');
 
         alert(err.message || 'No se pudieron cargar los datos de recibos.');
       }
+    }
+
+    // ---- Proformas ----
+    async function renderProformas(){
+      view.innerHTML = `
+        <section class="stack">
+          <header class="toolbar">
+            <div class="left">
+              <h2>Proformas</h2>
+              <p class="muted">
+                Cotizaciones sin venta ni salida de stock.
+              </p>
+            </div>
+          </header>
+
+          <div class="card">
+            <h3 style="margin-top:0">Proformas</h3>
+            <p class="muted" style="margin-bottom:0">
+              Próximamente podrá crear proformas con repuestos del inventario o repuestos ingresados manualmente.
+            </p>
+          </div>
+        </section>
+      `;
     }
 
     // ---- Sugerencias ----
