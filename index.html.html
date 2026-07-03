@@ -5810,26 +5810,188 @@ async function renderProformas(){
     `;
   }
   
+  
+    function abrirDetalleInternoProforma(proforma, items){
+    const numero = String(
+      proforma.numero_proforma || 0
+    ).padStart(6, '0');
+
+    const filas = (items || []).map(item => {
+      const cantidad = Number(item.cantidad || 0);
+      const precioUnit = Number(item.precio_unit || 0);
+
+      const parteActual = item.origen === 'inventario'
+        ? proPartesInventario.find(
+            parte => String(parte.id) === String(item.pieza_id)
+          )
+        : null;
+
+      const stockActual = parteActual
+        ? Number(parteActual.stock || 0)
+        : null;
+
+      const avisoStock = (
+        stockActual !== null
+        && cantidad > stockActual
+      )
+        ? `
+          <div class="xs" style="margin-top:4px; color:#b91c1c; font-weight:600">
+            Stock insuficiente: disponible ${stockActual}, cotizado ${cantidad}
+          </div>
+        `
+        : '';
+
+      return `
+        <tr>
+          <td>${escapeHtml(item.codigo || '')}</td>
+          <td>${escapeHtml(item.nombre || '')}</td>
+          <td>${item.origen === 'inventario' ? 'Inventario' : 'Manual'}</td>
+          <td class="num">${cantidad}</td>
+          <td class="num">${fmtMoney(precioUnit)}</td>
+          <td class="num">
+            ${
+              stockActual === null
+                ? '—'
+                : `${stockActual}${avisoStock}`
+            }
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    const modalExistente = document.getElementById(
+      'proDetalleInternoModal'
+    );
+
+    if(modalExistente){
+      modalExistente.remove();
+    }
+
+    const modal = document.createElement('div');
+
+    modal.id = 'proDetalleInternoModal';
+    modal.className = 'modal';
+
+    modal.innerHTML = `
+      <div class="box" style="width:min(100%, 1180px)">
+        <header>
+          <div>
+            <h3>Detalle interno — Proforma N.º ${numero}</h3>
+            <div class="muted xs" style="margin-top:4px">
+              Cliente: ${escapeHtml(proforma.cliente || '—')}
+              ${proforma.celular
+                ? ` — Celular: ${escapeHtml(proforma.celular)}`
+                : ''
+              }
+            </div>
+          </div>
+
+          <div class="actions">
+            <button
+              class="btn"
+              type="button"
+              data-cerrar-detalle-interno
+            >
+              Cerrar
+            </button>
+          </div>
+        </header>
+
+        <div style="padding:16px">
+          <p class="muted xs" style="margin:0 0 14px">
+            Información interna de TVD REPUESTOS. No forma parte del documento enviado al cliente.
+          </p>
+
+          <div class="table-wrap">
+            <table class="table compact">
+              <thead>
+                <tr>
+                  <th>Código interno</th>
+                  <th>Repuesto</th>
+                  <th>Origen</th>
+                  <th class="num">Cantidad cotizada</th>
+                  <th class="num">Precio cotizado</th>
+                  <th class="num">Stock actual</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                ${
+                  filas || `
+                    <tr>
+                      <td colspan="6" class="muted" style="text-align:center; padding:18px">
+                        No se encontraron ítems para esta proforma.
+                      </td>
+                    </tr>
+                  `
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const cerrar = () => {
+      document.removeEventListener('keydown', cerrarConEscape);
+      modal.remove();
+    };
+
+    const cerrarConEscape = (e) => {
+      if(e.key === 'Escape'){
+        cerrar();
+      }
+    };
+
+    document.addEventListener('keydown', cerrarConEscape);
+
+    modal.addEventListener('click', (e) => {
+      if(
+        e.target === modal
+        || e.target.closest('[data-cerrar-detalle-interno]')
+      ){
+        cerrar();
+      }
+    });
+  }
+  
     proformasTbody.addEventListener('click', async (e) => {
-    const printBtn = e.target.closest('button[data-pro-imprimir]');
-    const wordBtn = e.target.closest('button[data-pro-word]');
-    const eliminarBtn = e.target.closest(
-      'button[data-pro-eliminar-documento]'
-    );
+    const detalleBtn = e.target.closest(
+  'button[data-pro-detalle-interno]'
+);
 
-    if(!printBtn && !wordBtn && !eliminarBtn) return;
+const printBtn = e.target.closest(
+  'button[data-pro-imprimir]'
+);
 
-    const proformaId = (
-      printBtn
-      || wordBtn
-      || eliminarBtn
-    ).getAttribute(
-      printBtn
-        ? 'data-pro-imprimir'
-        : wordBtn
-          ? 'data-pro-word'
-          : 'data-pro-eliminar-documento'
-    );
+const wordBtn = e.target.closest(
+  'button[data-pro-word]'
+);
+
+const eliminarBtn = e.target.closest(
+  'button[data-pro-eliminar-documento]'
+);
+
+if(!detalleBtn && !printBtn && !wordBtn && !eliminarBtn) return;
+
+    const botonAccion = (
+  detalleBtn
+  || printBtn
+  || wordBtn
+  || eliminarBtn
+);
+
+const atributoId = detalleBtn
+  ? 'data-pro-detalle-interno'
+  : printBtn
+    ? 'data-pro-imprimir'
+    : wordBtn
+      ? 'data-pro-word'
+      : 'data-pro-eliminar-documento';
+
+const proformaId = botonAccion.getAttribute(atributoId);
 
     const proformaLista = proformasActivas.find(
       p => String(p.id) === String(proformaId)
@@ -5840,6 +6002,25 @@ async function renderProformas(){
           proformaLista.numero_proforma || 0
         ).padStart(6, '0')}`
       : '';
+      
+      if(detalleBtn){
+  try{
+    const detalle = await DB.getProformaDetalle(proformaId);
+
+    abrirDetalleInternoProforma(
+      detalle.proforma,
+      detalle.items
+    );
+
+  }catch(err){
+    alert(
+      err.message
+      || 'No se pudo cargar el detalle interno de la proforma.'
+    );
+  }
+
+  return;
+}
 
     if(eliminarBtn){
       if(!confirm(
