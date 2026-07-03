@@ -5467,8 +5467,51 @@ async function renderProformas(){
   }
 
     proValidez.addEventListener('change', actualizarValidez);
-    proSearchInventario.addEventListener('input', pintarInventarioBuscado);
-      proCliente.addEventListener('input', actualizarBotonCrear);
+
+proSearchInventario.addEventListener('input', pintarInventarioBuscado);
+
+proInventarioTbody.addEventListener('click', (e) => {
+  const agregarBtn = e.target.closest(
+    'button[data-pro-agregar-inventario]'
+  );
+
+  if(!agregarBtn) return;
+
+  const parteId = agregarBtn.getAttribute(
+    'data-pro-agregar-inventario'
+  );
+
+  const parte = proPartesInventario.find(
+    p => String(p.id) === String(parteId)
+  );
+
+  if(!parte){
+    alert('No se pudo encontrar el repuesto seleccionado.');
+    return;
+  }
+
+  const existente = proItems.find(item =>
+    item.origen === 'inventario'
+    && String(item.pieza_id) === String(parte.id)
+  );
+
+  if(existente){
+    existente.cantidad = Number(existente.cantidad || 0) + 1;
+  }else{
+    proItems.push({
+      origen: 'inventario',
+      pieza_id: parte.id,
+      codigo: String(parte.codigo || '').trim(),
+      nombre: String(parte.nombre || '').trim(),
+      cantidad: 1,
+      precio_unit: Number(parte.precio || 0)
+    });
+  }
+
+  pintarItems();
+});
+
+proCliente.addEventListener('input', actualizarBotonCrear);
   proValidaHasta.addEventListener('change', actualizarBotonCrear);
 
   [
