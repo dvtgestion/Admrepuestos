@@ -1812,6 +1812,140 @@ const totalStock = synced.stock;
 
         return Array.isArray(data) ? data[0] : data;
       }
+      
+      
+            // ---- Proformas ----
+      function fechaLocalISO(){
+        const d = new Date();
+        const año = d.getFullYear();
+        const mes = String(d.getMonth() + 1).padStart(2, '0');
+        const dia = String(d.getDate()).padStart(2, '0');
+        return `${año}-${mes}-${dia}`;
+      }
+
+      async function limpiarProformasVencidas(){
+        const { data, error } = await sb.rpc('limpiar_proformas_vencidas', {
+          p_org_id: orgId()
+        });
+
+        if(error) throw error;
+        return data;
+      }
+
+      async function listProformasActivas(limit=500){
+        const { data, error } = await sb
+          .from('proformas')
+          .select(`
+            id,
+            numero_proforma,
+            cliente,
+            celular,
+            comentarios,
+            fecha,
+            valida_hasta,
+            total,
+            cantidad_items,
+            usuario
+          `)
+          .eq('org_id', orgId())
+          .gte('valida_hasta', fechaLocalISO())
+          .order('fecha', { ascending:false })
+          .limit(limit);
+
+        if(error) throw error;
+        return data || [];
+      }
+
+      async function listProformaItems(proformaId){
+        const { data, error } = await sb
+          .from('proforma_items')
+          .select(`
+            id,
+            origen,
+            pieza_id,
+            codigo,
+            nombre,
+            cantidad,
+            precio_unit,
+            subtotal,
+            created_at
+          `)
+          .eq('org_id', orgId())
+          .eq('proforma_id', proformaId)
+          .order('created_at', { ascending:true });
+
+        if(error) throw error;
+        return data || [];
+      }
+
+      async function getProformaDetalle(proformaId){
+        const { data: proforma, error } = await sb
+          .from('proformas')
+          .select(`
+            id,
+            numero_proforma,
+            cliente,
+            celular,
+            comentarios,
+            fecha,
+            valida_hasta,
+            total,
+            cantidad_items,
+            usuario
+          `)
+          .eq('org_id', orgId())
+          .eq('id', proformaId)
+          .maybeSingle();
+
+        if(error) throw error;
+        if(!proforma) throw new Error('Proforma no encontrada.');
+
+        const items = await listProformaItems(proformaId);
+
+        return { proforma, items };
+      }
+
+      async function crearProforma({
+        cliente,
+        celular,
+        comentarios,
+        validaHasta,
+        items
+      }){
+        const u = Auth.currentUser();
+
+        const itemsLimpios = (items || []).map(i => ({
+          origen: String(i.origen || '').trim(),
+          pieza_id: i.pieza_id || null,
+          codigo: String(i.codigo || '').trim(),
+          nombre: String(i.nombre || '').trim(),
+          cantidad: Number(i.cantidad || 0),
+          precio_unit: Number(i.precio_unit || 0)
+        }));
+
+        const { data, error } = await sb.rpc('crear_proforma', {
+          p_org_id: orgId(),
+          p_cliente: String(cliente || '').trim(),
+          p_celular: String(celular || '').trim(),
+          p_comentarios: String(comentarios || '').trim(),
+          p_valida_hasta: String(validaHasta || ''),
+          p_usuario: u ? u.email : '',
+          p_items: itemsLimpios
+        });
+
+        if(error) throw error;
+        return Array.isArray(data) ? data[0] : data;
+      }
+
+      async function eliminarProforma(proformaId){
+        const { data, error } = await sb.rpc('eliminar_proforma', {
+          p_org_id: orgId(),
+          p_proforma_id: proformaId
+        });
+
+        if(error) throw error;
+        return Array.isArray(data) ? data[0] : data;
+      }
 
       // ---- Historial de precios ----
       async function listPriceHistory(limit=500){
@@ -2110,6 +2244,7 @@ async function syncPartBaseFromLastLot(){
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
 listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
+listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
   listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
