@@ -5146,12 +5146,16 @@ async function renderProformas(){
   const proManualPrecio = document.getElementById('proManualPrecio');
   const proAddManualBtn = document.getElementById('proAddManualBtn');
 
-    const proItemsTbody = document.getElementById('proItemsTbody');
+      const proItemsTbody = document.getElementById('proItemsTbody');
   const proItemsInfo = document.getElementById('proItemsInfo');
   const proTotal = document.getElementById('proTotal');
   const proClearBtn = document.getElementById('proClearBtn');
   const proCliente = document.getElementById('proCliente');
   const proCreateBtn = document.getElementById('proCreateBtn');
+
+  const proformasTbody = document.getElementById('proformasTbody');
+
+  let proformasActivas = [];
 
   let proItems = [];
 
@@ -5307,6 +5311,71 @@ async function renderProformas(){
 
     actualizarResumenItems();
   }
+  
+    function mostrarFechaProforma(valor){
+    const texto = String(valor || '').trim();
+
+    if(/^\d{4}-\d{2}-\d{2}$/.test(texto)){
+      const [año, mes, dia] = texto.split('-');
+      return `${dia}/${mes}/${año}`;
+    }
+
+    return fmtDate(valor);
+  }
+
+  function pintarProformasActivas(){
+    proformasTbody.innerHTML = '';
+
+    if(!proformasActivas.length){
+      proformasTbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="muted" style="text-align:center; padding:18px">
+            Aún no existen proformas activas.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    proformasActivas.forEach(proforma => {
+      const tr = document.createElement('tr');
+
+      tr.innerHTML = `
+        <td>${fmtDate(proforma.fecha)}</td>
+        <td>N.º ${String(proforma.numero_proforma || 0).padStart(6, '0')}</td>
+        <td>${escapeHtml(proforma.cliente || '')}</td>
+        <td>${escapeHtml(proforma.celular || '')}</td>
+        <td>${mostrarFechaProforma(proforma.valida_hasta)}</td>
+        <td class="num">${Number(proforma.cantidad_items || 0)}</td>
+        <td class="num">${fmtMoney(proforma.total)}</td>
+        <td class="num">
+          <span class="muted xs">Sin acciones todavía</span>
+        </td>
+      `;
+
+      proformasTbody.appendChild(tr);
+    });
+  }
+
+  async function cargarProformasActivas(){
+    try{
+      await DB.limpiarProformasVencidas();
+
+      proformasActivas = await DB.listProformasActivas(1000);
+
+      pintarProformasActivas();
+
+    }catch(err){
+      console.error(err);
+      proformasTbody.innerHTML = `
+        <tr>
+          <td colspan="8" class="muted" style="text-align:center; padding:18px">
+            No se pudieron cargar las proformas activas.
+          </td>
+        </tr>
+      `;
+    }
+  }
 
     proValidez.addEventListener('change', actualizarValidez);
       proCliente.addEventListener('input', actualizarBotonCrear);
@@ -5459,10 +5528,13 @@ async function renderProformas(){
       proValidez.value = '3';
       actualizarValidez();
 
-      proItems = [];
+            proItems = [];
       pintarItems();
 
+      await cargarProformasActivas();
+
     }catch(err){
+
       alert(err.message || 'No se pudo crear la proforma.');
 
     }finally{
@@ -5471,10 +5543,12 @@ async function renderProformas(){
     }
   });
 
-    actualizarValidez();
+      actualizarValidez();
   actualizarBotonManual();
   pintarItems();
   actualizarBotonCrear();
+
+  await cargarProformasActivas();
 }
 
     // ---- Sugerencias ----
