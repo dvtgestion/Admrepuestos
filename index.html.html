@@ -5562,14 +5562,13 @@ async function renderProformas(){
       );
 
       return `
-        <tr>
-          <td>${escapeHtml(item.codigo || '')}</td>
-          <td>${escapeHtml(item.nombre || '')}</td>
-          <td class="num">${cantidad}</td>
-          <td class="num">${fmtMoney(precioUnit)}</td>
-          <td class="num">${fmtMoney(subtotal)}</td>
-        </tr>
-      `;
+  <tr>
+    <td>${escapeHtml(item.nombre || '')}</td>
+    <td class="num">${cantidad}</td>
+    <td class="num">${fmtMoney(precioUnit)}</td>
+    <td class="num">${fmtMoney(subtotal)}</td>
+  </tr>
+`;
     }).join('');
 
     const comentarios = String(proforma.comentarios || '').trim();
@@ -5772,12 +5771,11 @@ async function renderProformas(){
     <table>
       <thead>
         <tr>
-          <th>Código</th>
-          <th>Repuesto</th>
-          <th class="num">Cantidad</th>
-          <th class="num">Precio unit.</th>
-          <th class="num">Subtotal</th>
-        </tr>
+  <th>Repuesto</th>
+  <th class="num">Cantidad</th>
+  <th class="num">Precio unit.</th>
+  <th class="num">Subtotal</th>
+</tr>
       </thead>
 
       <tbody>
