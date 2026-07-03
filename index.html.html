@@ -1666,7 +1666,7 @@ const totalStock = synced.stock;
       async function listRecibos(limit=500){
         const { data, error } = await sb
           .from('recibos')
-          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario')
+          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario, estado, anulada_en, anulada_por')
           .eq('org_id', orgId())
           .order('fecha', { ascending:false })
           .limit(limit);
@@ -1675,11 +1675,29 @@ const totalStock = synced.stock;
         return data || [];
       }
 
-      async function listReciboMovimientoIds(){
+            async function listReciboMovimientoIds(){
+        const { data: recibosEmitidos, error: errorRecibos } = await sb
+          .from('recibos')
+          .select('id')
+          .eq('org_id', orgId())
+          .eq('estado', 'emitido')
+          .limit(50000);
+
+        if(errorRecibos) throw errorRecibos;
+
+        const recibosIds = (recibosEmitidos || [])
+          .map(r => r.id)
+          .filter(Boolean);
+
+        if(!recibosIds.length){
+          return new Set();
+        }
+
         const { data, error } = await sb
           .from('recibo_items')
           .select('movimiento_id')
           .eq('org_id', orgId())
+          .in('recibo_id', recibosIds)
           .limit(50000);
 
         if(error) throw error;
@@ -1718,7 +1736,7 @@ const totalStock = synced.stock;
       async function getReciboDetalle(reciboId){
         const { data: recibo, error } = await sb
           .from('recibos')
-          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario')
+          .select('id, numero_recibo, cliente, celular, comentarios, fecha, total, cantidad_items, usuario, estado, anulada_en, anulada_por')
           .eq('org_id', orgId())
           .eq('id', reciboId)
           .maybeSingle();
@@ -1746,6 +1764,20 @@ const totalStock = synced.stock;
           p_comentarios: String(comentarios || '').trim(),
           p_usuario: u ? u.email : '',
           p_movimientos: movimientosIds
+        });
+
+        if(error) throw error;
+
+        return Array.isArray(data) ? data[0] : data;
+      }
+      
+            async function anularReciboVenta(reciboId){
+        const u = Auth.currentUser();
+
+        const { data, error } = await sb.rpc('anular_recibo_venta', {
+          p_org_id: orgId(),
+          p_recibo_id: reciboId,
+          p_usuario: u ? u.email : ''
         });
 
         if(error) throw error;
@@ -2049,7 +2081,7 @@ async function syncPartBaseFromLastLot(){
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
 listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
-listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta,
+listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
   listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
