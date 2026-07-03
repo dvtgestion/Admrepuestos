@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
 
   <style>
-    :root{
+    :root{recibo
       --bg:#f6f7f9; --card:#ffffff; --text:#0f172a; --muted:#6b7280; --border:#e5e7eb;
       --primary:#1f6feb; --danger:#ef4444; --radius:12px;
       --shadow:0 1px 2px rgba(0,0,0,.04),0 6px 24px rgba(0,0,0,.06);
@@ -3782,7 +3782,7 @@ alert('Movimiento deshecho');
       });
     }
 
-    // ---- Recibos ----
+        // ---- Recibos ----
     async function renderRecibos(){
       view.innerHTML = `
         <section class="stack">
@@ -3790,21 +3790,164 @@ alert('Movimiento deshecho');
             <div class="left">
               <h2>Recibos</h2>
               <p class="muted">
-                Seleccione salidas registradas para crear un recibo de venta.
+                Seleccione salidas ya registradas para crear un recibo de venta.
               </p>
             </div>
           </header>
 
           <div class="card">
-            <h3 style="margin-top:0">Recibos de venta</h3>
-            <p class="muted">
-              Esta sección estará destinada a agrupar salidas ya registradas en Movimientos.
-            </p>
+            <h3 style="margin-top:0">Crear recibo de venta</h3>
+
+            <div class="grid">
+              <label class="field">
+                <span>Cliente</span>
+                <input
+                  id="recCliente"
+                  class="input"
+                  placeholder="Nombre del cliente"
+                />
+              </label>
+
+              <label class="field">
+                <span>Celular</span>
+                <input
+                  id="recCelular"
+                  class="input"
+                  placeholder="Ej.: 78798194"
+                />
+              </label>
+
+              <label class="field" style="grid-column:1/-1">
+                <span>Comentarios o instrucciones</span>
+                <textarea
+                  id="recComentarios"
+                  class="input"
+                  rows="3"
+                  placeholder="Escriba aquí cualquier observación para el recibo…"
+                  style="height:92px; resize:vertical"
+                ></textarea>
+              </label>
+            </div>
+
+            <div
+              class="toolbar"
+              style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border)"
+            >
+              <div>
+                <strong id="recSelectedInfo">0 salidas seleccionadas</strong>
+
+                <div class="muted xs" style="margin-top:4px">
+                  Total del recibo:
+                  <strong id="recTotal">Bs 0,00</strong>
+                </div>
+              </div>
+
+              <div class="right">
+                <button
+                  id="recClearSelection"
+                  class="btn btn-ghost"
+                  type="button"
+                  disabled
+                >
+                  Limpiar selección
+                </button>
+
+                <button
+                  id="recCreateBtn"
+                  class="btn btn-primary"
+                  type="button"
+                  disabled
+                >
+                  Crear recibo de venta
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <header class="toolbar">
+              <div class="left">
+                <h3 style="margin:0 0 6px">Salidas disponibles para recibo</h3>
+                <p class="muted xs" style="margin:0">
+                  Seleccione las salidas que corresponden a la misma compra.
+                </p>
+              </div>
+
+              <div class="right">
+                <input
+                  id="recSearch"
+                  class="input"
+                  placeholder="Buscar código, pieza o referencia…"
+                  style="min-width:240px"
+                />
+              </div>
+            </header>
+
+            <div class="table-wrap">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>Seleccionar</th>
+                    <th>Fecha</th>
+                    <th>Código</th>
+                    <th>Pieza</th>
+                    <th>Almacén</th>
+                    <th class="num">Cantidad</th>
+                    <th class="num">Precio unit.</th>
+                    <th class="num">Subtotal</th>
+                    <th>Referencia</th>
+                  </tr>
+                </thead>
+
+                <tbody id="recAvailableTbody">
+                  <tr>
+                    <td colspan="9" class="muted" style="text-align:center; padding:18px">
+                      Las salidas registradas aparecerán aquí en el próximo paso.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <header class="toolbar">
+              <div class="left">
+                <h3 style="margin:0 0 6px">Recibos emitidos</h3>
+                <p class="muted xs" style="margin:0">
+                  Desde aquí podrá abrir, imprimir o guardar cada recibo como PDF.
+                </p>
+              </div>
+            </header>
+
+            <div class="table-wrap">
+              <table class="table compact">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>N.º</th>
+                    <th>Cliente</th>
+                    <th>Celular</th>
+                    <th class="num">Artículos</th>
+                    <th class="num">Total</th>
+                    <th>Usuario</th>
+                    <th></th>
+                  </tr>
+                </thead>
+
+                <tbody id="recibosTbody">
+                  <tr>
+                    <td colspan="8" class="muted" style="text-align:center; padding:18px">
+                      Aún no existen recibos emitidos.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
       `;
     }
-
 
     // ---- Sugerencias ----
     async function renderSugerencias(){
