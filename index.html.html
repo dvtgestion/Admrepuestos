@@ -5137,10 +5137,12 @@ async function renderProformas(){
   const proManualPrecio = document.getElementById('proManualPrecio');
   const proAddManualBtn = document.getElementById('proAddManualBtn');
 
-  const proItemsTbody = document.getElementById('proItemsTbody');
+    const proItemsTbody = document.getElementById('proItemsTbody');
   const proItemsInfo = document.getElementById('proItemsInfo');
   const proTotal = document.getElementById('proTotal');
   const proClearBtn = document.getElementById('proClearBtn');
+  const proCliente = document.getElementById('proCliente');
+  const proCreateBtn = document.getElementById('proCreateBtn');
 
   let proItems = [];
 
@@ -5190,6 +5192,18 @@ async function renderProformas(){
     );
   }
   
+    function actualizarBotonCrear(){
+    const clienteValido = String(proCliente.value || '').trim().length > 0;
+    const fechaValida = String(proValidaHasta.value || '').trim().length > 0;
+    const tieneItems = proItems.length > 0;
+
+    proCreateBtn.disabled = !(
+      clienteValido
+      && fechaValida
+      && tieneItems
+    );
+  }
+  
     function actualizarResumenItems(){
     const total = proItems.reduce((acumulado, item) => {
       return acumulado + (
@@ -5204,8 +5218,9 @@ async function renderProformas(){
       proItems.length === 1 ? '' : 's'
     }`;
 
-    proTotal.textContent = fmtMoney(total);
+        proTotal.textContent = fmtMoney(total);
     proClearBtn.disabled = proItems.length === 0;
+    actualizarBotonCrear();
   }
 
   function pintarItems(){
@@ -5285,6 +5300,8 @@ async function renderProformas(){
   }
 
     proValidez.addEventListener('change', actualizarValidez);
+      proCliente.addEventListener('input', actualizarBotonCrear);
+  proValidaHasta.addEventListener('change', actualizarBotonCrear);
 
   [
     proManualNombre,
@@ -5375,9 +5392,10 @@ async function renderProformas(){
     pintarItems();
   });
 
-  actualizarValidez();
+    actualizarValidez();
   actualizarBotonManual();
   pintarItems();
+  actualizarBotonCrear();
 }
 
     // ---- Sugerencias ----
