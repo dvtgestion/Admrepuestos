@@ -778,7 +778,15 @@
 
           <label class="field"><span>Referencia</span><input name="referencia" placeholder="Factura, orden, motivo…" /></label>
 
-          <div class="row-actions" style="grid-column: 1 / -1"><button type="submit" class="btn btn-primary">Aplicar</button></div>
+          <div class="row-actions" style="grid-column: 1 / -1">
+  <button
+    id="moveApplyBtn"
+    type="submit"
+    class="btn btn-primary"
+  >
+    Aplicar
+  </button>
+</div>
         </form>
       </div>
 
@@ -3573,6 +3581,9 @@ await paint();
       view.innerHTML = ''; view.appendChild(tpl);
 
       const moveForm = document.getElementById('moveForm');
+      const moveApplyBtn = document.getElementById('moveApplyBtn');
+
+let moveSubmitting = false;
       
       // --- ALTERADO: Pegamos os novos inputs em vez do select antigo ---
       const partIdInput = document.getElementById('movePartId');      // Oculto (ID)
@@ -3933,7 +3944,9 @@ if(selectedAlmacen !== '(Todos)'){
       tipoSel.addEventListener('change', toggleMoveFields);
 
       moveForm.addEventListener('submit', async (e)=>{
-        e.preventDefault();
+  e.preventDefault();
+
+  if(moveSubmitting) return;
         const fd = new FormData(moveForm);
         // --- ALTERADO: Usar o valor do input hidden ---
         const piezaId = partIdInput.value; 
@@ -3943,9 +3956,19 @@ if(selectedAlmacen !== '(Todos)'){
         const referencia = String(fd.get('referencia')||'').trim();
         const almacenMov = String(fd.get('almacen') || '').trim();
         
-        if(!piezaId || !tipo || !(cantidad>0)){ alert('Complete los campos (seleccione pieza y cantidad)'); return; }
-        
-        try{
+        if(!piezaId || !tipo || !(cantidad>0)){ 
+  alert('Complete los campos (seleccione pieza y cantidad)'); 
+  return; 
+}
+
+moveSubmitting = true;
+
+const textoOriginalAplicar = moveApplyBtn.textContent;
+
+moveApplyBtn.disabled = true;
+moveApplyBtn.textContent = 'Aplicando...';
+
+try{
           const u = Auth.currentUser();
           const payload = {
   piezaId,
@@ -3987,7 +4010,16 @@ alert('Movimiento registrado');
           partDisplay.value = '';
           
           toggleMoveFields();
-        }catch(err){ alert(err.message || 'Error al aplicar movimiento'); }
+        }catch(err){ 
+  alert(err.message || 'Error al aplicar movimiento'); 
+}finally{
+  moveSubmitting = false;
+
+  if(moveApplyBtn.isConnected){
+    moveApplyBtn.disabled = false;
+    moveApplyBtn.textContent = textoOriginalAplicar;
+  }
+}
       });
 
       tbody.addEventListener('click', async (e)=>{
