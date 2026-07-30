@@ -1600,6 +1600,45 @@ const totalStock = synced.stock;
 
   await recomputeMetrics(piezaId);
 }
+
+      // Corrige uma SALIDA existente sin cambiar su fecha ni su ID.
+      // La función SQL devuelve el repuesto anterior,
+      // descuenta el correcto y actualiza el mismo movimiento.
+      async function correctMovementById({
+        movementId,
+        piezaCorrectaId,
+        loteCorrectoId,
+        precioUnit,
+        motivo,
+        usuarioEmail
+      }){
+        if(!movementId) throw new Error('Movimiento inválido');
+        if(!piezaCorrectaId) throw new Error('Seleccione la pieza correcta');
+        if(!loteCorrectoId) throw new Error('Seleccione el lote correcto');
+
+        if(!String(motivo || '').trim()){
+          throw new Error('Indique el motivo de la corrección');
+        }
+
+        const { data, error } = await sb.rpc(
+          'corregir_movimiento_salida',
+          {
+            p_org_id: String(orgId()),
+            p_movimiento_id: String(movementId),
+            p_pieza_correcta_id: String(piezaCorrectaId),
+            p_lote_correcto_id: String(loteCorrectoId),
+            p_precio_unit:
+              precioUnit == null ? null : Number(precioUnit),
+            p_motivo: String(motivo || '').trim(),
+            p_usuario: String(usuarioEmail || '')
+          }
+        );
+
+        if(error) throw error;
+
+        return data;
+      }
+
       // ==== DESHACER POR ID ====
       async function undoMovementById(movId){
         const { data: m, error: e0 } = await sb.from('movements')
