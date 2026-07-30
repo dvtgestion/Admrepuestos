@@ -3914,6 +3914,500 @@ if(selectedAlmacen !== '(Todos)'){
         }
       }
       toggleMoveFields();
+      
+            async function openMovementCorrection(m){
+        if(!m || m.tipo !== 'salida'){
+          alert('Sólo se pueden corregir movimientos de salida.');
+          return;
+        }
+
+        let selectedPart = null;
+        let selectedLots = [];
+
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+
+        modal.innerHTML = `
+          <div class="box" style="max-width:720px">
+            <header>
+              <h3>Corregir movimiento</h3>
+
+              <button
+                type="button"
+                class="btn btn-ghost"
+                id="corrClose"
+              >
+                Cerrar
+              </button>
+            </header>
+
+            <div style="padding:16px; overflow:auto">
+              <div class="card" style="margin-bottom:14px">
+                <strong>Movimiento original</strong>
+
+                <div class="muted xs" style="margin-top:6px">
+                  ${escapeHtml(fmtDate(m.fecha))} ·
+                  ${escapeHtml(m.codigo || '')} —
+                  ${escapeHtml(m.nombre || '')} ·
+                  Cantidad: ${Number(m.cantidad || 0)}
+                </div>
+
+                <div class="muted xs" style="margin-top:4px">
+                  La fecha y el ID originales se conservarán automáticamente.
+                </div>
+              </div>
+
+              <label class="field">
+                <span>Buscar repuesto correcto</span>
+
+                <input
+                  id="corrSearch"
+                  class="input"
+                  autocomplete="off"
+                  placeholder="Escriba código o nombre..."
+                />
+              </label>
+
+              <div
+                id="corrResults"
+                class="search-list"
+                style="max-height:220px; margin-top:8px"
+              ></div>
+
+              <div
+                id="corrSelected"
+                class="muted"
+                style="margin-top:12px"
+              >
+                Ningún repuesto seleccionado.
+              </div>
+
+              <div
+                class="grid"
+                style="
+                  grid-template-columns:repeat(2,minmax(0,1fr));
+                  margin-top:12px
+                "
+              >
+                <label class="field">
+                  <span>Lote correcto</span>
+
+                  <select id="corrLot" disabled>
+                    <option value="">
+                      Seleccione primero el repuesto
+                    </option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span>Costo del lote</span>
+
+                  <input
+                    id="corrCost"
+                    readonly
+                    value="—"
+                  />
+                </label>
+
+                <label class="field">
+                  <span>Precio de venta (Bs)</span>
+
+                  <input
+                    id="corrPrice"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value="${Number(m.precio_unit || 0).toFixed(2)}"
+                  />
+
+                  <span class="xs muted">
+                    Se mantiene el precio original, pero puede corregirlo.
+                  </span>
+                </label>
+
+                <label class="field">
+                  <span>Cantidad</span>
+
+                  <input
+                    readonly
+                    value="${Number(m.cantidad || 0)}"
+                  />
+                </label>
+              </div>
+
+              <label class="field" style="margin-top:12px">
+                <span>Motivo de la corrección</span>
+
+                <input
+                  id="corrReason"
+                  class="input"
+                  placeholder="Ej.: se registró el repuesto equivocado"
+                />
+              </label>
+
+              <p class="muted xs" style="margin:12px 0 0">
+                El repuesto anterior volverá a su lote y el repuesto
+                correcto será descontado. Si existe un recibo asociado,
+                también será actualizado.
+              </p>
+            </div>
+
+            <footer>
+              <button
+                type="button"
+                class="btn btn-ghost"
+                id="corrCancel"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-warning"
+                id="corrConfirm"
+                disabled
+              >
+                Confirmar corrección
+              </button>
+            </footer>
+          </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        const search =
+          modal.querySelector('#corrSearch');
+
+        const results =
+          modal.querySelector('#corrResults');
+
+        const selectedInfo =
+          modal.querySelector('#corrSelected');
+
+        const lotSelect =
+          modal.querySelector('#corrLot');
+
+        const costInput =
+          modal.querySelector('#corrCost');
+
+        const priceInput =
+          modal.querySelector('#corrPrice');
+
+        const reasonInput =
+          modal.querySelector('#corrReason');
+
+        const confirmBtn =
+          modal.querySelector('#corrConfirm');
+
+        function closeModal(){
+          modal.remove();
+        }
+
+        function updateConfirmState(){
+          const priceText =
+            String(priceInput.value || '').trim();
+
+          const priceNumber =
+            Number(priceText);
+
+          confirmBtn.disabled = !(
+            selectedPart &&
+            lotSelect.value &&
+            String(reasonInput.value || '').trim() &&
+            priceText !== '' &&
+            Number.isFinite(priceNumber) &&
+            priceNumber >= 0
+          );
+        }
+
+        function updateLotInfo(){
+          const lot = selectedLots.find(
+            l => String(l.id) === String(lotSelect.value)
+          );
+
+          costInput.value = lot
+            ? Number(lot.costo_unit || 0).toFixed(2)
+            : '—';
+
+          updateConfirmState();
+        }
+
+        async function selectCorrectPart(p){
+          selectedPart = p;
+
+          selectedInfo.innerHTML = `
+            <strong>
+              ${escapeHtml(p.codigo)} —
+              ${escapeHtml(p.nombre)}
+            </strong>
+
+            <span class="xs muted">
+              · Stock actual: ${Number(p.stock || 0)}
+            </span>
+          `;
+
+          results.innerHTML = '';
+
+          lotSelect.disabled = true;
+
+          lotSelect.innerHTML =
+            '<option value="">Cargando lotes...</option>';
+
+          costInput.value = '—';
+          confirmBtn.disabled = true;
+
+          try{
+            selectedLots = await DB.listLots(p.id);
+
+            if(!selectedLots.length){
+              lotSelect.innerHTML =
+                '<option value="">Sin lotes con stock disponible</option>';
+
+              selectedInfo.innerHTML += `
+                <div
+                  class="xs"
+                  style="color:var(--danger); margin-top:4px"
+                >
+                  Esta pieza no tiene un lote disponible para descontar.
+                </div>
+              `;
+
+              return;
+            }
+
+            lotSelect.innerHTML = selectedLots
+              .map((l, idx) => `
+                <option value="${escapeHtml(l.id)}">
+                  ${escapeHtml(l.almacen || 'Sin almacén')} ·
+                  Lote ${idx + 1} ·
+                  Disponible: ${Number(l.qty || 0)} ·
+                  Costo: ${fmtMoney(l.costo_unit)}
+                </option>
+              `)
+              .join('');
+
+            lotSelect.disabled = false;
+
+            updateLotInfo();
+
+          }catch(err){
+            selectedLots = [];
+
+            lotSelect.innerHTML =
+              '<option value="">No se pudieron cargar los lotes</option>';
+
+            alert(
+              err.message ||
+              'No se pudieron cargar los lotes'
+            );
+          }
+        }
+
+        function paintCandidates(query=''){
+          const q =
+            String(query || '').trim().toLowerCase();
+
+          const matches = parts
+            .filter(
+              p => String(p.id) !== String(m.pieza_id)
+            )
+            .filter(p => {
+              if(!q) return true;
+
+              return `
+                ${p.codigo}
+                ${p.nombre}
+                ${p.almacen || ''}
+              `
+                .toLowerCase()
+                .includes(q);
+            })
+            .slice(0, 100);
+
+          results.innerHTML = '';
+
+          if(!matches.length){
+            results.innerHTML = `
+              <div
+                style="padding:14px; text-align:center"
+                class="muted"
+              >
+                No se encontraron repuestos.
+              </div>
+            `;
+
+            return;
+          }
+
+          matches.forEach(p => {
+            const row =
+              document.createElement('div');
+
+            row.className = 'search-item';
+
+            row.innerHTML = `
+              <strong>
+                ${escapeHtml(p.codigo)} —
+                ${escapeHtml(p.nombre)}
+              </strong>
+
+              <span>
+                Stock: ${Number(p.stock || 0)} ·
+                ${escapeHtml(p.almacen || 'Sin almacén')}
+              </span>
+            `;
+
+            row.addEventListener(
+              'click',
+              () => selectCorrectPart(p)
+            );
+
+            results.appendChild(row);
+          });
+        }
+
+        modal
+          .querySelector('#corrClose')
+          .addEventListener('click', closeModal);
+
+        modal
+          .querySelector('#corrCancel')
+          .addEventListener('click', closeModal);
+
+        search.addEventListener(
+          'input',
+          () => paintCandidates(search.value)
+        );
+
+        lotSelect.addEventListener(
+          'change',
+          updateLotInfo
+        );
+
+        reasonInput.addEventListener(
+          'input',
+          updateConfirmState
+        );
+
+        priceInput.addEventListener(
+          'input',
+          updateConfirmState
+        );
+
+        confirmBtn.addEventListener(
+          'click',
+          async ()=>{
+            const lot = selectedLots.find(
+              l => String(l.id) === String(lotSelect.value)
+            );
+
+            const cantidad =
+              Number(m.cantidad || 0);
+
+            const priceText =
+              String(priceInput.value || '').trim();
+
+            const precio =
+              Number(priceText);
+
+            const motivo =
+              String(reasonInput.value || '').trim();
+
+            if(!selectedPart || !lot){
+              alert(
+                'Seleccione el repuesto y el lote correctos.'
+              );
+
+              return;
+            }
+
+            if(Number(lot.qty || 0) < cantidad){
+              alert(
+                `Stock insuficiente en el lote correcto. ` +
+                `Disponible: ${Number(lot.qty || 0)}.`
+              );
+
+              return;
+            }
+
+            if(
+              priceText === '' ||
+              !Number.isFinite(precio) ||
+              precio < 0 ||
+              !motivo
+            ){
+              alert(
+                'Revise el precio e indique el motivo de la corrección.'
+              );
+
+              return;
+            }
+
+            const ok = confirm(
+              `¿Corregir ${m.codigo} — ${m.nombre} por ` +
+              `${selectedPart.codigo} — ${selectedPart.nombre}?\n\n` +
+              `La fecha ${fmtDate(m.fecha)} se conservará.`
+            );
+
+            if(!ok) return;
+
+            const originalText =
+              confirmBtn.textContent;
+
+            confirmBtn.disabled = true;
+
+            confirmBtn.textContent =
+              'Corrigiendo...';
+
+            try{
+              const u =
+                Auth.currentUser();
+
+              await DB.correctMovementById({
+                movementId: m.id,
+                piezaCorrectaId: selectedPart.id,
+                loteCorrectoId: lot.id,
+                precioUnit: precio,
+                motivo,
+                usuarioEmail: u ? u.email : ''
+              });
+
+              parts =
+                await DB.listParts();
+
+              moves =
+                await DB.listMoves(2000);
+
+              allLots =
+                await DB.listAllLots(50000);
+
+              buildAlmacenOptions();
+              paintMoves();
+              closeModal();
+
+              alert(
+                'Movimiento corregido. ' +
+                'La fecha original fue conservada.'
+              );
+
+            }catch(err){
+              alert(
+                err.message ||
+                'No se pudo corregir el movimiento'
+              );
+
+              confirmBtn.disabled = false;
+
+              confirmBtn.textContent =
+                originalText;
+            }
+          }
+        );
+
+        paintCandidates('');
+
+        search.focus();
+      }
 
       function paintMoves(){
         tbody.innerHTML = '';
