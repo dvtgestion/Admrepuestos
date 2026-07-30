@@ -4584,10 +4584,35 @@ alert('Movimiento registrado');
 }
       });
 
-      tbody.addEventListener('click', async (e)=>{
-        const btn = e.target.closest('button[data-undo]');
-        if(!btn) return;
-        const id = btn.getAttribute('data-undo');
+            tbody.addEventListener('click', async (e)=>{
+        const correctBtn =
+          e.target.closest('button[data-correct]');
+
+        if(correctBtn){
+          const id =
+            correctBtn.getAttribute('data-correct');
+
+          const movement = moves.find(
+            m => String(m.id) === String(id)
+          );
+
+          if(!movement){
+            alert('Movimiento no encontrado.');
+            return;
+          }
+
+          await openMovementCorrection(movement);
+          return;
+        }
+
+        const undoMovementBtn =
+          e.target.closest('button[data-undo]');
+
+        if(!undoMovementBtn) return;
+
+        const id =
+          undoMovementBtn.getAttribute('data-undo');
+
         if(!confirm('¿Deshacer este movimiento?')) return;
         try{
           await DB.undoMovementById(id);
