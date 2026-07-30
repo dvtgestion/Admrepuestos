@@ -4458,11 +4458,39 @@ if(selectedAlmacen !== '(Todos)'){
     <td class="num">${fmtMoney(m.cantidad * m.precio_unit)}</td>
     <td>${escapeHtml(m.referencia||'')}</td>
     <td>${escapeHtml(m.usuario||'')}</td>
-    <td class="num">
+        <td class="num">
       ${
         m.tipo === 'ajuste'
           ? '<span class="muted xs">Auditoría</span>'
-          : `<button class="btn btn-danger" data-undo="${m.id}">Deshacer</button>`
+          : m.tipo === 'salida'
+            ? `
+              <div class="row-actions">
+                <button
+                  type="button"
+                  class="btn btn-warning"
+                  data-correct="${m.id}"
+                >
+                  Corregir
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-danger"
+                  data-undo="${m.id}"
+                >
+                  Deshacer
+                </button>
+              </div>
+            `
+            : `
+              <button
+                type="button"
+                class="btn btn-danger"
+                data-undo="${m.id}"
+              >
+                Deshacer
+              </button>
+            `
       }
     </td>`;
 
