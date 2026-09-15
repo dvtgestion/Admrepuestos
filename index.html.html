@@ -1549,53 +1549,31 @@ const totalStock = synced.stock;
     if(insErr) throw insErr;
 
   }else{
-    if(!loteId) throw new Error('Seleccione el lote para la salida');
-
-    const { data: lot, error: el } = await sb.from('part_lots')
-      .select('id, qty, almacen, costo_unit, precio_unit')
-      .eq('org_id', orgId())
-      .eq('id', loteId)
-      .maybeSingle();
-
-    if(el) throw el;
-    if(!lot) throw new Error('Lote no encontrado');
-
-    if(Number(lot.qty||0) < q){
-      throw new Error('Cantidad supera el disponible del lote seleccionado.');
+    if(!loteId){
+      throw new Error('Seleccione el lote para la salida');
     }
 
-    if(Number(p.stock || 0) < q) {
-      throw new Error('Stock insuficiente para la salida');
+    const { data, error } = await sb.rpc(
+      'registrar_salida_segura',
+      {
+        p_org_id: orgId(),
+        p_pieza_id: piezaId,
+        p_lote_id: loteId,
+        p_cantidad: q,
+        p_referencia: referencia || '',
+        p_usuario: usuarioEmail || '',
+        p_precio_unit:
+          precioUnit != null
+            ? Number(precioUnit)
+            : null
+      }
+    );
+
+    if(error) throw error;
+
+    if(!data || data.ok !== true){
+      throw new Error('No se pudo registrar la salida.');
     }
-
-    const { error: updLot } = await sb.from('part_lots')
-      .update({ qty: Number(lot.qty || 0) - q })
-      .eq('org_id', orgId())
-      .eq('id', lot.id);
-
-    if(updLot) throw updLot;
-
-    await syncPartStockAndBaseFromLots(p.id);
-
-    const finalPrice = (precioUnit != null) ? Number(precioUnit) : Number(lot.precio_unit||0);
-    const almSalida = lot.almacen || p.almacen || '';
-
-    const { error: insErr2 } = await sb.from('movements').insert({
-      org_id: orgId(),
-      pieza_id: p.id,
-      codigo: p.codigo,
-      nombre: p.nombre,
-      almacen: almSalida,
-      tipo: 'salida',
-      cantidad: q,
-      referencia: referencia || '',
-      usuario: usuarioEmail || '',
-      costo_unit: Number(lot.costo_unit || 0),
-      precio_unit: finalPrice,
-      lote_id: lot.id
-    });
-
-    if(insErr2) throw insErr2;
   }
 
   await recomputeMetrics(piezaId);
