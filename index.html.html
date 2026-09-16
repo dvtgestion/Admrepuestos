@@ -554,8 +554,7 @@
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
           <input id="searchParts" class="input" placeholder="Buscar por código, nombre o motor…" />
-          <label class="btn" for="importCSV">Importar CSV</label>
-          <input id="importCSV" type="file" accept=".csv" style="display:none" />
+    
           <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
         </div>
       </header>
@@ -2938,7 +2937,6 @@ await run();
       const form = document.getElementById('partForm');
       const summary = document.getElementById('partFormSummary');
       const cancelBtn = document.getElementById('cancelEdit');
-      const importCSV = document.getElementById('importCSV');
       const filterAlm = document.getElementById('filterAlmacen');
       const safety1 = document.getElementById('safetyDaysHint');
       const safety2 = document.getElementById('safetyDaysHint2');
@@ -3555,42 +3553,7 @@ await paint();
           }catch(err){ alert(err.message || 'No se pudo eliminar'); }
         }
       });
-
-      // Importador CSV (usa parseLocaleNumber p/ custo/preço)
-      importCSV.addEventListener('change', ()=>{
-        const f = document.getElementById('importCSV').files[0]; if(!f) return;
-        const reader = new FileReader();
-        reader.onload = async ()=>{
-          try{
-            const lines = String(reader.result||'').split(/\r?\n/).filter(Boolean);
-            if(!lines.length){ alert('CSV vacío'); return; }
-            const head = lines.shift().split(',').map(h=>h.trim());
-            for(const line of lines){
-              const cells = parseCSVLine(line);
-              const obj = Object.fromEntries(head.map((h,i)=>[h, (cells[i]??'').trim()]));
-              const costoStr  = obj.costo_Bs ?? obj.costo ?? '';
-              const precioStr = obj.precio_Bs ?? obj.precio ?? '';
-              const part = {
-                codigo: obj.codigo, nombre: obj.nombre, categoria: obj.categoria,
-                ubicacion: obj.ubicacion, almacen: obj.almacen, proveedor: obj.proveedor,
-                leadTimeDias: Number(obj.leadTimeDias||0),
-                stock: Number(obj.stock||0),
-                costo: isNaN(parseLocaleNumber(costoStr)) ? 0 : parseLocaleNumber(costoStr),
-                precio: isNaN(parseLocaleNumber(precioStr)) ? 0 : parseLocaleNumber(precioStr)
-              };
-              await DB.upsertPart(part);
-            }
-            parts = await DB.listParts();
-allLots = await DB.listAllLots(50000);
-buildFilters();
-buildSuggestors();
-await paint();
-            alert('Importación completa');
-          }catch(e){ alert(e.message || 'Error al importar'); }
-          document.getElementById('importCSV').value = '';
-        };
-        reader.readAsText(f);
-      });
+      
     }
 
        // ---- Movimientos ----
