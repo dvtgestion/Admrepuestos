@@ -966,27 +966,62 @@
     /* ===== Org ===== */
     const Org = (() => {
       let currentId = localStorage.getItem('currentOrgId') || null;
-      let currentName = localStorage.getItem('currentOrgName') || null;
+let currentName = localStorage.getItem('currentOrgName') || null;
+let currentRole = localStorage.getItem('currentOrgRole') || null;
 
-      const get = () => ({ id: currentId, nombre: currentName });
-      const set = (org) => {
-        currentId = org?.id || null;
-        currentName = org?.nombre || null;
-        if (currentId) localStorage.setItem('currentOrgId', currentId); else localStorage.removeItem('currentOrgId');
-        if (currentName) localStorage.setItem('currentOrgName', currentName); else localStorage.removeItem('currentOrgName');
-      };
+const get = () => ({
+  id: currentId,
+  nombre: currentName,
+  role: currentRole
+});
+
+const set = (org) => {
+  currentId = org?.id || null;
+  currentName = org?.nombre || null;
+  currentRole = org?.role || null;
+
+  if(currentId){
+    localStorage.setItem('currentOrgId', currentId);
+  }else{
+    localStorage.removeItem('currentOrgId');
+  }
+
+  if(currentName){
+    localStorage.setItem('currentOrgName', currentName);
+  }else{
+    localStorage.removeItem('currentOrgName');
+  }
+
+  if(currentRole){
+    localStorage.setItem('currentOrgRole', currentRole);
+  }else{
+    localStorage.removeItem('currentOrgRole');
+  }
+};
 
       async function myOrgs() {
         const { data:{ user } } = await sb.auth.getUser();
         const uid = user?.id;
         if(!uid) return [];
-        const { data: mems, error } = await sb.from('org_members').select('org_id').eq('user_id', uid);
+        const { data: mems, error } = await sb
+  .from('org_members')
+  .select('org_id, role')
+  .eq('user_id', uid);
         if(error) throw error;
         if(!mems?.length) return [];
         const ids = mems.map(m=>m.org_id);
         const { data: orgs, error: e2 } = await sb.from('orgs').select('id, nombre').in('id', ids).order('nombre');
         if(e2) throw e2;
-        return orgs;
+        return (orgs || []).map(o => {
+  const mem = mems.find(
+    m => String(m.org_id) === String(o.id)
+  );
+
+  return {
+    ...o,
+    role: mem?.role || 'member'
+  };
+});
       }
 
       async function ensureCurrent() {
@@ -1007,7 +1042,9 @@
         return found;
       }
 
-      return { get, set, myOrgs, ensureCurrent };
+      const isAdmin = () => currentRole === 'admin';
+
+return { get, set, myOrgs, ensureCurrent, isAdmin };
     })();
     
         /* ===== DB (Supabase) ===== */
@@ -2390,14 +2427,35 @@ globalImagePicker.addEventListener('change', async ()=>{
     }
 
     function setNavActive(path){
-      document.querySelectorAll('.nav-btn').forEach(btn=>{
-        btn.classList.toggle('btn-primary', btn.dataset.route === path);
-        btn.onclick = ()=>{ 
-          location.hash = '#/' + btn.dataset.route; 
-          if(isMobile()) closeSidebarMobile(); // fecha a gaveta após navegar no mobile
-        };
-      });
-    }
+  const adminOnlyRoutes = [
+    'reportes',
+    'finanzas',
+    'ajustes'
+  ];
+
+  document.querySelectorAll('.nav-btn').forEach(btn=>{
+    const route = btn.dataset.route;
+    const adminOnly = adminOnlyRoutes.includes(route);
+
+    btn.classList.toggle(
+      'hidden',
+      adminOnly && !Org.isAdmin()
+    );
+
+    btn.classList.toggle(
+      'btn-primary',
+      route === path
+    );
+
+    btn.onclick = ()=>{
+      location.hash = '#/' + route;
+
+      if(isMobile()){
+        closeSidebarMobile();
+      }
+    };
+  });
+}
 
     async function route(){
       // Sempre interrompe o scanner ao trocar de rota/visão
@@ -2412,6 +2470,7 @@ globalImagePicker.addEventListener('change', async ()=>{
 
       const hash = location.hash || '#/login';
       const path = (hash.startsWith('#/')) ? hash.slice(2) : 'login';
+      
 
       // >>> NOVO: se já autenticado e path=login, redireciona imediatamente
       if(authed && path === 'login'){ 
@@ -2431,6 +2490,21 @@ globalImagePicker.addEventListener('change', async ()=>{
         if(mobileMenuBtn) mobileMenuBtn.classList.add('hidden'); // esconde o botão quando não logado
         closeSidebarMobile();
       }
+
+const adminOnlyRoutes = [
+  'reportes',
+  'finanzas',
+  'ajustes'
+];
+
+if(
+  authed &&
+  adminOnlyRoutes.includes(path) &&
+  !Org.isAdmin()
+){
+  location.hash = '#/inventario';
+  return;
+}
 
       // Redirecionamento se necessário
       if(!authed && !PUBLIC_ROUTES.includes(path)){ await renderLogin(); return; }
@@ -3581,6 +3655,9 @@ let moveSubmitting = false;
       const tbody = document.getElementById('movesTbody');
       const exportBtn = document.getElementById('exportCSV');
       const undoBtn = document.getElementById('undoLast');
+      if(!Org.isAdmin()){
+  undoBtn.classList.add('hidden');
+}
       const almFilter = document.getElementById('moveAlmacenFilter'); // Filtro de armazém geral
 			const moveAlmacenInput = document.getElementById('moveAlmacenInput');
  			const dlMoveAlmacenes = document.getElementById('dlMoveAlmacenes');
@@ -4402,36 +4479,38 @@ if(selectedAlmacen !== '(Todos)'){
         <td class="num">
       ${
         m.tipo === 'ajuste'
-          ? '<span class="muted xs">Auditoría</span>'
-          : m.tipo === 'salida'
-            ? `
-              <div class="row-actions">
-                <button
-                  type="button"
-                  class="btn btn-warning"
-                  data-correct="${m.id}"
-                >
-                  Corregir
-                </button>
+  ? '<span class="muted xs">Auditoría</span>'
+  : !Org.isAdmin()
+    ? '<span class="muted xs">—</span>'
+    : m.tipo === 'salida'
+      ? `
+        <div class="row-actions">
+          <button
+            type="button"
+            class="btn btn-warning"
+            data-correct="${m.id}"
+          >
+            Corregir
+          </button>
 
-                <button
-                  type="button"
-                  class="btn btn-danger"
-                  data-undo="${m.id}"
-                >
-                  Deshacer
-                </button>
-              </div>
-            `
-            : `
-              <button
-                type="button"
-                class="btn btn-danger"
-                data-undo="${m.id}"
-              >
-                Deshacer
-              </button>
-            `
+          <button
+            type="button"
+            class="btn btn-danger"
+            data-undo="${m.id}"
+          >
+            Deshacer
+          </button>
+        </div>
+      `
+      : `
+        <button
+          type="button"
+          class="btn btn-danger"
+          data-undo="${m.id}"
+        >
+          Deshacer
+        </button>
+      `
       }
     </td>`;
 
@@ -4526,6 +4605,9 @@ alert('Movimiento registrado');
       });
 
             tbody.addEventListener('click', async (e)=>{
+              if(!Org.isAdmin()){
+  return;
+}
         const correctBtn =
           e.target.closest('button[data-correct]');
 
@@ -4570,8 +4652,12 @@ alert('Movimiento deshecho');
       });
 
       undoBtn.addEventListener('click', async ()=>{
-        try{
-  await DB.undoLastMovement();
+  if(!Org.isAdmin()){
+    return;
+  }
+
+  try{
+    await DB.undoLastMovement();
 
   parts = await DB.listParts();
   moves = await DB.listMoves(2000);
