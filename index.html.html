@@ -836,7 +836,6 @@
           <button id="backupBtn" class="btn">Backup JSON</button>
           <label class="btn" for="restoreFile">Restaurar JSON</label>
           <input id="restoreFile" type="file" accept="application/json" style="display:none"/>
-          <button id="resetBtn" class="btn btn-danger">Vaciar datos (empresa actual)</button>
         </div>
       </header>
 
@@ -2199,15 +2198,6 @@ const totalStock = synced.stock;
         }
       }
 
-      async function wipeCurrentOrg(){
-        const oid = orgId();
-        await sb.from('price_history').delete().eq('org_id', oid);
-        await sb.from('movements').delete().eq('org_id', oid);
-        await sb.from('part_lots').delete().eq('org_id', oid);
-        await sb.from('fin_entries').delete().eq('org_id', oid);
-        await sb.from('parts').delete().eq('org_id', oid);
-      }
-
       // ---- Recalcular métricas ----
       async function recomputeMetrics(piezaId){
         if(!piezaId) return;
@@ -2323,7 +2313,7 @@ listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, elim
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
   // Finanzas
   listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
-  backupAll, restoreAll, wipeCurrentOrg,
+  backupAll, restoreAll,
   recomputeMetrics,
 
   // ✅ NOVAS FUNÇÕES (PARTE 3.2)
@@ -7094,7 +7084,6 @@ await cargarProformasActivas();
 
       const backupBtn = document.getElementById('backupBtn');
       const restoreFile = document.getElementById('restoreFile');
-      const resetBtn = document.getElementById('resetBtn');
 
       const orgName = document.getElementById('orgName');
       const orgSelect = document.getElementById('orgSelect');
@@ -7168,11 +7157,7 @@ if(syncBaseBtn){
         finally{ restoreFile.value = ''; }
       });
 
-      resetBtn.addEventListener('click', async ()=>{
-        if(!confirm('Esto borrará TODAS las piezas, lotes, movimientos, historial y finanzas de la EMPRESA ACTUAL. ¿Continuar?')) return;
-        try{ await DB.wipeCurrentOrg(); alert('Datos borrados de la empresa actual'); location.hash = '#/reportes'; await route(); }
-        catch(e){ alert(e.message || 'No se pudo borrar'); }
-      });
+      
 	}
 
     // ---- Historial ----
