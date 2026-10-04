@@ -885,44 +885,43 @@
           <span class="xs muted">Opcional.</span>
         </label>
 
-        <label class="field" style="grid-column:1/-1">
-          <span>Nombre del repuesto</span>
-          <input
-            id="ceRepuesto"
-            type="text"
-            placeholder="Escriba el repuesto solicitado"
-            required
-          />
-        </label>
+                <div class="field" style="grid-column:1/-1">
+          <div class="toolbar" style="margin-bottom:8px">
+            <div class="left">
+              <strong>Repuestos del pedido</strong>
 
-        <label class="field">
-          <span>Cantidad</span>
-          <input
-            id="ceCantidad"
-            type="number"
-            min="1"
-            max="2147483647"
-            step="1"
-            value="1"
-            required
-          />
-        </label>
+              <p class="muted xs" style="margin:4px 0 0">
+                Escriba cada repuesto con su cantidad y precio unitario.
+              </p>
+            </div>
 
-                <label class="field">
-          <span>Precio unitario del repuesto (Bs)</span>
-          <input
-            id="cePrecioUnitario"
-            type="number"
-            min="0"
-            max="999999999999.99"
-            step="0.01"
-            placeholder="0,00"
-            required
-          />
-          <span class="xs muted">
-            Precio por una unidad.
-          </span>
-        </label>
+            <div class="right">
+              <button
+                id="ceAgregarItemBtn"
+                class="btn"
+                type="button"
+              >
+                Agregar repuesto
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table compact">
+              <thead>
+                <tr>
+                  <th>Repuesto</th>
+                  <th class="num">Cantidad</th>
+                  <th class="num">Precio unitario (Bs)</th>
+                  <th class="num">Subtotal</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+
+              <tbody id="ceItemsTbody"></tbody>
+            </table>
+          </div>
+        </div>
 
         <label class="field">
           <span>Valor total del pedido (Bs)</span>
@@ -936,7 +935,7 @@
             readonly
           />
           <span class="xs muted">
-            Cantidad × precio unitario.
+            Suma de los subtotales de todos los repuestos.
           </span>
         </label>
 
@@ -2503,9 +2502,20 @@ async function listClientesEspera(){
   let desde = 0;
 
   while(true){
-    const { data, error } = await sb
+        const { data, error } = await sb
       .from('clientes_en_espera')
-      .select('*')
+      .select(`
+        *,
+        items:clientes_en_espera_items (
+          id,
+          pedido_id,
+          orden,
+          repuesto,
+          cantidad,
+          precio_unit,
+          subtotal
+        )
+      `)
       .eq('org_id', empresaId)
       .order('id', { ascending: false })
       .range(desde, desde + tamañoPagina - 1);
@@ -2530,9 +2540,20 @@ async function getClienteEspera(id){
     throw new Error('Pedido inválido.');
   }
 
-  const { data, error } = await sb
+    const { data, error } = await sb
     .from('clientes_en_espera')
-    .select('*')
+    .select(`
+      *,
+      items:clientes_en_espera_items (
+        id,
+        pedido_id,
+        orden,
+        repuesto,
+        cantidad,
+        precio_unit,
+        subtotal
+      )
+    `)
     .eq('org_id', orgId())
     .eq('id', id)
     .maybeSingle();
@@ -2551,158 +2572,111 @@ async function getClienteEspera(id){
 async function saveClienteEspera(pedido){
   const empresaId = orgId();
 
-  const cliente = String(pedido.cliente || '').trim();
-  const telefono = String(pedido.telefono || '').trim();
-  const repuesto = String(pedido.repuesto || '').trim();
-  const comentarios = String(pedido.comentarios || '').trim();
-
-  if(!cliente){
-    throw new Error('Ingrese el nombre del cliente.');
+  if(!Array.isArray(pedido.items) || !pedido.items.length){
+    throw new Error('Agregue al menos un repuesto al pedido.');
   }
 
-  if(!telefono){
-    throw new Error('Ingrese el teléfono del cliente.');
-  }
-
-  if(!repuesto){
-    throw new Error('Ingrese el nombre del repuesto.');
-  }
-
-  const cantidad = Number(pedido.cantidad);
-
-  if(
-    !Number.isInteger(cantidad) ||
-    cantidad <= 0 ||
-    cantidad > 2147483647
-  ){
-    throw new Error('Ingrese una cantidad entera válida.');
-  }
-
-  function convertirCentavos(valor, nombre){
-    if(
-      valor == null ||
-      String(valor).trim() === ''
-    ){
+  function leerMonto(valor, nombre){
+    if(valor == null || String(valor).trim() === ''){
       throw new Error(`Complete el campo ${nombre}.`);
     }
 
     const numero = parseLocaleNumber(valor);
 
     if(!Number.isFinite(numero) || numero < 0){
-      throw new Error(`El campo ${nombre} debe ser un monto válido.`);
+      throw new Error(
+        `El campo ${nombre} debe ser un monto válido.`
+      );
     }
 
-    const centavos = Math.round((numero + Number.EPSILON) * 100);
+    return numero;
+  }
+
+  const items = pedido.items.map((item, indice) => {
+    const repuesto = String(item.repuesto || '').trim();
+    const cantidad = Number(item.cantidad);
+
+    if(!repuesto){
+      throw new Error(
+        `Complete el nombre del repuesto ${indice + 1}.`
+      );
+    }
 
     if(
-      !Number.isSafeInteger(centavos) ||
-      centavos > 99999999999999
+      !Number.isInteger(cantidad) ||
+      cantidad <= 0 ||
+      cantidad > 2147483647
     ){
-      throw new Error(`El monto de ${nombre} es demasiado grande.`);
+      throw new Error(
+        `Ingrese una cantidad entera válida para el repuesto ${indice + 1}.`
+      );
     }
 
-    return centavos;
-  }
+    const precioUnit = leerMonto(
+      item.precio_unit,
+      `Precio unitario del repuesto ${indice + 1}`
+    );
 
-  const totalCentavos = convertirCentavos(
-    pedido.total,
-    'Total'
-  );
+    return {
+      repuesto,
+      cantidad,
+      precio_unit: precioUnit
+    };
+  });
 
-  const efectivoCentavos = convertirCentavos(
-    pedido.pago_efectivo ?? 0,
-    'Pago en efectivo'
-  );
+  const tieneId =
+    pedido.id != null &&
+    String(pedido.id).trim() !== '';
 
-  const qrCentavos = convertirCentavos(
-    pedido.pago_qr ?? 0,
-    'Pago por QR'
-  );
-
-  if(efectivoCentavos + qrCentavos > totalCentavos){
+  if(tieneId && !pedido.updated_at){
     throw new Error(
-      'El total pagado no puede superar el valor total del pedido.'
+      'Actualice la lista y vuelva a abrir el pedido antes de guardar los cambios.'
     );
   }
 
-  function fechaValida(valor){
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(valor)){
-      return false;
+  const { data, error } = await sb.rpc(
+    'guardar_cliente_espera_con_items',
+    {
+      p_org_id: empresaId,
+
+      p_cliente: String(pedido.cliente || '').trim(),
+      p_telefono: String(pedido.telefono || '').trim(),
+
+      p_fecha_pedido:
+        String(pedido.fecha_pedido || '').trim() || null,
+
+      p_fecha_prevista:
+        String(pedido.fecha_prevista || '').trim() || null,
+
+      p_comentarios:
+        String(pedido.comentarios || '').trim(),
+
+      p_pago_efectivo: leerMonto(
+        pedido.pago_efectivo ?? 0,
+        'Pago en efectivo'
+      ),
+
+      p_pago_qr: leerMonto(
+        pedido.pago_qr ?? 0,
+        'Pago por QR'
+      ),
+
+      p_items: items,
+
+      p_id: tieneId ? pedido.id : null,
+
+      p_updated_at:
+        tieneId ? pedido.updated_at : null
     }
-
-    if(Number(valor.slice(0, 4)) < 1){
-      return false;
-    }
-
-    const fecha = new Date(`${valor}T00:00:00Z`);
-
-    return (
-      Number.isFinite(fecha.getTime()) &&
-      fecha.toISOString().slice(0, 10) === valor
-    );
-  }
-
-  const fechaPedido = String(pedido.fecha_pedido || '').trim();
-  const fechaPrevista = String(pedido.fecha_prevista || '').trim();
-
-  if(!fechaValida(fechaPedido)){
-    throw new Error('Ingrese una fecha válida para el pedido.');
-  }
-
-  if(fechaPrevista && !fechaValida(fechaPrevista)){
-    throw new Error('Ingrese una fecha prevista válida.');
-  }
-
-  const valores = {
-    cliente,
-    telefono,
-    repuesto,
-    cantidad,
-    total: totalCentavos / 100,
-    pago_efectivo: efectivoCentavos / 100,
-    pago_qr: qrCentavos / 100,
-    fecha_pedido: fechaPedido,
-    fecha_prevista: fechaPrevista || null,
-    comentarios
-  };
-
-  if(pedido.id != null && String(pedido.id).trim() !== ''){
-    if(!pedido.updated_at){
-      throw new Error(
-        'Actualice la lista y vuelva a abrir el pedido antes de guardar los cambios.'
-      );
-    }
-
-    const { data, error } = await sb
-      .from('clientes_en_espera')
-      .update(valores)
-      .eq('org_id', empresaId)
-      .eq('id', pedido.id)
-      .eq('updated_at', pedido.updated_at)
-      .select('*')
-      .maybeSingle();
-
-    if(error) throw error;
-
-    if(!data){
-      throw new Error(
-        'El pedido cambió, ya no está disponible o no tiene permiso para editarlo. Actualice la lista y vuelva a abrir el pedido antes de continuar.'
-      );
-    }
-
-    return data;
-  }
-
-  const { data, error } = await sb
-    .from('clientes_en_espera')
-    .insert({
-      org_id: empresaId,
-      ...valores
-    })
-    .select('*')
-    .single();
+  );
 
   if(error) throw error;
+
+  if(!data || data.id == null || !Array.isArray(data.items)){
+    throw new Error(
+      'No se pudo confirmar el resultado. Actualice la lista antes de intentar guardar nuevamente.'
+    );
+  }
 
   return data;
 }
@@ -2738,7 +2712,18 @@ async function setEstadoClienteEspera({
     .eq('org_id', orgId())
     .eq('id', id)
     .eq('updated_at', updated_at)
-    .select('*')
+    .select(`
+      *,
+      items:clientes_en_espera_items (
+        id,
+        pedido_id,
+        orden,
+        repuesto,
+        cantidad,
+        precio_unit,
+        subtotal
+      )
+    `)
     .maybeSingle();
 
   if(error) throw error;
@@ -3301,7 +3286,7 @@ if(stSort) stSort.addEventListener('change', paintStockDetenido);
 await run();
     }
 
-    // ---- Finanzas (UI) ----
+    // ---- Finanzasfghffghghggygy (UI) ----
     async function renderFinanzas(){
       const tpl = document.getElementById('tpl-finanzas').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -7606,53 +7591,170 @@ async function renderClientesEspera(){
     guardarBtn.disabled = valor || !cargado;
   }
   
-    function calcularTotalPedido(){
-    const cantidadInput = el('ceCantidad');
-    const precioInput = el('cePrecioUnitario');
-    const totalInput = el('ceTotal');
+      function crearFilaItem(item = {}){
+    const fila = document.createElement('tr');
 
-    precioInput.setCustomValidity('');
-        precioInput.nextElementSibling.textContent =
-      'Precio por una unidad.';
+    fila.setAttribute('data-ce-item', '');
 
-    const cantidad = Number(cantidadInput.value);
-    const precio = Number(precioInput.value);
+    fila.innerHTML = `
+      <td style="min-width:240px">
+        <input
+          class="input"
+          type="text"
+          data-ce-repuesto
+          aria-label="Nombre del repuesto"
+          placeholder="Escriba el repuesto solicitado"
+          required
+        />
+      </td>
 
-    if(
-      cantidadInput.value === '' ||
-      precioInput.value === '' ||
-      !Number.isInteger(cantidad) ||
-      cantidad <= 0 ||
-      !Number.isFinite(precio) ||
-      precio < 0 ||
-      !cantidadInput.validity.valid ||
-      !precioInput.validity.valid
-    ){
-      totalInput.value = '';
-      return;
-    }
+      <td style="min-width:100px">
+        <input
+          class="input"
+          type="number"
+          data-ce-cantidad
+          aria-label="Cantidad"
+          min="1"
+          max="2147483647"
+          step="1"
+          required
+        />
+      </td>
 
-    // Calcular en centavos para evitar diferencias decimales.
-    const precioCentavos = Math.round(
-      (precio + Number.EPSILON) * 100
+      <td style="min-width:150px">
+        <input
+          class="input"
+          type="number"
+          data-ce-precio
+          aria-label="Precio unitario"
+          min="0"
+          max="999999999999.99"
+          step="0.01"
+          placeholder="0,00"
+          required
+        />
+      </td>
+
+      <td class="num" style="white-space:nowrap">
+        <span data-ce-subtotal>—</span>
+      </td>
+
+      <td>
+        <button
+          class="btn btn-danger"
+          type="button"
+          data-ce-quitar-item
+        >
+          Quitar
+        </button>
+      </td>
+    `;
+
+    fila.querySelector('[data-ce-repuesto]').value =
+      item.repuesto ?? '';
+
+    fila.querySelector('[data-ce-cantidad]').value =
+      item.cantidad ?? 1;
+
+    fila.querySelector('[data-ce-precio]').value =
+      item.precio_unit ?? '';
+
+    el('ceItemsTbody').appendChild(fila);
+
+    return fila;
+  }
+
+  function calcularTotalPedido(){
+    const filas = Array.from(
+      el('ceItemsTbody').querySelectorAll('[data-ce-item]')
     );
 
-    const totalCentavos = cantidad * precioCentavos;
+    const totalInput = el('ceTotal');
 
-    if(
-      !Number.isSafeInteger(totalCentavos) ||
-      totalCentavos > 99999999999999
-    ){
-      totalInput.value = '';
+    let totalCentavos = 0;
+    let cantidadTotal = 0;
+    let valido = filas.length > 0;
 
-      precioInput.setCustomValidity(
-        'El valor total del pedido supera el máximo permitido.'
+    for(const fila of filas){
+      const cantidadInput =
+        fila.querySelector('[data-ce-cantidad]');
+
+      const precioInput =
+        fila.querySelector('[data-ce-precio]');
+
+      const subtotalEl =
+        fila.querySelector('[data-ce-subtotal]');
+
+      cantidadInput.setCustomValidity('');
+      precioInput.setCustomValidity('');
+
+      subtotalEl.textContent = '—';
+
+      const cantidad = Number(cantidadInput.value);
+      const precio = Number(precioInput.value);
+
+      if(
+        cantidadInput.value === '' ||
+        precioInput.value === '' ||
+        !Number.isInteger(cantidad) ||
+        cantidad <= 0 ||
+        !Number.isFinite(precio) ||
+        precio < 0 ||
+        !cantidadInput.validity.valid ||
+        !precioInput.validity.valid
+      ){
+        valido = false;
+        continue;
+      }
+
+      const precioCentavos = Math.round(
+        (precio + Number.EPSILON) * 100
       );
 
-      return;
+      const subtotalCentavos =
+        cantidad * precioCentavos;
+
+      if(
+        !Number.isSafeInteger(subtotalCentavos) ||
+        subtotalCentavos > 99999999999999
+      ){
+        precioInput.setCustomValidity(
+          'El subtotal de este repuesto supera el máximo permitido.'
+        );
+
+        valido = false;
+        continue;
+      }
+
+      subtotalEl.textContent =
+        fmtMoney(subtotalCentavos / 100);
+
+      cantidadTotal += cantidad;
+      totalCentavos += subtotalCentavos;
+
+      if(cantidadTotal > 2147483647){
+        cantidadInput.setCustomValidity(
+          'La cantidad total del pedido supera el máximo permitido.'
+        );
+
+        valido = false;
+      }
+
+      if(
+        !Number.isSafeInteger(totalCentavos) ||
+        totalCentavos > 99999999999999
+      ){
+        precioInput.setCustomValidity(
+          'El valor total del pedido supera el máximo permitido.'
+        );
+
+        valido = false;
+      }
     }
 
-    totalInput.value = (totalCentavos / 100).toFixed(2);
+    totalInput.value = valido
+      ? (totalCentavos / 100).toFixed(2)
+      : '';
   }
 
   function calcularResumen(){
@@ -7700,45 +7802,29 @@ async function renderClientesEspera(){
     return 'sin_pago';
   }
 
-  function prepararPrecioUnitario(pedido = null){
-    const input = el('cePrecioUnitario');
-    const ayuda = input.nextElementSibling;
+    function prepararItemsPedido(pedido = null){
+    const tbody = el('ceItemsTbody');
+    tbody.innerHTML = '';
 
-    input.setCustomValidity('');
-    input.value = '';
-    ayuda.textContent = 'Precio por una unidad.';
+    const items = pedido && Array.isArray(pedido.items)
+      ? [...pedido.items].sort(
+          (a, b) => Number(a.orden) - Number(b.orden)
+        )
+      : [];
 
-    if(!pedido) return;
-
-    const cantidad = Number(pedido.cantidad);
-    const total = Number(pedido.total);
-
-    if(
-      !Number.isInteger(cantidad) ||
-      cantidad <= 0 ||
-      !Number.isFinite(total) ||
-      total < 0
-    ){
-      return;
+    if(items.length){
+      items.forEach(item => crearFilaItem(item));
+    }else{
+      crearFilaItem();
     }
 
-    input.value = (total / cantidad).toFixed(2);
-
-    const totalCentavos = Math.round(
-      (total + Number.EPSILON) * 100
-    );
-
-    if(totalCentavos % cantidad !== 0){
-      ayuda.textContent =
-        'Precio unitario aproximado del pedido original. ' +
-        'Se conserva el total guardado hasta que cambie ' +
-        'la cantidad o el precio unitario.';
-    }
+    calcularTotalPedido();
+    bloquear(ocupado);
   }
 
-    function limpiarFormulario(){
+  function limpiarFormulario(){
     form.reset();
-    prepararPrecioUnitario();
+
     editando = null;
     cambios = false;
     formaAnterior = 'sin_pago';
@@ -7746,6 +7832,8 @@ async function renderClientesEspera(){
     el('ceFechaPedido').value = fechaHoy();
     el('ceFormSummary').textContent = 'Nuevo pedido';
     guardarBtn.textContent = 'Guardar pedido';
+
+    prepararItemsPedido();
 
     informar(
       'En los pagos, ingrese los importes acumulados recibidos hasta ahora.'
@@ -7761,14 +7849,20 @@ async function renderClientesEspera(){
   }
 
   function abrirEdicion(p){
+    if(!Array.isArray(p.items) || !p.items.length){
+      informar(
+        'No se pudieron cargar los repuestos de este pedido. Actualice la lista antes de editarlo.',
+        true
+      );
+
+      return;
+    }
+
     editando = { ...p };
 
     const campos = {
       ceCliente: p.cliente,
       ceTelefono: p.telefono,
-      ceRepuesto: p.repuesto,
-      ceCantidad: p.cantidad,
-      ceTotal: p.total,
       cePagoEfectivo: p.pago_efectivo,
       cePagoQr: p.pago_qr,
       ceFechaPedido: p.fecha_pedido,
@@ -7776,11 +7870,11 @@ async function renderClientesEspera(){
       ceComentarios: p.comentarios
     };
 
-        Object.entries(campos).forEach(([id, valor]) => {
+    Object.entries(campos).forEach(([id, valor]) => {
       el(id).value = valor ?? '';
     });
 
-    prepararPrecioUnitario(p);
+    prepararItemsPedido(p);
 
     formaAnterior = formaDelPedido(p);
     el('ceFormaPago').value = formaAnterior;
@@ -7797,7 +7891,11 @@ async function renderClientesEspera(){
     );
 
     mostrarFormaPago();
-    formWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    formWrap.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start'
+    });
   }
 
   function conservarRegistro(p){
@@ -7814,6 +7912,26 @@ async function renderClientesEspera(){
 
 function buildClienteEsperaHtml(pedido){
   const numero = numeroPedido(pedido.id);
+
+  if(!Array.isArray(pedido.items) || !pedido.items.length){
+    throw new Error(
+      'No se pudieron cargar los repuestos del pedido. Actualice la lista e intente nuevamente.'
+    );
+  }
+
+  const filasItems = [...pedido.items]
+    .sort(
+      (a, b) => Number(a.orden) - Number(b.orden)
+    )
+    .map(item => `
+      <tr>
+        <td class="repuesto">${escapeHtml(item.repuesto || '')}</td>
+        <td class="num">${Number(item.cantidad)}</td>
+        <td class="num">${fmtMoney(item.precio_unit)}</td>
+        <td class="num">${fmtMoney(item.subtotal)}</td>
+      </tr>
+    `)
+    .join('');
 
   const estados = {
     pendiente: 'Pendiente de entrega',
@@ -8073,48 +8191,20 @@ function buildClienteEsperaHtml(pedido){
         <b>Estado del pedido</b>
         ${escapeHtml(estado || '')}
       </div>
-    </section>
+        </section>
 
-        <table>
+    <table>
       <thead>
         <tr>
           <th>Repuesto solicitado</th>
           <th class="num">Cantidad</th>
           <th class="num">Precio unitario</th>
-          <th class="num">Valor total</th>
+          <th class="num">Subtotal</th>
         </tr>
       </thead>
 
       <tbody>
-        <tr>
-          <td class="repuesto">${escapeHtml(pedido.repuesto || '')}</td>
-
-          <td class="num">
-            ${Number(pedido.cantidad || 0)}
-          </td>
-
-          <td class="num">
-            ${
-              Number(pedido.cantidad) > 0
-                ? fmtMoney(
-                    Number(pedido.total) / Number(pedido.cantidad)
-                  )
-                : '—'
-            }
-            ${
-              Number(pedido.cantidad) > 0 &&
-              Math.round(
-                (Number(pedido.total) + Number.EPSILON) * 100
-              ) % Number(pedido.cantidad) !== 0
-                ? '<div style="font-size:10px;color:#6b7280">Aproximado por redondeo</div>'
-                : ''
-            }
-          </td>
-
-          <td class="num">
-            ${fmtMoney(pedido.total)}
-          </td>
-        </tr>
+        ${filasItems}
       </tbody>
     </table>
 
@@ -8217,13 +8307,43 @@ function buildClienteEsperaHtml(pedido){
             ${escapeHtml(p.cliente)}
             <div class="muted xs">${escapeHtml(p.telefono)}</div>
           </td>
-          <td>
-            ${escapeHtml(p.repuesto)}
-            <div class="muted xs">
-              Cantidad: ${Number(p.cantidad)}
-            </div>
+                    <td style="min-width:240px">
+            ${
+              Array.isArray(p.items) && p.items.length
+                ? [...p.items]
+                    .sort(
+                      (a, b) => Number(a.orden) - Number(b.orden)
+                    )
+                    .map(item => `
+                      <div style="margin-bottom:10px">
+                        <strong>
+                          ${escapeHtml(item.repuesto || '')}
+                        </strong>
+
+                        <div class="muted xs">
+                          Cantidad: ${Number(item.cantidad)}
+                          · Precio unit.: ${fmtMoney(item.precio_unit)}
+                        </div>
+
+                        <div class="xs">
+                          Subtotal: ${fmtMoney(item.subtotal)}
+                        </div>
+                      </div>
+                    `)
+                    .join('')
+                : `
+                    <div>${escapeHtml(p.repuesto || '')}</div>
+                    <div class="muted xs">
+                      Cantidad: ${Number(p.cantidad || 0)}
+                    </div>
+                  `
+            }
+
             ${p.comentarios ? `
-              <div class="muted xs" style="white-space:pre-wrap">
+              <div
+                class="muted xs"
+                style="white-space:pre-wrap; margin-top:8px"
+              >
                 ${escapeHtml(p.comentarios)}
               </div>
             ` : ''}
@@ -8268,7 +8388,7 @@ function buildClienteEsperaHtml(pedido){
           <tr>
             <th>Pedido</th>
             <th>Cliente / teléfono</th>
-            <th>Repuesto</th>
+            <th>Repuestos</th>
             <th class="num">Total</th>
             <th class="num">Pagado</th>
             <th class="num">Saldo</th>
@@ -8395,13 +8515,50 @@ function buildClienteEsperaHtml(pedido){
     mostrarFormaPago();
   });
 
-    form.addEventListener('input', e => {
+      el('ceAgregarItemBtn').addEventListener('click', ()=>{
+    if(ocupado || !vigente()) return;
+
+    const fila = crearFilaItem();
+
     cambios = true;
 
-    if(
-      e.target.id === 'ceCantidad' ||
-      e.target.id === 'cePrecioUnitario'
-    ){
+    calcularTotalPedido();
+    calcularResumen();
+
+    fila.querySelector('[data-ce-repuesto]').focus();
+  });
+
+  el('ceItemsTbody').addEventListener('click', e => {
+    const boton = e.target.closest(
+      'button[data-ce-quitar-item]'
+    );
+
+    if(!boton || ocupado || !vigente()) return;
+
+    const fila = boton.closest('[data-ce-item]');
+    if(!fila) return;
+
+    fila.remove();
+
+    // Mantener una fila para ingresar al menos un repuesto.
+    if(!el('ceItemsTbody').querySelector('[data-ce-item]')){
+      crearFilaItem();
+    }
+
+    cambios = true;
+
+    calcularTotalPedido();
+    calcularResumen();
+  });
+
+  form.addEventListener('input', e => {
+    if(ocupado || !vigente()) return;
+
+    cambios = true;
+
+    if(e.target.matches(
+      '[data-ce-cantidad], [data-ce-precio]'
+    )){
       calcularTotalPedido();
     }
 
@@ -8433,11 +8590,57 @@ function buildClienteEsperaHtml(pedido){
     if(cargado) pintar();
   });
 
-  form.addEventListener('submit', async e => {
+    form.addEventListener('submit', async e => {
     e.preventDefault();
 
     if(ocupado || !cargado || !vigente()) return;
+
+    calcularTotalPedido();
+    calcularResumen();
+
     if(!form.reportValidity()) return;
+
+    const filas = Array.from(
+      el('ceItemsTbody').querySelectorAll('[data-ce-item]')
+    );
+
+    if(!filas.length){
+      informar(
+        'Agregue al menos un repuesto al pedido.',
+        true
+      );
+      return;
+    }
+
+    if(el('ceTotal').value === ''){
+      informar(
+        'Revise las cantidades y los precios de los repuestos.',
+        true
+      );
+      return;
+    }
+
+    const items = filas.map(fila => ({
+      repuesto: fila
+        .querySelector('[data-ce-repuesto]')
+        .value.trim(),
+
+      cantidad: Number(
+        fila.querySelector('[data-ce-cantidad]').value
+      ),
+
+      precio_unit: Number(
+        fila.querySelector('[data-ce-precio]').value
+      )
+    }));
+
+    if(items.some(item => !item.repuesto)){
+      informar(
+        'Complete el nombre de cada repuesto.',
+        true
+      );
+      return;
+    }
 
     const forma = el('ceFormaPago').value;
     const efectivo = Number(el('cePagoEfectivo').value);
@@ -8454,14 +8657,29 @@ function buildClienteEsperaHtml(pedido){
       return;
     }
 
+    const aCentavos = valor =>
+      Math.round((Number(valor) + Number.EPSILON) * 100);
+
+    const pagadoCentavos =
+      aCentavos(efectivo) + aCentavos(qr);
+
+    const totalCentavos =
+      aCentavos(el('ceTotal').value);
+
+    if(pagadoCentavos > totalCentavos){
+      informar(
+        'El total pagado no puede superar el valor total del pedido.',
+        true
+      );
+      return;
+    }
+
     const pedido = {
-      cliente: el('ceCliente').value,
-      telefono: el('ceTelefono').value,
-      repuesto: el('ceRepuesto').value,
-      cantidad: el('ceCantidad').value,
-      total: el('ceTotal').value,
-      pago_efectivo: el('cePagoEfectivo').value,
-      pago_qr: el('cePagoQr').value,
+      cliente: el('ceCliente').value.trim(),
+      telefono: el('ceTelefono').value.trim(),
+      items,
+      pago_efectivo: efectivo,
+      pago_qr: qr,
       fecha_pedido: el('ceFechaPedido').value,
       fecha_prevista: el('ceFechaPrevista').value,
       comentarios: el('ceComentarios').value
@@ -8473,11 +8691,13 @@ function buildClienteEsperaHtml(pedido){
     }
 
     const textoOriginal = guardarBtn.textContent;
+
     bloquear(true);
     guardarBtn.textContent = 'Guardando...';
 
     try{
       const guardado = await DB.saveClienteEspera(pedido);
+
       if(!vigente()) return;
 
       conservarRegistro(guardado);
