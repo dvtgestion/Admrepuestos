@@ -908,6 +908,22 @@
           />
         </label>
 
+                <label class="field">
+          <span>Precio unitario del repuesto (Bs)</span>
+          <input
+            id="cePrecioUnitario"
+            type="number"
+            min="0"
+            max="999999999999.99"
+            step="0.01"
+            placeholder="0,00"
+            required
+          />
+          <span class="xs muted">
+            Precio por una unidad.
+          </span>
+        </label>
+
         <label class="field">
           <span>Valor total del pedido (Bs)</span>
           <input
@@ -917,10 +933,10 @@
             max="999999999999.99"
             step="0.01"
             placeholder="0,00"
-            required
+            readonly
           />
           <span class="xs muted">
-            Importe total por toda la cantidad solicitada.
+            Cantidad × precio unitario.
           </span>
         </label>
 
@@ -7589,6 +7605,55 @@ async function renderClientesEspera(){
 
     guardarBtn.disabled = valor || !cargado;
   }
+  
+    function calcularTotalPedido(){
+    const cantidadInput = el('ceCantidad');
+    const precioInput = el('cePrecioUnitario');
+    const totalInput = el('ceTotal');
+
+    precioInput.setCustomValidity('');
+        precioInput.nextElementSibling.textContent =
+      'Precio por una unidad.';
+
+    const cantidad = Number(cantidadInput.value);
+    const precio = Number(precioInput.value);
+
+    if(
+      cantidadInput.value === '' ||
+      precioInput.value === '' ||
+      !Number.isInteger(cantidad) ||
+      cantidad <= 0 ||
+      !Number.isFinite(precio) ||
+      precio < 0 ||
+      !cantidadInput.validity.valid ||
+      !precioInput.validity.valid
+    ){
+      totalInput.value = '';
+      return;
+    }
+
+    // Calcular en centavos para evitar diferencias decimales.
+    const precioCentavos = Math.round(
+      (precio + Number.EPSILON) * 100
+    );
+
+    const totalCentavos = cantidad * precioCentavos;
+
+    if(
+      !Number.isSafeInteger(totalCentavos) ||
+      totalCentavos > 99999999999999
+    ){
+      totalInput.value = '';
+
+      precioInput.setCustomValidity(
+        'El valor total del pedido supera el máximo permitido.'
+      );
+
+      return;
+    }
+
+    totalInput.value = (totalCentavos / 100).toFixed(2);
+  }
 
   function calcularResumen(){
     const centavos = id => {
@@ -7635,8 +7700,45 @@ async function renderClientesEspera(){
     return 'sin_pago';
   }
 
-  function limpiarFormulario(){
+  function prepararPrecioUnitario(pedido = null){
+    const input = el('cePrecioUnitario');
+    const ayuda = input.nextElementSibling;
+
+    input.setCustomValidity('');
+    input.value = '';
+    ayuda.textContent = 'Precio por una unidad.';
+
+    if(!pedido) return;
+
+    const cantidad = Number(pedido.cantidad);
+    const total = Number(pedido.total);
+
+    if(
+      !Number.isInteger(cantidad) ||
+      cantidad <= 0 ||
+      !Number.isFinite(total) ||
+      total < 0
+    ){
+      return;
+    }
+
+    input.value = (total / cantidad).toFixed(2);
+
+    const totalCentavos = Math.round(
+      (total + Number.EPSILON) * 100
+    );
+
+    if(totalCentavos % cantidad !== 0){
+      ayuda.textContent =
+        'Precio unitario aproximado del pedido original. ' +
+        'Se conserva el total guardado hasta que cambie ' +
+        'la cantidad o el precio unitario.';
+    }
+  }
+
+    function limpiarFormulario(){
     form.reset();
+    prepararPrecioUnitario();
     editando = null;
     cambios = false;
     formaAnterior = 'sin_pago';
@@ -7674,9 +7776,11 @@ async function renderClientesEspera(){
       ceComentarios: p.comentarios
     };
 
-    Object.entries(campos).forEach(([id, valor]) => {
+        Object.entries(campos).forEach(([id, valor]) => {
       el(id).value = valor ?? '';
     });
+
+    prepararPrecioUnitario(p);
 
     formaAnterior = formaDelPedido(p);
     el('ceFormaPago').value = formaAnterior;
@@ -7971,11 +8075,12 @@ function buildClienteEsperaHtml(pedido){
       </div>
     </section>
 
-    <table>
+        <table>
       <thead>
         <tr>
           <th>Repuesto solicitado</th>
           <th class="num">Cantidad</th>
+          <th class="num">Precio unitario</th>
           <th class="num">Valor total</th>
         </tr>
       </thead>
@@ -7983,8 +8088,32 @@ function buildClienteEsperaHtml(pedido){
       <tbody>
         <tr>
           <td class="repuesto">${escapeHtml(pedido.repuesto || '')}</td>
-          <td class="num">${Number(pedido.cantidad || 0)}</td>
-          <td class="num">${fmtMoney(pedido.total)}</td>
+
+          <td class="num">
+            ${Number(pedido.cantidad || 0)}
+          </td>
+
+          <td class="num">
+            ${
+              Number(pedido.cantidad) > 0
+                ? fmtMoney(
+                    Number(pedido.total) / Number(pedido.cantidad)
+                  )
+                : '—'
+            }
+            ${
+              Number(pedido.cantidad) > 0 &&
+              Math.round(
+                (Number(pedido.total) + Number.EPSILON) * 100
+              ) % Number(pedido.cantidad) !== 0
+                ? '<div style="font-size:10px;color:#6b7280">Aproximado por redondeo</div>'
+                : ''
+            }
+          </td>
+
+          <td class="num">
+            ${fmtMoney(pedido.total)}
+          </td>
         </tr>
       </tbody>
     </table>
@@ -8266,8 +8395,16 @@ function buildClienteEsperaHtml(pedido){
     mostrarFormaPago();
   });
 
-  form.addEventListener('input', ()=>{
+    form.addEventListener('input', e => {
     cambios = true;
+
+    if(
+      e.target.id === 'ceCantidad' ||
+      e.target.id === 'cePrecioUnitario'
+    ){
+      calcularTotalPedido();
+    }
+
     calcularResumen();
   });
 
