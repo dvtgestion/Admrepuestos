@@ -829,43 +829,33 @@
   </template>
 
   <template id="tpl-ajustes">
-    <section class="stack">
-      <header class="toolbar">
-        <div class="left"><h2>Ajustes</h2><p class="muted">Empresa, backup y restauración.</p></div>
-        <div class="right">
-          <button id="backupBtn" class="btn">Backup JSON</button>
-          <label class="btn" for="restoreFile">Restaurar JSON</label>
-          <input id="restoreFile" type="file" accept="application/json" style="display:none"/>
-        </div>
-      </header>
-
-      <div class="card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-        <strong>Empresa actual:</strong>
-        <span id="orgName">—</span>
-        <select id="orgSelect" class="input"></select>
-        <button id="orgNewBtn" class="btn">Nueva empresa</button>
+  <section class="stack">
+    <header class="toolbar">
+      <div class="left">
+        <h2>Ajustes</h2>
+        <p class="muted">Empresa, backup y restauración.</p>
       </div>
 
-      <div class="card" style="display:flex; flex-direction:column; gap:8px;">
-  <h3>Herramientas de Corrección</h3>
-
-  <p class="muted xs">
-    1) “Reparar lotes” restaura el costo/precio de cada lote usando movimientos de ENTRADA (lote_id).<br>
-    2) “Actualizar base” actualiza costo/precio BASE de la pieza usando el ÚLTIMO lote (no cambia los lotes).
-  </p>
-
-  <div style="display:flex; gap:8px; flex-wrap:wrap;">
-    <button id="repairLotsBtn" class="btn btn-warning">Reparar lotes desde entradas</button>
-    <button id="syncBaseBtn" class="btn btn-primary">Actualizar costo/precio base (último lote)</button>
-  </div>
-
-  <p class="muted xs">
-    <strong>Orden recomendado:</strong> primero “Reparar lotes…” (una sola vez) y después “Actualizar costo/precio base…”.
-  </p>
-</div>
+      <div class="right">
+        <button id="backupBtn" class="btn">Backup JSON</button>
+        <label class="btn" for="restoreFile">Restaurar JSON</label>
+        <input
+          id="restoreFile"
+          type="file"
+          accept="application/json"
+          style="display:none"
+        />
       </div>
-    </section>
-  </template>
+    </header>
+
+    <div class="card" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+      <strong>Empresa actual:</strong>
+      <span id="orgName">—</span>
+      <select id="orgSelect" class="input"></select>
+      <button id="orgNewBtn" class="btn">Nueva empresa</button>
+    </div>
+  </section>
+</template>
 
   <template id="tpl-historial">
     <section class="stack">
@@ -2230,76 +2220,10 @@ async function updatePartDescription(id, descripcion){
   if(error) throw error;
 }
 
-            // ======================================================
-// ✅ FERRAMENTAS DE CORREÇÃO (OPÇÃO A)
-// ======================================================
-      // ======================================================
-// ✅ CORREÇÃO 1: Restaurar preços dos LOTES usando
-// movimentos de ENTRADA (cada entrada tem lote_id)
-// ======================================================
-async function repairLotsFromEntradaMovements(){
-  const { data: moves, error } = await sb.from('movements')
-    .select('lote_id, costo_unit, precio_unit')
-    .eq('org_id', orgId())
-    .eq('tipo', 'entrada')
-    .not('lote_id', 'is', null)
-    .order('fecha', { ascending: true })
-    .limit(50000);
-
-  if(error) throw error;
-
-  let updated = 0;
-  for(const m of (moves || [])){
-    const { error: e2 } = await sb.from('part_lots')
-      .update({
-        costo_unit: Number(m.costo_unit || 0),
-        precio_unit: Number(m.precio_unit || 0),
-      })
-      .eq('org_id', orgId())
-      .eq('id', m.lote_id);
-
-    if(e2) throw e2;
-    updated++;
-  }
-
-  return updated;
-}
+          
 
 // ======================================================
-// ✅ CORREÇÃO 2: Atualizar custo/preço BASE da peça
-// usando o ÚLTIMO LOTE (não mexe nos lotes)
-// ======================================================
-async function syncPartBaseFromLastLot(){
-  const parts = await listParts();
-  let count = 0;
 
-  for(const p of parts){
-    const { data: lot, error } = await sb.from('part_lots')
-      .select('costo_unit, precio_unit')
-      .eq('org_id', orgId())
-      .eq('part_id', p.id)
-      .gt('qty', 0)
-      .order('id', { ascending: false }) // último lote
-      .limit(1)
-      .maybeSingle();
-
-    if(error) throw error;
-    if(!lot) continue;
-
-    const { error: e2 } = await sb.from('parts')
-      .update({
-        costo: Number(lot.costo_unit || 0),
-        precio: Number(lot.precio_unit || 0),
-      })
-      .eq('org_id', orgId())
-      .eq('id', p.id);
-
-    if(e2) throw e2;
-    count++;
-  }
-
-  return count;
-}
 
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
@@ -2314,11 +2238,7 @@ listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, elim
   // Finanzas
   listFinEntries, upsertFinEntry, deleteFinEntry, sumFinByTipo, listFinCategories,
   backupAll, restoreAll,
-  recomputeMetrics,
-
-  // ✅ NOVAS FUNÇÕES (PARTE 3.2)
-  repairLotsFromEntradaMovements,
-  syncPartBaseFromLastLot
+    recomputeMetrics
 };
 })();
         
@@ -7089,43 +7009,6 @@ await cargarProformasActivas();
       const orgSelect = document.getElementById('orgSelect');
       const orgNewBtn = document.getElementById('orgNewBtn');
 
-      // Botões de correção
-const repairLotsBtn = document.getElementById('repairLotsBtn');
-const syncBaseBtn   = document.getElementById('syncBaseBtn');
-
-if(repairLotsBtn){
-  repairLotsBtn.addEventListener('click', async ()=>{
-    if(!confirm('¿Seguro? Esto intentará restaurar el costo/precio de cada lote usando los movimientos de ENTRADA.')) return;
-    try{
-      repairLotsBtn.disabled = true;
-      repairLotsBtn.textContent = 'Reparando...';
-      const updated = await DB.repairLotsFromEntradaMovements();
-      alert(`Éxito: ${updated} lotes restaurados desde movimientos de entrada.`);
-    }catch(err){
-      alert('Error: ' + (err.message || err));
-    }finally{
-      repairLotsBtn.disabled = false;
-      repairLotsBtn.textContent = 'Reparar lotes desde entradas';
-    }
-  });
-}
-
-if(syncBaseBtn){
-  syncBaseBtn.addEventListener('click', async ()=>{
-    if(!confirm('¿Seguro? Esto actualizará el costo/precio BASE de cada pieza usando el ÚLTIMO lote (no cambia los lotes).')) return;
-    try{
-      syncBaseBtn.disabled = true;
-      syncBaseBtn.textContent = 'Actualizando...';
-      const count = await DB.syncPartBaseFromLastLot();
-      alert(`Éxito: ${count} piezas actualizadas con costo/precio base del último lote.`);
-    }catch(err){
-      alert('Error: ' + (err.message || err));
-    }finally{
-      syncBaseBtn.disabled = false;
-      syncBaseBtn.textContent = 'Actualizar costo/precio base (último lote)';
-    }
-  });
-}
 
       orgNewBtn.addEventListener('click', async ()=>{
         const nombre = prompt('Nombre de la nueva empresa:'); if(!nombre) return;
