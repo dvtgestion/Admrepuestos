@@ -1361,21 +1361,22 @@ return { get, set, myOrgs, ensureCurrent, isAdmin };
   if(!partId) return [];
 
   const { data, error } = await sb.from('part_lots')
-    .select('id, qty, almacen, costo_unit, precio_unit')
+    .select('id, qty, almacen, costo_unit, precio_unit, edit_version')
     .eq('org_id', orgId())
     .eq('part_id', partId)
-    .order('id', {ascending:true});
+    .order('id', { ascending: true });
 
   if(error) throw error;
 
-  return (data||[])
-    .filter(l => Number(l.qty||0) > 0)
+  return (data || [])
+    .filter(l => Number(l.qty || 0) > 0)
     .map(l => ({
       id: l.id,
       qty: Number(l.qty || 0),
       almacen: l.almacen || '',
       costo_unit: Number(l.costo_unit || 0),
-      precio_unit: Number(l.precio_unit || 0)
+      precio_unit: Number(l.precio_unit || 0),
+      edit_version: String(l.edit_version)
     }));
 }
       async function listAllLots(limit=20000){
@@ -1533,100 +1534,39 @@ async function removeLotWithAudit(lotId){
   };
 }
 
-async function editLotWithAudit({ lotId, qty, costo_unit, precio_unit }){
-  if(!lotId) throw new Error('Lote inválido');
+async function editLotWithAudit({
+  lotId,
+  edit_version,
+  qty,
+  costo_unit,
+  precio_unit
+}){
+  const version = String(edit_version ?? '');
 
-  const newQty = Number(qty || 0);
-  const newCosto = Number(costo_unit || 0);
-  const newPrecio = Number(precio_unit || 0);
-
-  if(newQty < 0){
-    throw new Error('La cantidad del lote no puede ser negativa.');
+  if(!/^[1-9]\d*$/.test(version)){
+    throw new Error(
+      'Actualice los datos del lote antes de editarlo.'
+    );
   }
 
-  // Buscar lote actual
-  const { data: lot, error: e1 } = await sb.from('part_lots')
-    .select('id, part_id, qty, costo_unit, precio_unit')
-    .eq('org_id', orgId())
-    .eq('id', lotId)
-    .maybeSingle();
-
-  if(e1) throw e1;
-  if(!lot) throw new Error('Lote no encontrado');
-
-  const oldQty = Number(lot.qty || 0);
-  const oldCosto = Number(lot.costo_unit || 0);
-  const oldPrecio = Number(lot.precio_unit || 0);
-
-  // Buscar pieza
-  const { data: part, error: e2 } = await sb.from('parts')
-    .select('id, codigo, nombre, almacen')
-    .eq('org_id', orgId())
-    .eq('id', lot.part_id)
-    .maybeSingle();
-
-  if(e2) throw e2;
-  if(!part) throw new Error('Pieza no encontrada');
-
-  // Atualizar o lote e confirmar que foi atualizado
-  const { data: updatedLot, error: e3 } = await sb.from('part_lots')
-    .update({
-      qty: newQty,
-      costo_unit: newCosto,
-      precio_unit: newPrecio
-    })
-    .eq('org_id', orgId())
-    .eq('id', lot.id)
-    .select('id, part_id, qty, costo_unit, precio_unit')
-    .maybeSingle();
-
-  if(e3) throw e3;
-
-  if(!updatedLot){
-    throw new Error('El lote no fue actualizado. Revise permisos/RLS o el ID del lote.');
-  }
-
-  // Recalcular stock, costo e precio base usando os lotes ativos
-const synced = await syncPartStockAndBaseFromLots(part.id);
-const totalStock = synced.stock;
-
-  // Registrar auditoria em Movimientos
-  const u = Auth.currentUser();
-  const diffQty = newQty - oldQty;
-
-  const qtyAudit = Math.abs(diffQty) > 0
-    ? Math.abs(diffQty)
-    : Math.max(1, newQty);
-
-  const { error: e6 } = await sb.from('movements').insert({
-    org_id: orgId(),
-    pieza_id: part.id,
-    codigo: part.codigo,
-    nombre: part.nombre,
-    almacen: part.almacen || '',
-    tipo: 'ajuste',
-    cantidad: qtyAudit,
-    referencia: `AJUSTE: edición manual del lote ${lot.id} | Cantidad: ${oldQty} → ${newQty} | Costo: ${oldCosto} → ${newCosto} | Precio: ${oldPrecio} → ${newPrecio}`,
-    usuario: u ? u.email : '',
-    costo_unit: Number(updatedLot.costo_unit || 0),
-    precio_unit: Number(updatedLot.precio_unit || 0),
-    lote_id: lot.id
+  const { data, error } = await sb.rpc('editar_lote_seguro', {
+    p_org_id: orgId(),
+    p_lote_id: lotId,
+    p_version: version,
+    p_qty: qty,
+    p_costo_unit: costo_unit,
+    p_precio_unit: precio_unit
   });
 
-  if(e6) throw e6;
+  if(error){
+    throw new Error(error.message || 'No se pudo editar el lote.');
+  }
 
-  await recomputeMetrics(part.id);
+  if(!data || data.ok !== true){
+    throw new Error('No se pudo confirmar la edición del lote.');
+  }
 
-  return {
-    partId: part.id,
-    oldQty,
-    newQty,
-    oldCosto,
-    newCosto: Number(updatedLot.costo_unit || 0),
-    oldPrecio,
-    newPrecio: Number(updatedLot.precio_unit || 0),
-    totalStock
-  };
+  return data;
 }
 
 
@@ -3564,6 +3504,7 @@ function partHasAlmacen(p, almacen){
         <button 
           class="btn"
           data-edit-lot="${l.id}"
+          data-lot-version="${l.edit_version}"
           data-lot-qty="${l.qty}"
           data-lot-costo="${l.costo_unit}"
           data-lot-precio="${l.precio_unit}"
@@ -3661,8 +3602,10 @@ tbody.addEventListener('click', async (e)=>{
   const btnEdit = e.target.closest('button[data-edit-lot]');
 
   // Editar lote específico
+  // Editar lote específico
   if(btnEdit){
     const lotId = btnEdit.getAttribute('data-edit-lot');
+    const editVersion = btnEdit.getAttribute('data-lot-version');
 
     const currentQty = btnEdit.getAttribute('data-lot-qty') || '0';
     const currentCosto = btnEdit.getAttribute('data-lot-costo') || '0';
@@ -3703,6 +3646,7 @@ tbody.addEventListener('click', async (e)=>{
     try{
       await DB.editLotWithAudit({
         lotId,
+        edit_version: editVersion,
         qty,
         costo_unit: costo,
         precio_unit: precio
