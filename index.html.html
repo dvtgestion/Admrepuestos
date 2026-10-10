@@ -460,7 +460,7 @@
           <th>MOTOR</th>
           <th>Almacén</th>
           <th class="num">Stock</th>
-          <th class="num">Costo base</th>
+          <th class="num">Costo promedio</th>
           <th class="num">Valor detenido</th>
           <th>Última salida</th>
           <th class="num">Días sin salida</th>
@@ -1388,6 +1388,38 @@ return { get, set, myOrgs, ensureCurrent, isAdmin };
   if(error) throw error;
   return data || [];
 }
+
+async function listStockDetenidoLots(){
+  const companyId = orgId();
+  const lots = [];
+  let lastId = null;
+
+  while(true){
+    let query = sb.from('part_lots')
+      .select('id, part_id, qty, costo_unit')
+      .eq('org_id', companyId)
+      .gt('qty', 0)
+      .order('id', { ascending: true })
+      .limit(500);
+
+    if(lastId !== null){
+      query = query.gt('id', lastId);
+    }
+
+    const { data, error } = await query;
+
+    if(error) throw error;
+
+    const page = data || [];
+    if(page.length === 0) break;
+
+    lots.push(...page);
+    lastId = page[page.length - 1].id;
+  }
+
+  return lots;
+}
+
       async function getInventoryValueByLots(){
         const lots = await listAllLots(50000);
         return lots.reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
@@ -2687,7 +2719,7 @@ listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
 correctMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
-  listLots, listAllLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
+  listLots, listAllLots, listStockDetenidoLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
@@ -2961,6 +2993,7 @@ const stockDetenidoTbody = document.getElementById('stockDetenidoTbody');
 
 let reportPartsCache = [];
 let reportMovesCache = [];
+let reportLotsCache = [];
 
 function buildStockDetenidoAlmacenes(parts){
   if(!stAlmacen) return;
@@ -2989,10 +3022,28 @@ function daysWithoutSale(lastDate){
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
-function getStockDetenidoRows(parts, moves){
+function getStockDetenidoRows(parts, moves, lots){
   const threshold = Number(stDays?.value || 90);
 
   const lastSalidaByPart = new Map();
+  const valueByPart = new Map();
+
+  for(const lot of lots){
+    const qty = Number(lot.qty || 0);
+    const costo = Number(lot.costo_unit || 0);
+
+    if(qty <= 0) continue;
+
+    const accumulated = valueByPart.get(lot.part_id) || {
+      qty: 0,
+      valor: 0
+    };
+
+    accumulated.qty += qty;
+    accumulated.valor += qty * costo;
+
+    valueByPart.set(lot.part_id, accumulated);
+  }
 
   for(const m of moves){
     if(m.tipo !== 'salida') continue;
@@ -3013,7 +3064,12 @@ function getStockDetenidoRows(parts, moves){
       const diasSinSalida = daysWithoutSale(lastSalida);
       const nuncaVendida = !lastSalida;
       const detenida = nuncaVendida || diasSinSalida >= threshold;
-      const valorDetenido = Number(p.stock || 0) * Number(p.costo || 0);
+
+      const lotTotals = valueByPart.get(p.id);
+      const valorDetenido = lotTotals ? lotTotals.valor : 0;
+      const costoPromedio = lotTotals && lotTotals.qty > 0
+        ? lotTotals.valor / lotTotals.qty
+        : 0;
 
       return {
         ...p,
@@ -3021,7 +3077,8 @@ function getStockDetenidoRows(parts, moves){
         diasSinSalida,
         nuncaVendida,
         detenida,
-        valorDetenido
+        valorDetenido,
+        costoPromedio
       };
     })
     .filter(p => p.detenida);
@@ -3030,7 +3087,11 @@ function getStockDetenidoRows(parts, moves){
 function paintStockDetenido(){
   if(!stockDetenidoTbody) return;
 
-  let rows = getStockDetenidoRows(reportPartsCache, reportMovesCache);
+  let rows = getStockDetenidoRows(
+    reportPartsCache,
+    reportMovesCache,
+    reportLotsCache
+  );
 
   const alm = stAlmacen?.value || '(Todos)';
   const q = String(stSearch?.value || '').trim().toLowerCase();
@@ -3117,7 +3178,7 @@ function paintStockDetenido(){
       <td>${escapeHtml(p.categoria || '')}</td>
       <td>${escapeHtml(p.almacen || '')}</td>
       <td class="num">${Number(p.stock || 0)}</td>
-      <td class="num">${fmtMoney(p.costo)}</td>
+      <td class="num">${fmtMoney(p.costoPromedio)}</td>
       <td class="num">${fmtMoney(p.valorDetenido)}</td>
       <td>${escapeHtml(ultimaSalida)}</td>
       <td class="num">${escapeHtml(diasLabel)}</td>
@@ -3130,9 +3191,13 @@ function paintStockDetenido(){
 
       async function run(){
         const parts = await DB.listParts();
+        const lots = await DB.listStockDetenidoLots();
+
         reportPartsCache = parts;
-reportMovesCache = await DB.listMoves(50000);
-buildStockDetenidoAlmacenes(parts);
+        reportLotsCache = lots;
+        reportMovesCache = await DB.listMoves(50000);
+
+        buildStockDetenidoAlmacenes(parts);
 
         // Período
         const dFrom = new Date(repDesde.value + 'T00:00:00');
