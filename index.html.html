@@ -5175,9 +5175,19 @@ function buildInventoryExportRows(parts, lots, options){
   const head = [
     'Código', 'Pieza', 'Categoría', 'Almacén', 'Proveedor',
     'Ubicación', 'Estado de la pieza', 'Lote', 'Cantidad',
-    'Costo unitario (Bs)', 'Precio unitario (Bs)',
-    'Valor al costo (Bs)', 'Valor a precio de venta (Bs)',
-    'Lotes incluidos', 'Tipo de valor'
+
+    options.formato === 'pieza'
+      ? 'Costo promedio por unidad (Bs)'
+      : 'Costo por unidad (Bs)',
+
+    options.formato === 'pieza'
+      ? 'Precio promedio de venta por unidad (Bs)'
+      : 'Precio de venta por unidad (Bs)',
+
+    'Costo total del stock (Bs)',
+    'Valor de venta del stock (Bs)',
+    'Lotes incluidos',
+    'Tipo de valor'
   ];
 
   function money(value){
