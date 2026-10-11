@@ -1420,6 +1420,60 @@ async function listStockDetenidoLots(){
   return lots;
 }
 
+async function getInventoryExportData(){
+  const companyId = orgId();
+
+  if(!companyId){
+    throw new Error('Seleccione una empresa antes de exportar.');
+  }
+
+  async function readAllPages(table, columns){
+    const records = [];
+    let lastId = null;
+
+    while(true){
+      let query = sb.from(table)
+        .select(columns)
+        .eq('org_id', companyId)
+        .order('id', { ascending: true })
+        .limit(500);
+
+      if(lastId !== null){
+        query = query.gt('id', lastId);
+      }
+
+      const { data, error } = await query;
+
+      if(error) throw error;
+
+      const page = data || [];
+      if(page.length === 0) break;
+
+      records.push(...page);
+      lastId = page[page.length - 1].id;
+    }
+
+    return records;
+  }
+
+  const [parts, lots] = await Promise.all([
+    readAllPages(
+      'parts',
+      'id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio'
+    ),
+    readAllPages(
+      'part_lots',
+      'id, part_id, qty, almacen, costo_unit, precio_unit, created_at'
+    )
+  ]);
+
+  return {
+    companyId,
+    parts,
+    lots
+  };
+}
+
       async function getInventoryValueByLots(){
         const lots = await listAllLots(50000);
         return lots.reduce((s,l)=> s + Number(l.qty||0)*Number(l.costo_unit||0), 0);
@@ -2719,7 +2773,7 @@ listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
 correctMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
-  listLots, listAllLots, listStockDetenidoLots, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
+  listLots, listAllLots, listStockDetenidoLots, getInventoryExportData, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
   addPriceHistory, listPriceHistory,
   uploadPartImage, deletePartImage, trySetPartImage, listPartImages,
@@ -4091,9 +4145,12 @@ let moveSubmitting = false;
       const tbody = document.getElementById('movesTbody');
       const exportBtn = document.getElementById('exportCSV');
       const undoBtn = document.getElementById('undoLast');
+
       if(!Org.isAdmin()){
-  undoBtn.classList.add('hidden');
-}
+        undoBtn.classList.add('hidden');
+        exportBtn.classList.add('hidden');
+        exportBtn.disabled = true;
+      }
       const almFilter = document.getElementById('moveAlmacenFilter'); // Filtro de armazém geral
 			const moveAlmacenInput = document.getElementById('moveAlmacenInput');
  			const dlMoveAlmacenes = document.getElementById('dlMoveAlmacenes');
@@ -5107,25 +5164,455 @@ alert('Movimiento deshecho');
         catch(e){ alert(e.message || 'No se pudo deshacer'); }
       });
 
+
+function buildInventoryExportRows(parts, lots, options){
+  const selectedWarehouse = options.almacen || '';
+  const lotsByPart = new Map();
+  const rows = [];
+  const includedLots = new Set();
+  let pieceCount = 0;
+
+  const head = [
+    'Código', 'Pieza', 'Categoría', 'Almacén', 'Proveedor',
+    'Ubicación', 'Estado de la pieza', 'Lote', 'Cantidad',
+    'Costo unitario (Bs)', 'Precio unitario (Bs)',
+    'Valor al costo (Bs)', 'Valor a precio de venta (Bs)',
+    'Lotes incluidos', 'Tipo de valor'
+  ];
+
+  function money(value){
+    return value == null ? '' : Number(value).toFixed(2);
+  }
+
+  function amount(value){
+    if(value == null || value === '') return null;
+
+    const number = Number(value);
+
+    if(!Number.isFinite(number) || number < 0){
+      throw new Error(
+        'Hay un costo o precio inválido en el inventario.'
+      );
+    }
+
+    return number;
+  }
+
+  for(const lot of lots){
+    const qty = Number(lot.qty || 0);
+
+    if(!Number.isFinite(qty) || qty < 0){
+      throw new Error('Hay una cantidad de lote inválida.');
+    }
+
+    if(!lotsByPart.has(lot.part_id)){
+      lotsByPart.set(lot.part_id, []);
+    }
+
+    lotsByPart.get(lot.part_id).push(lot);
+  }
+
+  for(const part of parts){
+    const allLots = lotsByPart.get(part.id) || [];
+
+    const warehouseOf = lot =>
+      String(lot.almacen || part.almacen || '').trim();
+
+    const scopedLots = selectedWarehouse
+      ? allLots.filter(lot =>
+          warehouseOf(lot) === selectedWarehouse
+        )
+      : allLots;
+
+    if(selectedWarehouse && scopedLots.length === 0){
+      if(
+        allLots.length > 0 ||
+        String(part.almacen || '').trim() !== selectedWarehouse
+      ){
+        continue;
+      }
+    }
+
+    if(allLots.length === 0 && Number(part.stock || 0) > 0){
+      throw new Error(
+        'La pieza ' + (part.codigo || part.nombre) +
+        ' tiene stock registrado, pero no tiene lotes. ' +
+        'Revísela antes de exportar.'
+      );
+    }
+
+    const activeLots = scopedLots.filter(lot =>
+      Number(lot.qty || 0) > 0
+    );
+
+    const stock = activeLots.reduce(
+      (sum, lot) => sum + Number(lot.qty),
+      0
+    );
+
+    const available = stock > 0;
+
+    if(options.estado === 'disponible' && !available) continue;
+    if(options.estado === 'agotado' && available) continue;
+
+    const exportLots = options.estado === 'disponible'
+      ? activeLots
+      : scopedLots;
+
+    let totalCost = 0;
+    let totalPrice = 0;
+
+    for(const lot of activeLots){
+      const cost = amount(lot.costo_unit);
+      const price = amount(lot.precio_unit);
+
+      if(cost === null || price === null){
+        throw new Error(
+          'Hay un lote disponible sin costo o precio registrado: ' +
+          lot.id
+        );
+      }
+
+      totalCost += Number(lot.qty) * cost;
+      totalPrice += Number(lot.qty) * price;
+    }
+
+    const latestLot = [...scopedLots].sort((a,b)=>
+      String(b.created_at || '')
+        .localeCompare(String(a.created_at || '')) ||
+      String(b.id).localeCompare(String(a.id))
+    )[0];
+
+    const referenceCost = amount(
+      latestLot ? latestLot.costo_unit : part.costo
+    );
+
+    const referencePrice = amount(
+      latestLot ? latestLot.precio_unit : part.precio
+    );
+
+    const state = available ? 'Disponible' : 'Agotado';
+
+    function prefix(warehouse){
+      return [
+        part.codigo || '',
+        part.nombre || '',
+        part.categoria || '',
+        warehouse,
+        part.proveedor || '',
+        part.ubicacion || '',
+        state
+      ];
+    }
+
+    pieceCount++;
+    exportLots.forEach(lot => includedLots.add(lot.id));
+
+    if(options.formato === 'pieza'){
+      const warehouses = [...new Set(
+        exportLots.map(warehouseOf)
+      )].filter(Boolean).sort().join(' / ');
+
+      const source = available
+        ? 'Promedio ponderado del stock disponible'
+        : latestLot
+          ? 'Referencia del último lote; sin stock'
+          : 'Referencia del registro de la pieza; sin lotes';
+
+      rows.push([
+        ...prefix(
+          selectedWarehouse || warehouses || part.almacen || ''
+        ),
+        '',
+        stock,
+        money(available ? totalCost / stock : referenceCost),
+        money(available ? totalPrice / stock : referencePrice),
+        money(totalCost),
+        money(totalPrice),
+        exportLots.length,
+        source
+      ]);
+    }else if(exportLots.length > 0){
+      for(const lot of exportLots){
+        const qty = Number(lot.qty || 0);
+        const cost = amount(lot.costo_unit);
+        const price = amount(lot.precio_unit);
+
+        rows.push([
+          ...prefix(warehouseOf(lot)),
+          lot.id,
+          qty,
+          money(cost),
+          money(price),
+          money(qty === 0 ? 0 : qty * cost),
+          money(qty === 0 ? 0 : qty * price),
+          1,
+          qty > 0
+            ? 'Valor registrado del lote'
+            : 'Lote sin stock'
+        ]);
+      }
+    }else{
+      rows.push([
+        ...prefix(part.almacen || ''),
+        '',
+        0,
+        money(referenceCost),
+        money(referencePrice),
+        money(0),
+        money(0),
+        0,
+        'Referencia del registro de la pieza; sin lotes'
+      ]);
+    }
+  }
+
+  return {
+    head,
+    rows,
+    pieceCount,
+    lotCount: includedLots.size
+  };
+}
+
+
+function chooseInventoryExportOptions(almacenes){
+  return new Promise(resolve=>{
+    const dialog = document.createElement('dialog');
+
+    dialog.style.cssText =
+      'width:min(480px,90vw);border:1px solid #ddd;' +
+      'border-radius:12px;padding:24px;';
+
+    const options = almacenes.map(almacen=>
+      `<option value="${escapeHtml(almacen)}">` +
+      `${escapeHtml(almacen)}</option>`
+    ).join('');
+
+    dialog.innerHTML = `
+      <form class="stack">
+        <h3 style="margin:0">Exportar inventario</h3>
+
+        <label class="field">
+          <span>Formato</span>
+          <select name="formato" class="input">
+            <option value="pieza">Resumen por pieza</option>
+            <option value="lote">Detalle por lote</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Disponibilidad</span>
+          <select name="estado" class="input">
+            <option value="disponible">Disponible</option>
+            <option value="agotado">Agotado</option>
+            <option value="todo">Todo</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Almacén</span>
+          <select name="almacen" class="input">
+            <option value="">Todos los almacenes</option>
+            ${options}
+          </select>
+        </label>
+
+        <p class="muted xs">
+          La disponibilidad se calcula con el stock total
+          de cada pieza dentro del alcance seleccionado.
+          Un lote vacío no significa que la pieza esté agotada.
+        </p>
+
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button type="button" class="btn" data-cancel>
+            Cancelar
+          </button>
+          <button type="submit" class="btn btn-primary">
+            Exportar CSV
+          </button>
+        </div>
+      </form>
+    `;
+
+    let result = null;
+    const form = dialog.querySelector('form');
+
+    form.addEventListener('submit', event=>{
+      event.preventDefault();
+
+      const values = new FormData(form);
+
+      result = {
+        formato: String(values.get('formato')),
+        estado: String(values.get('estado')),
+        almacen: String(values.get('almacen') || '')
+      };
+
+      dialog.close();
+    });
+
+    dialog.querySelector('[data-cancel]')
+      .addEventListener('click', ()=>dialog.close());
+
+    dialog.addEventListener('close', ()=>{
+      dialog.remove();
+      resolve(result);
+    }, { once: true });
+
+    document.body.appendChild(dialog);
+    dialog.showModal();
+  });
+}
+
       exportBtn.addEventListener('click', async ()=>{
-        const p = await DB.listParts();
-        const head = ['id','codigo','nombre','categoria','almacen','proveedor','leadTimeDias','consumoDiario','ubicacion','stock','stockMin','costo_Bs','precio_Bs'];
-        const rows = p.map(pt=>{
-          const row = {
-            id:pt.id, codigo:pt.codigo, nombre:pt.nombre, categoria:pt.categoria,
-            almacen:pt.almacen, proveedor:pt.proveedor, leadTimeDias:pt.leadTimeDias,
-            consumoDiario:pt.consumoDiario, ubicacion:pt.ubicacion, stock:pt.stock,
-            stockMin:pt.stockMin, costo_Bs:pt.costo, precio_Bs:pt.precio
-          };
-          return head.map(k=>csvCell(row[k] ?? '')).join(',');
-        });
-        const csv = head.join(',') + '\n' + rows.join('\n');
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const stamp = new Date().toISOString().slice(0,19).replace(/[:T]/g,'-');
-        a.href = url; a.download = `inventario_${stamp}.csv`;
-        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        if(!Org.isAdmin()){
+          alert('Solo los administradores pueden exportar el inventario.');
+          return;
+        }
+
+        if(exportBtn.disabled) return;
+
+        const originalLabel = exportBtn.textContent;
+        exportBtn.disabled = true;
+        exportBtn.textContent = 'Preparando exportación…';
+
+        try{
+          const initialData = await DB.getInventoryExportData();
+          const currentOrg = Org.get();
+
+          if(
+            !Org.isAdmin() ||
+            String(currentOrg?.id) !== String(initialData.companyId)
+          ){
+            throw new Error(
+              'La empresa o los permisos cambiaron. Vuelva a abrir la exportación.'
+            );
+          }
+
+          const warehouseSet = new Set();
+
+          for(const part of initialData.parts){
+            const warehouse = String(part.almacen || '').trim();
+            if(warehouse) warehouseSet.add(warehouse);
+          }
+
+          for(const lot of initialData.lots){
+            const warehouse = String(lot.almacen || '').trim();
+            if(warehouse) warehouseSet.add(warehouse);
+          }
+
+          const options = await chooseInventoryExportOptions(
+            [...warehouseSet].sort((a,b)=>a.localeCompare(b))
+          );
+
+          if(!options) return;
+
+          exportBtn.textContent = 'Exportando…';
+
+          const data = await DB.getInventoryExportData();
+          const exportOrg = Org.get();
+
+          if(
+            !Org.isAdmin() ||
+            String(exportOrg?.id) !== String(data.companyId) ||
+            String(data.companyId) !== String(initialData.companyId)
+          ){
+            throw new Error(
+              'La empresa o los permisos cambiaron. Vuelva a abrir la exportación.'
+            );
+          }
+
+          const result = buildInventoryExportRows(
+            data.parts,
+            data.lots,
+            options
+          );
+
+          if(result.rows.length === 0){
+            alert('No hay piezas que coincidan con las opciones seleccionadas.');
+            return;
+          }
+
+          function exportCell(value){
+            let text = String(value ?? '');
+
+            if(/^\s*[=+\-@]/.test(text)){
+              text = "'" + text;
+            }
+
+            return '"' + text.replace(/"/g, '""') + '"';
+          }
+
+          const csvLines = [
+            result.head.map(exportCell).join(','),
+            ...result.rows.map(row =>
+              row.map(exportCell).join(',')
+            )
+          ];
+
+          const csv = '\uFEFF' + csvLines.join('\r\n');
+          const blob = new Blob(
+            [csv],
+            { type: 'text/csv;charset=utf-8;' }
+          );
+
+          function fileNamePart(value){
+            return String(value || 'empresa')
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-zA-Z0-9_-]+/g, '_');
+          }
+
+          const now = new Date();
+          const pad = value => String(value).padStart(2, '0');
+
+          const stamp =
+            now.getFullYear() + '-' +
+            pad(now.getMonth() + 1) + '-' +
+            pad(now.getDate()) + '_' +
+            pad(now.getHours()) + '-' +
+            pad(now.getMinutes()) + '-' +
+            pad(now.getSeconds());
+
+          const companyName = fileNamePart(exportOrg?.nombre);
+          const warehouseName = options.almacen
+            ? fileNamePart(options.almacen)
+            : 'todos_los_almacenes';
+
+          const formatName = options.formato === 'pieza'
+            ? 'por_pieza'
+            : 'por_lote';
+
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+
+          link.href = url;
+          link.download =
+            `inventario_${companyName}_${formatName}_` +
+            `${options.estado}_${warehouseName}_${stamp}.csv`;
+
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+
+          setTimeout(()=>URL.revokeObjectURL(url), 10000);
+
+          alert(
+            'Exportación completada.\n\n' +
+            'Piezas distintas: ' + result.pieceCount + '\n' +
+            'Lotes incluidos: ' + result.lotCount + '\n' +
+            'Filas exportadas: ' + result.rows.length
+          );
+        }catch(error){
+          alert(
+            error.message || 'No se pudo exportar el inventario.'
+          );
+        }finally{
+          exportBtn.textContent = originalLabel;
+          exportBtn.disabled = !Org.isAdmin();
+          exportBtn.classList.toggle('hidden', !Org.isAdmin());
+        }
       });
 
       // Calculadora Importacion 2
