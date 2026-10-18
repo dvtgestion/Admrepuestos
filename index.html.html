@@ -3792,10 +3792,18 @@ function partHasAlmacen(p, almacen){
           const tdAct = document.createElement('td');
           tdAct.className = 'num';
                     tdAct.innerHTML = `
-            <div class="row-actions" style="justify-content:flex-end">
+            <div
+              class="row-actions"
+              style="
+                display:grid;
+                grid-template-columns:44px max-content;
+                justify-content:end;
+                gap:6px;
+              "
+            >
               <button class="btn" data-act="img" data-id="${p.id}" title="Imágenes">📷</button>
-              <button class="btn" data-act="desc" data-id="${p.id}" title="Descripción">📝</button>
               <button class="btn btn-ghost" data-act="edit" data-id="${p.id}">Editar</button>
+              <button class="btn" data-act="desc" data-id="${p.id}" title="Descripción">📝</button>
               <button class="btn btn-danger" data-act="del" data-id="${p.id}">Eliminar</button>
             </div>
           `;
