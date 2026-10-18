@@ -682,7 +682,6 @@
           </div>
 
           <select id="moveAlmacenFilter" class="input" title="Filtrar piezas por almacén"></select>
-          <button id="undoLast" class="btn btn-danger">Deshacer último</button>
           <button id="exportCSV" class="btn">Exportar inventario (CSV)</button>
         </div>
       </header>
@@ -4154,10 +4153,8 @@ let moveSubmitting = false;
       const salidaLotesInfo = document.getElementById('salidaLotesInfo');
       const tbody = document.getElementById('movesTbody');
       const exportBtn = document.getElementById('exportCSV');
-      const undoBtn = document.getElementById('undoLast');
 
       if(!Org.isAdmin()){
-        undoBtn.classList.add('hidden');
         exportBtn.classList.add('hidden');
         exportBtn.disabled = true;
       }
@@ -5154,25 +5151,7 @@ alert('Movimiento deshecho');
         }catch(err){ alert(err.message || 'No se pudo deshacer'); }
       });
 
-      undoBtn.addEventListener('click', async ()=>{
-  if(!Org.isAdmin()){
-    return;
-  }
-
-  try{
-    await DB.undoLastMovement();
-
-  parts = await DB.listParts();
-  moves = await DB.listMoves(2000);
-  allLots = await DB.listAllLots(50000);
-
-  buildAlmacenOptions();
-  paintMoves();
-
-  alert('Movimiento deshecho');
-}
-        catch(e){ alert(e.message || 'No se pudo deshacer'); }
-      });
+      
 
 
 function buildInventoryExportRows(parts, lots, options){
