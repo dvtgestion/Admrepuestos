@@ -807,6 +807,112 @@
           </table>
         </div>
       </div>
+
+      <section id="undoAuditCard" class="card hidden">
+        <header class="toolbar">
+          <div class="left">
+            <h3 style="margin:0">
+              Historial de movimientos deshechos
+            </h3>
+            <p class="muted xs">
+              Las fechas corresponden al momento en que
+              se deshizo el movimiento.
+            </p>
+          </div>
+        </header>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:end">
+          <label class="field">
+            <span>Deshecho desde</span>
+            <input
+              id="undoAuditFrom"
+              class="input"
+              type="date"
+            />
+          </label>
+
+          <label class="field">
+            <span>Deshecho hasta</span>
+            <input
+              id="undoAuditTo"
+              class="input"
+              type="date"
+            />
+          </label>
+
+          <button
+            id="undoAuditApply"
+            class="btn"
+            type="button"
+          >
+            Consultar historial
+          </button>
+        </div>
+
+        <p
+          id="undoAuditStatus"
+          class="muted xs"
+          role="status"
+          aria-live="polite"
+        ></p>
+
+        <div class="table-wrap" style="margin-top:12px">
+          <table class="table compact">
+            <thead>
+              <tr>
+                <th>Deshecho el</th>
+                <th>Movimiento original</th>
+                <th>Tipo original</th>
+                <th>Código</th>
+                <th>Pieza</th>
+                <th>Almacén</th>
+                <th class="num">Cantidad</th>
+                <th>Lote</th>
+                <th>Registrado por</th>
+                <th>Deshecho por</th>
+                <th>Motivo</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+
+            <tbody id="undoAuditTbody">
+              <tr>
+                <td colspan="12" class="muted">
+                  Aún no se ha consultado el historial.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div
+          style="display:flex;gap:12px;flex-wrap:wrap;
+                 align-items:center;justify-content:space-between;
+                 margin-top:12px"
+        >
+          <span id="undoAuditSummary" class="muted xs"></span>
+
+          <div style="display:flex;gap:8px">
+            <button
+              id="undoAuditPrev"
+              class="btn"
+              type="button"
+              disabled
+            >
+              Anterior
+            </button>
+
+            <button
+              id="undoAuditNext"
+              class="btn"
+              type="button"
+              disabled
+            >
+              Siguiente
+            </button>
+          </div>
+        </div>
+      </section>
     </section>
   </template>
 
@@ -1945,102 +2051,112 @@ async function editLotWithAudit({
       }
 
       // ==== DESHACER POR ID ====
-      async function undoMovementById(movId){
-        const { data: m, error: e0 } = await sb.from('movements')
-          .select('id, tipo, cantidad, pieza_id, lote_id')
-          .eq('org_id', orgId())
-          .eq('id', movId)
-          .maybeSingle();
-        if(e0) throw e0;
-        if(!m) throw new Error('Movimiento no encontrado');
+      async function undoMovementById(movId, motivo){
+  if(!Org.isAdmin()){
+    throw new Error(
+      'Solo los administradores pueden deshacer movimientos.'
+    );
+  }
 
-        const q = Number(m.cantidad||0);
-        if(!(q>0)) throw new Error('Cantidad inválida');
-				if(m.tipo === 'ajuste'){
-  throw new Error('Los movimientos de ajuste son registros de auditoría y no se pueden deshacer.');
+  const movementId = String(movId ?? '');
+  const reason = String(motivo ?? '').trim();
+
+  if(!/^[1-9]\d*$/.test(movementId)){
+    throw new Error('Movimiento inválido.');
+  }
+
+  if(reason.length < 3 || reason.length > 1000){
+    throw new Error(
+      'Ingrese un motivo de entre 3 y 1000 caracteres.'
+    );
+  }
+
+  const { data, error } = await sb.rpc(
+    'deshacer_movimiento_seguro',
+    {
+      p_org_id: orgId(),
+      p_movimiento_id: movementId,
+      p_motivo: reason
+    }
+  );
+
+  if(error){
+    throw new Error(
+      error.message || 'No se pudo deshacer el movimiento.'
+    );
+  }
+
+  if(!data || data.ok !== true){
+    throw new Error(
+      'No se pudo confirmar el resultado del desfazimiento.'
+    );
+  }
+
+  return data;
 }
-        let lot = null;
-        if(m.lote_id){
-          const lr = await sb.from('part_lots')
-            .select('id, qty, costo_unit, precio_unit, part_id')
-            .eq('org_id', orgId())
-            .eq('id', m.lote_id)
-            .maybeSingle();
-          if(lr.error) throw lr.error;
-          lot = lr.data || null;
-        }
 
-        let piezaId = m.pieza_id || (lot?.part_id ?? null);
+async function listMovementUndoAudit({
+  from = null,
+  to = null,
+  page = 1
+} = {}){
+  if(!Org.isAdmin()){
+    throw new Error(
+      'Solo los administradores pueden consultar este historial.'
+    );
+  }
 
-        let p = null;
-        if(piezaId){
-          const pr = await sb.from('parts')
-            .select('id, stock')
-            .eq('org_id', orgId())
-            .eq('id', piezaId)
-            .maybeSingle();
-          if(pr.error) throw pr.error;
-          p = pr.data || null;
-        }
+  const pageNumber = Number(page);
+  const pageSize = 50;
 
-        if(m.tipo === 'entrada'){
-          if(p && lot){
-            if(Number(p.stock||0) < q){
-              throw new Error('No se puede deshacer: el stock actual es menor que la entrada.');
-            }
-            if(Number(lot.qty||0) < q){
-              throw new Error('No se puede deshacer: ya hubo salidas desde este lote.');
-            }
+  if(!Number.isSafeInteger(pageNumber) || pageNumber < 1){
+    throw new Error('Página inválida.');
+  }
 
-            const upLot = await sb.from('part_lots')
-              .update({ qty: Number(lot.qty||0) - q })
-              .eq('org_id', orgId())
-              .eq('id', lot.id);
-            if(upLot.error) throw upLot.error;
+  const offset = (pageNumber - 1) * pageSize;
 
-            const upP = await sb.from('parts')
-              .update({ stock: Math.max(0, Number(p.stock||0) - q) })
-              .eq('org_id', orgId())
-              .eq('id', p.id);
-            if(upP.error) throw upP.error;
+  if(!Number.isSafeInteger(offset)){
+    throw new Error('Página inválida.');
+  }
 
-          }else{
-            // huérfano: solo borrar el movimiento
-          }
-        }else{ // SALIDA
-          if(lot){
-            const upLot = await sb.from('part_lots')
-              .update({ qty: Number(lot.qty||0) + q })
-              .eq('org_id', orgId())
-              .eq('id', lot.id);
-            if(upLot.error) throw upLot.error;
-          }else{
-            if(p){
-              throw new Error('No se puede deshacer: salida antigua sin lote asociado.');
-            }
-          }
+  let query = sb.from('movement_undo_audit')
+    .select(
+      'id, movimiento_id, movimiento_original, ' +
+      'deshecho_en, deshecho_por, deshecho_email, motivo, ' +
+      'cantidad_lote_antes, cantidad_lote_despues, ' +
+      'stock_pieza_antes, stock_pieza_despues',
+      { count: 'exact' }
+    )
+    .eq('org_id', orgId());
 
-          if(p){
-            const upP = await sb.from('parts')
-              .update({ stock: Number(p.stock||0) + q })
-              .eq('org_id', orgId())
-              .eq('id', p.id);
-            if(upP.error) throw upP.error;
-          }
-        }
+  if(from){
+    query = query.gte(
+      'deshecho_en',
+      from instanceof Date ? from.toISOString() : from
+    );
+  }
 
-        const del = await sb.from('movements')
-          .delete()
-          .eq('org_id', orgId())
-          .eq('id', m.id);
-        if(del.error) throw del.error;
+  if(to){
+    query = query.lte(
+      'deshecho_en',
+      to instanceof Date ? to.toISOString() : to
+    );
+  }
 
-        if(piezaId){
-  await syncPartStockAndBaseFromLots(piezaId);
-  await recomputeMetrics(piezaId);
+  const { data, error, count } = await query
+    .order('deshecho_en', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + pageSize - 1);
+
+  if(error) throw error;
+
+  return {
+    rows: data || [],
+    total: Number(count || 0),
+    page: pageNumber,
+    pageSize
+  };
 }
-      }
-
 
       // ---- Recibos ----
       async function listRecibos(limit=500){
@@ -2761,7 +2877,7 @@ async function setEstadoClienteEspera({
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
-listMoves, listMovesRange, applyMovement, undoMovementById,
+listMoves, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
@@ -4119,10 +4235,472 @@ await paint();
       
     }
 
+function showMovementUndoAuditDetail(entry){
+  if(!Org.isAdmin()) return;
+
+  const original = entry.movimiento_original || {};
+  const dialog = document.createElement('dialog');
+
+  dialog.style.cssText =
+    'width:min(760px,94vw);max-height:90vh;overflow:auto;' +
+    'border:1px solid #ddd;border-radius:12px;padding:24px;';
+
+  function dateText(value){
+    if(!value) return '—';
+
+    const date = new Date(value);
+
+    return Number.isNaN(date.getTime())
+      ? '—'
+      : date.toLocaleString('es-BO', { hour12: false });
+  }
+
+  function moneyText(value){
+    return value == null ? '—' : fmtMoney(Number(value));
+  }
+
+  const originalType = original.tipo === 'entrada'
+    ? 'Entrada'
+    : original.tipo === 'salida'
+      ? 'Salida'
+      : original.tipo || '—';
+
+  const fields = [
+    ['Movimiento original', original.id ?? entry.movimiento_id],
+    ['Tipo original', originalType],
+    ['Fecha original', dateText(original.fecha)],
+    ['Código', original.codigo],
+    ['Pieza', original.nombre],
+    ['Almacén', original.almacen],
+    ['Lote', original.lote_id],
+    ['Cantidad original', original.cantidad],
+    ['Costo por unidad', moneyText(original.costo_unit)],
+    ['Precio de venta por unidad', moneyText(original.precio_unit)],
+    ['Referencia original', original.referencia],
+    ['Registrado por', original.usuario || original.owner],
+    ['Deshecho el', dateText(entry.deshecho_en)],
+    ['Deshecho por', entry.deshecho_email],
+    ['ID del responsable', entry.deshecho_por],
+    ['Motivo', entry.motivo],
+    ['Cantidad del lote antes', entry.cantidad_lote_antes],
+    ['Cantidad del lote después', entry.cantidad_lote_despues],
+    ['Stock total de la pieza antes', entry.stock_pieza_antes],
+    ['Stock total de la pieza después', entry.stock_pieza_despues]
+  ];
+
+  dialog.innerHTML = `
+    <h3 style="margin-top:0">
+      Detalle del movimiento deshecho
+    </h3>
+
+    <div class="table-wrap">
+      <table class="table compact">
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button type="button" class="btn" data-close>
+        Cerrar
+      </button>
+    </div>
+  `;
+
+  const detailBody = dialog.querySelector('tbody');
+
+  for(const [label, value] of fields){
+    const row = document.createElement('tr');
+    const heading = document.createElement('th');
+    const cell = document.createElement('td');
+
+    heading.scope = 'row';
+    
+    function showMovementUndoAuditDetail(entry){
+  if(!Org.isAdmin()) return;
+
+  const original = entry.movimiento_original || {};
+
+  function dateText(value){
+    if(!value) return '—';
+
+    const date = new Date(value);
+    if(Number.isNaN(date.getTime())) return '—';
+
+    return date.toLocaleString('es-BO', {
+      hour12: false
+    });
+  }
+
+  function moneyText(value){
+    if(value === null || value === undefined || value === ''){
+      return '—';
+    }
+
+    const number = Number(value);
+
+    return Number.isFinite(number)
+      ? fmtMoney(number)
+      : '—';
+  }
+
+  const originalType = original.tipo === 'entrada'
+    ? 'Entrada'
+    : original.tipo === 'salida'
+      ? 'Salida'
+      : original.tipo || '—';
+
+  const fields = [
+    ['Movimiento original', entry.movimiento_id],
+    ['Tipo original', originalType],
+    ['Fecha original', dateText(original.fecha)],
+    ['Código', original.codigo],
+    ['Pieza', original.nombre],
+    ['Almacén', original.almacen],
+    ['Lote', original.lote_id],
+    ['Cantidad original', original.cantidad],
+    ['Costo por unidad', moneyText(original.costo_unit)],
+    ['Precio de venta por unidad', moneyText(original.precio_unit)],
+    ['Referencia original', original.referencia],
+    ['Registrado por', original.usuario || original.owner],
+    ['Deshecho el', dateText(entry.deshecho_en)],
+    ['Deshecho por', entry.deshecho_email || entry.deshecho_por],
+    ['ID del responsable', entry.deshecho_por],
+    ['Motivo', entry.motivo],
+    ['Cantidad del lote antes', entry.cantidad_lote_antes],
+    ['Cantidad del lote después', entry.cantidad_lote_despues],
+    ['Stock total de la pieza antes', entry.stock_pieza_antes],
+    ['Stock total de la pieza después', entry.stock_pieza_despues]
+  ];
+
+  const dialog = document.createElement('dialog');
+
+  dialog.style.cssText =
+    'width:min(760px,94vw);max-height:85vh;overflow:auto;' +
+    'border:1px solid #ddd;border-radius:12px;padding:24px;';
+
+  dialog.innerHTML = `
+    <h3 style="margin-top:0">
+      Detalle del movimiento deshecho
+    </h3>
+
+    <div class="table-wrap">
+      <table class="table compact">
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;margin-top:16px">
+      <button type="button" class="btn">
+        Cerrar
+      </button>
+    </div>
+  `;
+
+  const body = dialog.querySelector('tbody');
+
+  for(const [label, value] of fields){
+    const row = document.createElement('tr');
+    const heading = document.createElement('th');
+    const cell = document.createElement('td');
+
+    heading.scope = 'row';
+    heading.textContent = label;
+
+    cell.textContent =
+      value === null || value === undefined || value === ''
+        ? '—'
+        : String(value);
+
+    cell.style.whiteSpace = 'pre-wrap';
+    cell.style.overflowWrap = 'anywhere';
+
+    row.append(heading, cell);
+    body.appendChild(row);
+  }
+
+  dialog.querySelector('button')
+    .addEventListener('click', ()=>dialog.close());
+
+  dialog.addEventListener('close', ()=>{
+    dialog.remove();
+  }, { once: true });
+
+  document.body.appendChild(dialog);
+  dialog.showModal();
+}
+
+
+async function setupMovementUndoAudit(){
+  const card = document.getElementById('undoAuditCard');
+
+  if(!card) return null;
+
+  if(!Org.isAdmin()){
+    card.classList.add('hidden');
+    return null;
+  }
+
+  const fromInput = card.querySelector('#undoAuditFrom');
+  const toInput = card.querySelector('#undoAuditTo');
+  const applyButton = card.querySelector('#undoAuditApply');
+  const previousButton = card.querySelector('#undoAuditPrev');
+  const nextButton = card.querySelector('#undoAuditNext');
+  const body = card.querySelector('#undoAuditTbody');
+  const status = card.querySelector('#undoAuditStatus');
+  const summary = card.querySelector('#undoAuditSummary');
+
+  let currentPage = 1;
+  let total = 0;
+  let pageSize = 50;
+  let activeFrom = null;
+  let activeTo = null;
+  let requestNumber = 0;
+
+  card.classList.remove('hidden');
+
+  function dateText(value){
+    if(!value) return '—';
+
+    const date = new Date(value);
+    if(Number.isNaN(date.getTime())) return '—';
+
+    return date.toLocaleString('es-BO', {
+      hour12: false
+    });
+  }
+
+  function showMessage(text){
+    body.replaceChildren();
+
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+
+    cell.colSpan = 12;
+    cell.className = 'muted';
+    cell.textContent = text;
+
+    row.appendChild(cell);
+    body.appendChild(row);
+  }
+
+  function updateControls(busy){
+    applyButton.disabled = busy;
+    fromInput.disabled = busy;
+    toInput.disabled = busy;
+
+    previousButton.disabled =
+      busy || currentPage <= 1;
+
+    nextButton.disabled =
+      busy || currentPage * pageSize >= total;
+  }
+
+  function paintRows(entries){
+    body.replaceChildren();
+
+    if(entries.length === 0){
+      showMessage(
+        'No hay movimientos deshechos en el período seleccionado.'
+      );
+      return;
+    }
+
+    for(const entry of entries){
+      const original = entry.movimiento_original || {};
+      const row = document.createElement('tr');
+
+      const originalType = original.tipo === 'entrada'
+        ? 'Entrada'
+        : original.tipo === 'salida'
+          ? 'Salida'
+          : original.tipo || '—';
+
+      const values = [
+        dateText(entry.deshecho_en),
+        '#' + entry.movimiento_id + '\n' +
+          dateText(original.fecha),
+        originalType,
+        original.codigo,
+        original.nombre,
+        original.almacen,
+        original.cantidad,
+        original.lote_id,
+        original.usuario || original.owner,
+        entry.deshecho_email || entry.deshecho_por,
+        entry.motivo
+      ];
+
+      for(const value of values){
+        const cell = document.createElement('td');
+
+        cell.textContent =
+          value === null || value === undefined || value === ''
+            ? '—'
+            : String(value);
+
+        cell.style.whiteSpace = 'pre-wrap';
+        cell.style.overflowWrap = 'anywhere';
+
+        row.appendChild(cell);
+      }
+
+      const detailCell = document.createElement('td');
+      const detailButton = document.createElement('button');
+
+      detailButton.type = 'button';
+      detailButton.className = 'btn';
+      detailButton.textContent = 'Ver';
+
+      detailButton.addEventListener('click', ()=>{
+        showMovementUndoAuditDetail(entry);
+      });
+
+      detailCell.appendChild(detailButton);
+      row.appendChild(detailCell);
+      body.appendChild(row);
+    }
+  }
+
+  async function loadPage(page = 1){
+    const thisRequest = ++requestNumber;
+    const companyId = String(Org.get()?.id || '');
+
+    if(!Org.isAdmin()){
+      card.classList.add('hidden');
+      body.replaceChildren();
+      return false;
+    }
+
+    updateControls(true);
+    status.textContent = 'Consultando historial…';
+
+    try{
+      const result = await DB.listMovementUndoAudit({
+        from: activeFrom,
+        to: activeTo,
+        page
+      });
+
+      if(thisRequest !== requestNumber || !card.isConnected){
+        return false;
+      }
+
+      if(
+        !Org.isAdmin() ||
+        String(Org.get()?.id || '') !== companyId
+      ){
+        body.replaceChildren();
+        card.classList.add('hidden');
+        return false;
+      }
+
+      currentPage = result.page;
+      total = result.total;
+      pageSize = result.pageSize;
+
+      paintRows(result.rows);
+
+      const totalPages = Math.max(
+        1,
+        Math.ceil(total / pageSize)
+      );
+
+      const first = total === 0
+        ? 0
+        : (currentPage - 1) * pageSize + 1;
+
+      const last = total === 0
+        ? 0
+        : Math.min(
+            (currentPage - 1) * pageSize + result.rows.length,
+            total
+          );
+
+      summary.textContent =
+        'Registros: ' + first + '–' + last + ' de ' + total +
+        ' · Página ' + currentPage + ' de ' + totalPages;
+
+      status.textContent = '';
+      return true;
+    }catch(error){
+      if(thisRequest !== requestNumber || !card.isConnected){
+        return false;
+      }
+
+      currentPage = 1;
+      total = 0;
+      summary.textContent = '';
+
+      showMessage('No se pudo cargar el historial.');
+
+      status.textContent =
+        error.message || 'Error al consultar el historial.';
+
+      return false;
+    }finally{
+      if(thisRequest === requestNumber && card.isConnected){
+        updateControls(false);
+      }
+    }
+  }
+
+  applyButton.addEventListener('click', ()=>{
+    const fromValue = fromInput.value;
+    const toValue = toInput.value;
+
+    if(fromValue && toValue && fromValue > toValue){
+      status.textContent =
+        'La fecha inicial no puede ser posterior a la fecha final.';
+      return;
+    }
+
+    const start = fromValue
+      ? new Date(fromValue + 'T00:00:00')
+      : null;
+
+    const end = toValue
+      ? new Date(toValue + 'T23:59:59.999')
+      : null;
+
+    if(
+      (start && Number.isNaN(start.getTime())) ||
+      (end && Number.isNaN(end.getTime()))
+    ){
+      status.textContent = 'Ingrese fechas válidas.';
+      return;
+    }
+
+    activeFrom = start ? start.toISOString() : null;
+    activeTo = end ? end.toISOString() : null;
+
+    loadPage(1);
+  });
+
+  previousButton.addEventListener('click', ()=>{
+    if(currentPage > 1){
+      loadPage(currentPage - 1);
+    }
+  });
+
+  nextButton.addEventListener('click', ()=>{
+    if(currentPage * pageSize < total){
+      loadPage(currentPage + 1);
+    }
+  });
+
+  await loadPage(1);
+
+  return {
+    refresh: ()=>loadPage(1)
+  };
+}
+
        // ---- Movimientos ----
     async function renderMovimientos(){
       const tpl = document.getElementById('tpl-movimientos').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
+
+      const undoAuditController = await setupMovementUndoAudit();
 
       const moveForm = document.getElementById('moveForm');
       const moveApplyBtn = document.getElementById('moveApplyBtn');
@@ -5122,23 +5700,84 @@ alert('Movimiento registrado');
           e.target.closest('button[data-undo]');
 
         if(!undoMovementBtn) return;
+        if(undoMovementBtn.disabled) return;
+
+        if(!Org.isAdmin()){
+          alert(
+            'Solo los administradores pueden deshacer movimientos.'
+          );
+          return;
+        }
 
         const id =
           undoMovementBtn.getAttribute('data-undo');
 
-        if(!confirm('¿Deshacer este movimiento?')) return;
+        const motivoRaw = prompt(
+          'Motivo para deshacer este movimiento ' +
+          '(entre 3 y 1000 caracteres):'
+        );
+
+        if(motivoRaw === null) return;
+
+        const motivo = motivoRaw.trim();
+
+        if(motivo.length < 3 || motivo.length > 1000){
+          alert(
+            'Ingrese un motivo de entre 3 y 1000 caracteres.'
+          );
+          return;
+        }
+
+        if(!confirm(
+          '¿Deshacer este movimiento?\n\n' +
+          'Se revertirá el stock y quedará registrado ' +
+          'quién lo deshizo, cuándo y por qué.\n\n' +
+          'Motivo: ' + motivo
+        )){
+          return;
+        }
+
+        const originalLabel = undoMovementBtn.textContent;
+        let saved = false;
+
+        undoMovementBtn.disabled = true;
+        undoMovementBtn.textContent = 'Deshaciendo…';
+
         try{
-          await DB.undoMovementById(id);
+          await DB.undoMovementById(id, motivo);
+          saved = true;
 
-parts = await DB.listParts();
-moves = await DB.listMoves(2000);
-allLots = await DB.listAllLots(50000);
+          parts = await DB.listParts();
+          moves = await DB.listMoves(2000);
+          allLots = await DB.listAllLots(50000);
 
-buildAlmacenOptions();
-paintMoves();
+          buildAlmacenOptions();
+          paintMoves();
 
-alert('Movimiento deshecho');
-        }catch(err){ alert(err.message || 'No se pudo deshacer'); }
+          if(undoAuditController){
+            await undoAuditController.refresh();
+          }
+
+          alert(
+            'Movimiento deshecho. ' +
+            'La operación quedó registrada en el historial.'
+          );
+        }catch(err){
+          if(saved){
+            alert(
+              'El movimiento fue deshecho y la auditoría ' +
+              'quedó guardada, pero no se pudo actualizar ' +
+              'la pantalla. Actualice la página.'
+            );
+          }else{
+            alert(
+              err.message || 'No se pudo deshacer el movimiento.'
+            );
+          }
+        }finally{
+          undoMovementBtn.disabled = false;
+          undoMovementBtn.textContent = originalLabel;
+        }
       });
 
       
