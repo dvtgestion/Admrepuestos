@@ -652,7 +652,7 @@
           <table class="table compact" id="partsTable">
             <thead><tr>
               <th>Código</th><th>Nombre</th><th>Motor/Detalles</th><th>Almacén</th><th>Ubicación</th>
-              <th class="num">Stock</th><th class="num">Mín</th>
+              <th class="num">Stock</th>
               <th class="num">Costo base</th><th class="num">Precio base</th>
               <th>Lotes</th><th></th>
             </tr></thead>
@@ -3781,7 +3781,6 @@ function partHasAlmacen(p, almacen){
             <td>${escapeHtml(almacenSummaryForPart(p))}</td>
             <td>${escapeHtml(p.ubicacion||'')}</td>
             <td class="num">${p.stock}</td>
-            <td class="num">${p.stockMin}</td>
             <td class="num">${fmtMoney(p.costo)}</td>
             <td class="num">${fmtMoney(p.precio)}</td>
           `;
