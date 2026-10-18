@@ -346,6 +346,67 @@
 }
 
 
+/* Movimientos: aprovechar mejor el espacio */
+#movesTable th,
+#movesTable td {
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+
+#movesTable th {
+  white-space: normal;
+}
+
+/* Fecha */
+#movesTable td:nth-child(1) {
+  width: 100px;
+  max-width: 100px;
+}
+
+/* Código */
+#movesTable td:nth-child(2) {
+  max-width: 90px;
+}
+
+/* Nombre de la pieza */
+#movesTable td:nth-child(3) {
+  max-width: 180px;
+}
+
+/* Almacén */
+#movesTable td:nth-child(4) {
+  max-width: 100px;
+}
+
+/* Referencia */
+#movesTable td:nth-child(10) {
+  max-width: 200px;
+}
+
+/* Usuario */
+#movesTable td:nth-child(11) {
+  max-width: 160px;
+}
+
+/* Textos completos en varias líneas */
+#movesTable td:nth-child(1),
+#movesTable td:nth-child(2),
+#movesTable td:nth-child(3),
+#movesTable td:nth-child(4),
+#movesTable td:nth-child(10),
+#movesTable td:nth-child(11) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+/* Corregir y Deshacer en vertical */
+#movesTable .row-actions {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
   </style>
 </head>
 <body>
