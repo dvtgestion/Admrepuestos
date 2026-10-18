@@ -2041,16 +2041,6 @@ async function editLotWithAudit({
 }
       }
 
-      async function undoLastMovement(){
-        const { data: last, error } = await sb.from('movements')
-          .select('id')
-          .eq('org_id', orgId())
-          .order('fecha',{ascending:false})
-          .limit(1).maybeSingle();
-        if(error) throw error;
-        if(!last) throw new Error('Sin movimientos');
-        await undoMovementById(last.id);
-      }
 
       // ---- Recibos ----
       async function listRecibos(limit=500){
@@ -2771,7 +2761,7 @@ async function setEstadoClienteEspera({
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
-listMoves, listMovesRange, applyMovement, undoLastMovement, undoMovementById,
+listMoves, listMovesRange, applyMovement, undoMovementById,
 correctMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
