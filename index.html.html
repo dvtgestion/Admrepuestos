@@ -414,6 +414,25 @@
   gap: 6px;
 }
 
+/* Mostrar el botón cuando el menú lateral está plegado */
+@media (max-width:900px){
+  #mobileMenuBtn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border-radius: 12px;
+    font-size: 26px;
+    line-height: 1;
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 1200;
+  }
+}
+
   </style>
 </head>
 <body>
@@ -3014,7 +3033,7 @@ listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, elim
     const PUBLIC_ROUTES = ['login'];
 
     // Helpers drawer mobile
-    const isMobile = ()=> window.matchMedia('(max-width:600px)').matches;
+    const isMobile = ()=> window.matchMedia('(max-width:900px)').matches;
     function openSidebarMobile(){ if(sidebar){ sidebar.classList.add('open'); } }
     function closeSidebarMobile(){ if(sidebar){ sidebar.classList.remove('open'); } }
     function toggleSidebarMobile(){ if(sidebar){ sidebar.classList.toggle('open'); } }
