@@ -303,6 +303,49 @@
   filter:grayscale(.35);
 }
 
+
+/* Inventario: aprovechar mejor el espacio de la tabla */
+#partsTable th,
+#partsTable td {
+  padding: 8px 6px;
+  vertical-align: middle;
+}
+
+/* Permitir títulos en varias líneas */
+#partsTable th {
+  white-space: normal;
+}
+
+/* Motor/Detalles: menos ancho y altura automática */
+#partsTable th:nth-child(3),
+#partsTable td:nth-child(3) {
+  width: 140px;
+  max-width: 140px;
+}
+
+/* Nombre de la pieza */
+#partsTable td:nth-child(2) {
+  max-width: 200px;
+}
+
+/* Almacén y ubicación */
+#partsTable td:nth-child(4),
+#partsTable td:nth-child(5) {
+  max-width: 100px;
+}
+
+/* Mostrar los textos completos, distribuidos en varias líneas */
+#partsTable td:nth-child(1),
+#partsTable td:nth-child(2),
+#partsTable td:nth-child(3),
+#partsTable td:nth-child(4),
+#partsTable td:nth-child(5) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+
   </style>
 </head>
 <body>
