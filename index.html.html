@@ -2698,10 +2698,47 @@ async function listMovementUndoAudit({
 
       // ---- Backup / Restore / Wipe ----
       async function backupAll(){
-        const [parts, moves, hist, fin] = await Promise.all([
-          listParts(), listMoves(10000), listPriceHistory(10000), listFinEntries(10000)
-        ]);
-        return { parts, moves, priceHistory: hist, finanzas: fin };
+        const companyId = orgId();
+
+        if(!companyId){
+          throw new Error(
+            'Seleccione una empresa antes de generar el backup.'
+          );
+        }
+
+        if(!Org.isAdmin()){
+          throw new Error(
+            'Solo los administradores pueden generar backups.'
+          );
+        }
+
+        const { data, error } = await sb.rpc(
+          'generar_backup_empresa',
+          { p_org_id: companyId }
+        );
+
+        if(error){
+          throw new Error(
+            error.message || 'No se pudo generar el backup.'
+          );
+        }
+
+        if(typeof data !== 'string' || !data.trim()){
+          throw new Error(
+            'El servidor no devolvió un backup válido.'
+          );
+        }
+
+        if(
+          !Org.isAdmin() ||
+          String(orgId()) !== String(companyId)
+        ){
+          throw new Error(
+            'La empresa o los permisos cambiaron. Vuelva a generar el backup.'
+          );
+        }
+
+        return data;
       }
 
       async function restoreAll(jsonDump){
@@ -10105,11 +10142,61 @@ function buildClienteEsperaHtml(pedido){
       });
 
       backupBtn.addEventListener('click', async ()=>{
+        if(backupBtn.disabled) return;
+
+        if(!Org.isAdmin()){
+          alert('Solo los administradores pueden generar backups.');
+          return;
+        }
+
+        const companyId = Org.get()?.id;
+        const originalLabel = backupBtn.textContent;
+
+        backupBtn.disabled = true;
+        backupBtn.textContent = 'Generando backup…';
+
         try{
           const dump = await DB.backupAll();
-          const blob = new Blob([JSON.stringify(dump,null,2)], {type:'application/json'});
-          const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup_inventario.json'; a.click();
-        }catch(e){ alert(e.message || 'No se pudo fazer backup'); }
+
+          if(
+            !Org.isAdmin() ||
+            String(Org.get()?.id) !== String(companyId)
+          ){
+            throw new Error(
+              'La empresa o los permisos cambiaron. Vuelva a generar el backup.'
+            );
+          }
+
+          const content = typeof dump === 'string'
+            ? dump
+            : JSON.stringify(dump, null, 2);
+
+          const blob = new Blob(
+            [content],
+            { type: 'application/json;charset=utf-8' }
+          );
+
+          const stamp = new Date()
+            .toISOString()
+            .replace(/[:.]/g, '-');
+
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+
+          link.href = url;
+          link.download = `backup_${companyId}_${stamp}.json`;
+
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+
+          setTimeout(()=>URL.revokeObjectURL(url), 10000);
+        }catch(error){
+          alert(error.message || 'No se pudo generar el backup.');
+        }finally{
+          backupBtn.textContent = originalLabel;
+          backupBtn.disabled = !Org.isAdmin();
+        }
       });
 
       restoreFile.addEventListener('change', async ()=>{
