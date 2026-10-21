@@ -2741,26 +2741,99 @@ async function listMovementUndoAudit({
         return data;
       }
 
-      async function restoreAll(jsonDump){
-        if(Array.isArray(jsonDump.parts)){
-          for(const p of jsonDump.parts){
-            await upsertPart(p);
-          }
+      async function restoreAll(contenido, opciones = {}){
+        const companyId = orgId();
+        const modo = opciones.modo || 'validar';
+        const expectedCompanyId = opciones.empresaId ?? companyId;
+        const confirmacion = opciones.confirmacion;
+
+        if(!companyId){
+          throw new Error('Seleccione una empresa.');
         }
-        if(Array.isArray(jsonDump.finanzas)){
-          const u = Auth.currentUser();
-          for(const f of jsonDump.finanzas){
-            await upsertFinEntry({
-              id: f.id || undefined,
-              fecha: f.fecha,
-              tipo: f.tipo,
-              categoria: f.categoria,
-              descripcion: f.descripcion,
-              monto: f.monto,
-              usuario: u ? u.email : (f.usuario||'')
-            });
-          }
+
+        if(!Org.isAdmin()){
+          throw new Error(
+            'Solo los administradores pueden restaurar backups.'
+          );
         }
+
+        if(String(companyId) !== String(expectedCompanyId)){
+          throw new Error(
+            'La empresa cambió. Vuelva a seleccionar el archivo.'
+          );
+        }
+
+        if(typeof contenido !== 'string' || !contenido.trim()){
+          throw new Error(
+            'Seleccione el archivo JSON original del backup.'
+          );
+        }
+
+        if(modo !== 'validar' && modo !== 'restaurar'){
+          throw new Error('Modo de restauración inválido.');
+        }
+
+        if(
+          modo === 'restaurar' &&
+          !/^RESTAURAR [a-f0-9]{64}$/.test(confirmacion || '')
+        ){
+          throw new Error(
+            'Falta confirmar el archivo que se va a restaurar.'
+          );
+        }
+
+        const nombre = modo === 'validar'
+          ? 'validar_backup_empresa'
+          : 'restaurar_backup_empresa';
+
+        const parametros = {
+          p_org_id: companyId,
+          p_contenido: contenido
+        };
+
+        if(modo === 'restaurar'){
+          parametros.p_simular = false;
+          parametros.p_confirmacion = confirmacion;
+        }
+
+        const { data, error } = await sb.rpc(nombre, parametros);
+
+        if(error){
+          throw new Error(
+            error.message || 'No se pudo confirmar la operación.'
+          );
+        }
+
+        if(
+          !data ||
+          data.ok !== true ||
+          String(data.empresa_id) !== String(companyId) ||
+          !/^[a-f0-9]{64}$/.test(data.sha256 || '')
+        ){
+          throw new Error(
+            'No se pudo confirmar la respuesta del servidor.'
+          );
+        }
+
+        if(modo === 'validar'){
+          if(
+            !Org.isAdmin() ||
+            String(orgId()) !== String(companyId)
+          ){
+            throw new Error(
+              'La empresa o los permisos cambiaron. Vuelva a seleccionar el archivo.'
+            );
+          }
+        }else if(
+          data.simulacion !== false ||
+          confirmacion !== 'RESTAURAR ' + data.sha256
+        ){
+          throw new Error(
+            'No se pudo confirmar la restauración. Revise el estado antes de repetirla.'
+          );
+        }
+
+        return data;
       }
 
       // ---- Recalcular métricas ----
@@ -10200,13 +10273,143 @@ function buildClienteEsperaHtml(pedido){
       });
 
       restoreFile.addEventListener('change', async ()=>{
-        const f = restoreFile.files[0]; if(!f) return;
+        const file = restoreFile.files[0];
+        if(!file) return;
+
+        if(!Org.isAdmin()){
+          alert('Solo los administradores pueden restaurar backups.');
+          restoreFile.value = '';
+          return;
+        }
+
+        if(restoreFile.disabled || backupBtn.disabled){
+          alert('Espere a que termine la operación actual.');
+          restoreFile.value = '';
+          return;
+        }
+
+        const empresa = Org.get();
+        const empresaId = empresa?.id;
+
+        if(!empresaId){
+          alert('Seleccione una empresa.');
+          restoreFile.value = '';
+          return;
+        }
+
+        const label = document.querySelector('label[for="restoreFile"]');
+        const originalLabel = label?.textContent || 'Restaurar JSON';
+        const controles = [
+          restoreFile, backupBtn, orgSelect, orgNewBtn
+        ].filter(Boolean);
+        const estados = controles.map(elemento => elemento.disabled);
+        let completada = false;
+
+        function comprobarContexto(){
+          if(
+            !restoreFile.isConnected ||
+            !Org.isAdmin() ||
+            String(Org.get()?.id) !== String(empresaId)
+          ){
+            throw new Error(
+              'La pantalla, la empresa o los permisos cambiaron. Vuelva a seleccionar el archivo.'
+            );
+          }
+        }
+
+        controles.forEach(elemento => elemento.disabled = true);
+
+        if(label){
+          label.textContent = 'Validando backup…';
+          label.setAttribute('aria-disabled', 'true');
+        }
+
         try{
-          const data = JSON.parse(await f.text());
-          await DB.restoreAll(data);
-          alert('Restauración completa'); location.hash = '#/reportes'; await route();
-        }catch(e){ alert('Archivo inválido / restauración falló'); }
-        finally{ restoreFile.value = ''; }
+          const contenido = await file.text();
+          comprobarContexto();
+
+          const revision = await DB.restoreAll(contenido, {
+            modo: 'validar',
+            empresaId
+          });
+
+          comprobarContexto();
+
+          const fecha = new Date(revision.generado_en);
+
+          if(!Number.isFinite(fecha.getTime())){
+            throw new Error('La fecha del backup no es válida.');
+          }
+
+          const conteos = revision.conteos;
+          const nombreEmpresa = empresa.nombre || empresaId;
+
+          const respuesta = prompt(
+            'Restaurar empresa: ' + nombreEmpresa + '\n\n' +
+            'Fecha del backup: ' + fecha.toLocaleString('es-BO') + '\n' +
+            'Piezas: ' + conteos.parts + '\n' +
+            'Lotes: ' + conteos.part_lots + '\n' +
+            'Movimientos: ' + conteos.movements + '\n\n' +
+            'Se reemplazarán los datos de esta empresa por los del archivo. ' +
+            'Los cambios y registros posteriores al backup se eliminarán.\n\n' +
+            'Se guardará una copia del estado actual en la auditoría de restauraciones.\n\n' +
+            'Escriba RESTAURAR para confirmar, o pulse Cancelar.',
+            ''
+          );
+
+          if(respuesta === null) return;
+
+          if(respuesta.trim() !== 'RESTAURAR'){
+            alert('Confirmación incorrecta. No se realizó la restauración.');
+            return;
+          }
+
+          comprobarContexto();
+
+          if(label) label.textContent = 'Restaurando…';
+
+          const resultado = await DB.restoreAll(contenido, {
+            modo: 'restaurar',
+            empresaId,
+            confirmacion: 'RESTAURAR ' + revision.sha256
+          });
+
+          completada = true;
+
+          alert(
+            'Restauración completada en ' + nombreEmpresa + '.\n\n' +
+            'Piezas: ' + resultado.conteos.parts + '\n' +
+            'Lotes: ' + resultado.conteos.part_lots + '\n' +
+            'Movimientos: ' + resultado.conteos.movements + '\n\n' +
+            'La página se actualizará para cargar los datos recuperados.'
+          );
+
+          window.location.reload();
+        }catch(error){
+          if(completada){
+            alert(
+              'Los datos fueron restaurados. Recargue la página para actualizarlos.'
+            );
+          }else{
+            alert(
+              'No se pudo completar o confirmar la operación.\n\n' +
+              (error.message || 'Revise el estado antes de volver a intentarlo.')
+            );
+          }
+        }finally{
+          restoreFile.value = '';
+
+          if(label){
+            label.textContent = originalLabel;
+            label.removeAttribute('aria-disabled');
+          }
+
+          if(!completada){
+            controles.forEach((elemento, index) => {
+              elemento.disabled = estados[index] || !Org.isAdmin();
+            });
+          }
+        }
       });
 
       
