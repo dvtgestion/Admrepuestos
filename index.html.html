@@ -1975,16 +1975,15 @@ async function editLotWithAudit({
 
   const totalStock = (lots || []).reduce((s, l) => s + Number(l.qty || 0), 0);
 
-  const nuevoCosto = Number(part.costo || 0);
-  const nuevoPrecio = Number(part.precio || 0);
+  // Al editar una pieza, conservar el costo y el precio existentes.
+  const datosEdicion = { ...base };
+  delete datosEdicion.costo;
+  delete datosEdicion.precio;
 
-  // Atualiza dados da peça, mas o stock vem dos lotes
   const { error } = await sb.from('parts')
     .update({
-      ...base,
-      stock: totalStock,
-      costo: nuevoCosto,
-      precio: nuevoPrecio
+      ...datosEdicion,
+      stock: totalStock
     })
     .eq('id', part.id)
     .eq('org_id', orgId());
@@ -4063,8 +4062,13 @@ function partHasAlmacen(p, almacen){
       const resetFormToNew = ()=>{
   form.reset();
   form.querySelector('input[name="id"]').value = '';
-  form.querySelector('input[name="stock"]').readOnly = false;
-  form.querySelector('input[name="stock"]').title = '';
+
+  for(const nombre of ['stock', 'costo', 'precio']){
+    const input = form.querySelector(`input[name="${nombre}"]`);
+    input.readOnly = false;
+    input.title = '';
+  }
+
   summary.textContent = 'Nueva pieza';
 };
 
@@ -4305,16 +4309,6 @@ await paint();
           const newId = await DB.upsertPart(part);
           const finalId = part.id || newId;
 
-          if(prev && (Number(prev.costo)!==Number(part.costo) || Number(prev.precio)!==Number(part.precio))){
-            const u = Auth.currentUser();
-            await DB.addPriceHistory({
-              piezaId: finalId,
-              codigo: prev.codigo, nombre: prev.nombre,
-              costoAntes: Number(prev.costo)||0, costoDespues: Number(part.costo)||0,
-              precioAntes: Number(prev.precio)||0, precioDespues: Number(part.precio)||0,
-              usuario: u ? u.email : ''
-            });
-          }
 
           parts = await DB.listParts();
 allLots = await DB.listAllLots(50000);
@@ -4340,6 +4334,12 @@ await paint();
       if(impTasa && savedFx){ impTasa.value = savedFx; }
 
       function runImpCalc(){
+  if(form.querySelector('input[name="id"]').value){
+    alert(
+      'Para cambiar el costo o el precio, edite el lote correspondiente en «Ver lotes».'
+    );
+    return;
+  }
         const brl = parseLocaleNumber(impCostoBRL?.value);
         const fx  = parseLocaleNumber(impTasa?.value);
         const log = parseLocaleNumber(impLogisticaBs?.value);
@@ -4407,8 +4407,20 @@ form.querySelector('input[name="stock"]').value = p.stock;
 form.querySelector('input[name="stock"]').readOnly = true;
 form.querySelector('input[name="stock"]').title = 'El stock se calcula por los lotes. Para cambiarlo, edite un lote específico.';
 
-form.querySelector('input[name="costo"]').value = p.costo;
-form.querySelector('input[name="precio"]').value = p.precio;
+const costoInput = form.querySelector('input[name="costo"]');
+const precioInput = form.querySelector('input[name="precio"]');
+
+costoInput.value = p.costo;
+precioInput.value = p.precio;
+
+costoInput.readOnly = true;
+precioInput.readOnly = true;
+
+const avisoPrecio =
+  'Para cambiar el costo o el precio, edite el lote correspondiente en «Ver lotes».';
+
+costoInput.title = avisoPrecio;
+precioInput.title = avisoPrecio;
         }
 
         // 3. AÇÃO: DESCRIÇÃO (Aqui está o PASSO C - Nova janela)
