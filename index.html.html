@@ -4361,7 +4361,7 @@ await paint();
 
         if(impTasa && String(impTasa.value).trim()){ localStorage.setItem('fxRateBRL', impTasa.value.trim()); }
       }
-      if(impCalcular) impCalcular.addEventListener('click', runImpCalc);
+      if(impCalcular) impCalcular.onclick = runImpCalc;
       if(impLimpiar) impLimpiar.addEventListener('click', ()=>{
         if(impCostoBRL) impCostoBRL.value = '';
         if(impLogisticaBs) impLogisticaBs.value = '';
