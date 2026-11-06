@@ -700,7 +700,25 @@
             </div>
             <video id="cam" playsinline></video>
           </label>
-          <label class="field"><span>Nombre</span><input name="nombre" required placeholder="Filtro de aceite" /></label>
+          <label class="field">
+  <span>Nombre</span>
+  <input
+    name="nombre"
+    required
+    placeholder="Filtro de aceite"
+  />
+</label>
+
+<label class="field">
+  <span>Nombres alternativos</span>
+  <input
+    name="nombres_alternativos"
+    placeholder="Ej.: Rótula de dirección; Punta de dirección"
+  />
+  <span class="xs muted">
+    Opcional. Separe los nombres con punto y coma (;).
+  </span>
+</label>
           <label class="field"><span>Motor/Detalles</span><input name="categoria" placeholder="Escriba el motor o detalles…" /></label>
           <label class="field"><span>Ubicación</span><input name="ubicacion" placeholder="Estante A3" /></label>
 
@@ -1557,12 +1575,13 @@ return { get, set, myOrgs, ensureCurrent, isAdmin };
         const { data, error } = await sb
           .from('parts')
           // CORREÇÃO: 'descripcion' adicionada na leitura
-          .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          .select('id, org_id, codigo, nombre, nombres_alternativos, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('org_id', orgId())
           .order('nombre',{ascending:true});
         if(error) throw error;
         return (data||[]).map(r => ({
-          id:r.id, codigo:r.codigo, nombre:r.nombre, 
+          id:r.id, codigo:r.codigo, nombre:r.nombre,
+nombresAlternativos: r.nombres_alternativos || '', 
           descripcion: r.descripcion || '', // CORREÇÃO: Mapeando
           categoria:r.categoria||'',
           ubicacion:r.ubicacion||'', almacen:r.almacen||'', proveedor:r.proveedor||'',
@@ -1577,12 +1596,13 @@ return { get, set, myOrgs, ensureCurrent, isAdmin };
         if(!id) return null;
         const { data, error } = await sb.from('parts')
           // CORREÇÃO: 'descripcion' adicionada na leitura individual
-          .select('id, org_id, codigo, nombre, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
+          .select('id, org_id, codigo, nombre, nombres_alternativos, descripcion, categoria, ubicacion, almacen, proveedor, lead_time_dias, consumo_diario, stock, stock_min, costo, precio, image_url, image_path')
           .eq('id', id).eq('org_id', orgId()).maybeSingle();
         if(error) throw error;
         if(!data) return null;
         return {
-          id:data.id, codigo:data.codigo, nombre:data.nombre, 
+          id:r.id, codigo:r.codigo, nombre:r.nombre,
+nombresAlternativos: r.nombres_alternativos || '', 
           descripcion: data.descripcion || '', // CORREÇÃO: Mapeando
           categoria:data.categoria||'',
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
@@ -1945,6 +1965,7 @@ async function editLotWithAudit({
         const base = {
           org_id: orgId(),
           codigo: part.codigo, nombre: part.nombre,
+nombres_alternativos: String(part.nombresAlternativos || '').trim() || null,
           // AQUI ESTÁ A CORREÇÃO PARA SALVAR:
           descripcion: part.descripcion || null, 
           
@@ -2514,8 +2535,9 @@ async function listMovementUndoAudit({
         const itemsLimpios = (items || []).map(i => ({
           origen: String(i.origen || '').trim(),
           pieza_id: i.pieza_id || null,
-          codigo: String(i.codigo || '').trim(),
-          nombre: String(i.nombre || '').trim(),
+          codigo: String(fd.get('codigo')).trim(),
+nombre: String(fd.get('nombre')).trim(),
+nombresAlternativos: String(fd.get('nombres_alternativos') || '').trim(),
           cantidad: Number(i.cantidad || 0),
           precio_unit: Number(i.precio_unit || 0)
         }));
@@ -3947,7 +3969,15 @@ function partHasAlmacen(p, almacen){
         const q = (search.value||'').toLowerCase().trim();
         const alm = filterAlm.value || '(Todos)';
                 // Adicionei p.descripcion na lista de busca
-        const tokens = [p.codigo, p.nombre, p.descripcion, p.categoria, p.proveedor, p.almacen].map(x=>String(x||'').toLowerCase());
+        const tokens = [
+  p.codigo,
+  p.nombre,
+  p.nombresAlternativos,
+  p.descripcion,
+  p.categoria,
+  p.proveedor,
+  p.almacen
+].map(x => String(x || '').toLowerCase());
         const passQ = !q || tokens.some(t=>t.includes(q));
         const passA = partHasAlmacen(p, alm);
         return passQ && passA;
@@ -4390,6 +4420,9 @@ await paint();
           form.querySelector('input[name="id"]').value = p.id;
           form.querySelector('input[name="codigo"]').value = p.codigo;
           form.querySelector('input[name="nombre"]').value = p.nombre;
+
+form.querySelector('input[name="nombres_alternativos"]').value =
+  p.nombresAlternativos || '';
           
           // --- LINHA NOVA DO PASSO B ---
           form.querySelector('textarea[name="descripcion"]').value = p.descripcion || ''; 
@@ -5011,7 +5044,12 @@ if(selectedAlmacen !== '(Todos)'){
           // Filtra: se busca estiver vazia, mostra tudo (limitado a 50). Se tiver texto, filtra.
           const matches = candidates.filter(p => {
              if(!q) return true;
-             const text = `${p.codigo} ${p.nombre} ${p.almacen||''}`.toLowerCase();
+             const text = [
+  p.codigo,
+  p.nombre,
+  p.nombresAlternativos,
+  p.almacen
+].map(value => String(value || '')).join(' ').toLowerCase();
              return text.includes(q); // Busca em qualquer parte do texto (incluindo espaço)
           }).slice(0, 100); // Limita para não travar se tiver mil peças
 
