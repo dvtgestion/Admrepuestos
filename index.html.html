@@ -1601,8 +1601,8 @@ nombresAlternativos: r.nombres_alternativos || '',
         if(error) throw error;
         if(!data) return null;
         return {
-          id:r.id, codigo:r.codigo, nombre:r.nombre,
-nombresAlternativos: r.nombres_alternativos || '', 
+          id:data.id, codigo:data.codigo, nombre:data.nombre,
+nombresAlternativos: data.nombres_alternativos || '', 
           descripcion: data.descripcion || '', // CORREÇÃO: Mapeando
           categoria:data.categoria||'',
           ubicacion:data.ubicacion||'', almacen:data.almacen||'', proveedor:data.proveedor||'',
@@ -2535,9 +2535,8 @@ async function listMovementUndoAudit({
         const itemsLimpios = (items || []).map(i => ({
           origen: String(i.origen || '').trim(),
           pieza_id: i.pieza_id || null,
-          codigo: String(fd.get('codigo')).trim(),
-nombre: String(fd.get('nombre')).trim(),
-nombresAlternativos: String(fd.get('nombres_alternativos') || '').trim(),
+          codigo: String(i.codigo || '').trim(),
+nombre: String(i.nombre || '').trim(),
           cantidad: Number(i.cantidad || 0),
           precio_unit: Number(i.precio_unit || 0)
         }));
@@ -4318,9 +4317,10 @@ await paint();
         e.preventDefault();
         const fd = new FormData(form);
         const part = {
-          id: fd.get('id') || undefined,
-          codigo: String(fd.get('codigo')).trim(),
-          nombre: String(fd.get('nombre')).trim(),
+  id: fd.get('id') || undefined,
+  codigo: String(fd.get('codigo')).trim(),
+  nombre: String(fd.get('nombre')).trim(),
+  nombresAlternativos: String(fd.get('nombres_alternativos') || '').trim(),
           // NOVA LINHA AQUI: Captura a descrição do formulário
           descripcion: String(fd.get('descripcion')||'').trim(), 
           categoria: String(fd.get('categoria')||'').trim(),
