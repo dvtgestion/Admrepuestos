@@ -1463,9 +1463,22 @@
         const { data:{ user } } = await sb.auth.getUser();
         set(user || null);
         sb.auth.onAuthStateChange((_event, session)=>{
-          set(session?.user || null);
-          route();
-        });
+  const usuarioAnterior = cache?.id || null;
+  const emailAnterior = cache?.email || null;
+
+  set(session?.user || null);
+
+  const cambioDeCuenta = usuarioAnterior !== (cache?.id || null);
+  const cambioDeEmail = emailAnterior !== (cache?.email || null);
+
+  if(cambioDeCuenta || cambioDeEmail){
+    setTimeout(()=>{
+      route().catch(error=>{
+        console.error('No se pudo actualizar la sesión.', error);
+      });
+    }, 0);
+  }
+});
       }
       const isAuthed = () => !!cache;
       const currentUser = () => cache;
