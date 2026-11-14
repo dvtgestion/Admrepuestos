@@ -689,7 +689,15 @@
           <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
         </div>
       </header>
-      <details id="partFormWrap" class="card">
+      <p
+  id="inventoryResultsCount"
+  class="muted"
+  role="status"
+  aria-live="polite"
+  style="margin:0; font-size:14px;"
+></p>
+
+<details id="partFormWrap" class="card">
         <summary id="partFormSummary">Nueva pieza</summary>
         <form id="partForm" class="grid">
           <input type="hidden" name="id" />
@@ -4086,7 +4094,31 @@ function partHasAlmacen(p, almacen){
 
       async function paint(){
         tbody.innerHTML = '';
-        for(const p of parts.filter(matchesFilters)){
+
+        const filteredParts = parts.filter(matchesFilters);
+        const resultsCount = document.getElementById('inventoryResultsCount');
+
+        const hasFilters =
+          Boolean((search.value || '').trim()) ||
+          (filterAlm.value || '(Todos)') !== '(Todos)';
+
+        const count = filteredParts.length;
+
+        if(resultsCount){
+          if(count === 0){
+            resultsCount.textContent = 'No se encontraron piezas';
+          }else if(hasFilters){
+            resultsCount.textContent = count === 1
+              ? '1 pieza encontrada'
+              : `${count} piezas encontradas`;
+          }else{
+            resultsCount.textContent = count === 1
+              ? '1 pieza en la lista'
+              : `${count} piezas en la lista`;
+          }
+        }
+
+        for(const p of filteredParts){
           const low = Number(p.stock) < Number(p.stockMin);
           const tr = document.createElement('tr');
 
