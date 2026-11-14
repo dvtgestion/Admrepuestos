@@ -5782,8 +5782,7 @@ if(selectedAlmacen !== '(Todos)'){
               parts =
                 await DB.listParts();
 
-              moves =
-                await reloadMovesByPeriod();
+              await reloadMovesByPeriod();
 
               allLots =
                 await DB.listAllLots(50000);
