@@ -2075,6 +2075,45 @@ nombres_alternativos: String(part.nombresAlternativos || '').trim() || null,
         return data||[];
       }
 
+async function listMovesByPeriod(from, toExclusive){
+  if(
+    !(from instanceof Date) ||
+    !(toExclusive instanceof Date) ||
+    !Number.isFinite(from.getTime()) ||
+    !Number.isFinite(toExclusive.getTime()) ||
+    from >= toExclusive
+  ){
+    throw new Error('Seleccione un período de fechas válido.');
+  }
+
+  const companyId = orgId();
+  const records = [];
+  const pageSize = 500;
+  const start = from.toISOString();
+  const end = toExclusive.toISOString();
+
+  for(let offset = 0; ; offset += pageSize){
+    const { data, error } = await sb.from('movements')
+      .select('id, fecha, pieza_id, codigo, nombre, almacen, tipo, cantidad, referencia, usuario, costo_unit, precio_unit, lote_id')
+      .eq('org_id', companyId)
+      .gte('fecha', start)
+      .lt('fecha', end)
+      .order('fecha', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if(error) throw error;
+
+    const page = data || [];
+    records.push(...page);
+
+    if(page.length < pageSize) break;
+  }
+
+  return records;
+}
+
+
       // >>> NOVO: movimientos por rango (para Reportes)
       async function listMovesRange(from, to){
         const base = sb.from('movements')
@@ -3146,7 +3185,7 @@ async function setEstadoClienteEspera({
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
-listMoves, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
+listMoves, listMovesByPeriod, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
 listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
@@ -4963,7 +5002,7 @@ let moveSubmitting = false;
       const moveSearchFilter = document.getElementById('moveSearchFilter');
 
       let parts = await DB.listParts();
-let moves = await DB.listMoves(2000);
+let moves = [];
 let allLots = await DB.listAllLots(50000);
 let currentLots = []; 
 
@@ -4972,6 +5011,61 @@ let currentLots = [];
       const d0 = new Date(Date.now() - 29*24*3600*1000);
       moveDesde.value = d0.toISOString().slice(0,10);
       moveHasta.value = today.toISOString().slice(0,10);
+
+let movePeriodRequest = 0;
+
+async function reloadMovesByPeriod(){
+  const requestId = ++movePeriodRequest;
+  const companyId = Org.get()?.id;
+  const userId = Auth.currentUser()?.id;
+
+  const isCurrent = () =>
+    requestId === movePeriodRequest &&
+    moveForm.isConnected &&
+    Org.get()?.id === companyId &&
+    Auth.currentUser()?.id === userId;
+
+  moves = [];
+
+  const from = new Date(moveDesde.value + 'T00:00:00');
+  const until = new Date(moveHasta.value + 'T00:00:00');
+
+  if(
+    !moveDesde.value ||
+    !moveHasta.value ||
+    !Number.isFinite(from.getTime()) ||
+    !Number.isFinite(until.getTime()) ||
+    from > until
+  ){
+    tbody.innerHTML =
+      '<tr><td colspan="12">Seleccione un período de fechas válido.</td></tr>';
+    return false;
+  }
+
+  until.setDate(until.getDate() + 1);
+
+  tbody.innerHTML =
+    '<tr><td colspan="12">Cargando movimientos del período...</td></tr>';
+
+  try{
+    const records = await DB.listMovesByPeriod(from, until);
+
+    if(!isCurrent()) return false;
+
+    moves = records;
+    paintMoves();
+    return true;
+  }catch(error){
+    if(!isCurrent()) return false;
+
+    moves = [];
+    tbody.innerHTML =
+      '<tr><td colspan="12">' +
+      escapeHtml(error.message || 'No se pudieron cargar los movimientos.') +
+      '</td></tr>';
+    return false;
+  }
+}
 
       // 1. Preenche o filtro de armazém (canto superior direito)
       function buildAlmacenOptions(){
@@ -5689,7 +5783,7 @@ if(selectedAlmacen !== '(Todos)'){
                 await DB.listParts();
 
               moves =
-                await DB.listMoves(2000);
+                await reloadMovesByPeriod();
 
               allLots =
                 await DB.listAllLots(50000);
@@ -5725,12 +5819,13 @@ if(selectedAlmacen !== '(Todos)'){
       function paintMoves(){
         tbody.innerHTML = '';
         const dFrom = new Date(moveDesde.value + 'T00:00:00');
-        const dTo   = new Date(moveHasta.value + 'T23:59:59');
+const dTo = new Date(moveHasta.value + 'T00:00:00');
+dTo.setDate(dTo.getDate() + 1);
         const q = (moveSearchFilter.value || '').trim().toLowerCase();
         
         const filteredMoves = moves.filter(m => {
   const dt = new Date(m.fecha);
-  if (dt < dFrom || dt > dTo) return false;
+  if (dt < dFrom || dt >= dTo) return false;
 
   const selectedAlmacen = almFilter.value || '(Todos)';
   if (
@@ -5812,10 +5907,16 @@ if(selectedAlmacen !== '(Todos)'){
   tbody.appendChild(tr);
 });
 }
-      paintMoves();
-      
-      moveDesde.addEventListener('change', paintMoves);
-      moveHasta.addEventListener('change', paintMoves);
+      await reloadMovesByPeriod();
+
+      moveDesde.addEventListener('change', ()=>{
+        reloadMovesByPeriod();
+      });
+
+      moveHasta.addEventListener('change', ()=>{
+        reloadMovesByPeriod();
+      });
+
       moveSearchFilter.addEventListener('input', paintMoves);
       
       tipoSel.addEventListener('change', toggleMoveFields);
@@ -5872,7 +5973,7 @@ try{
           await DB.applyMovement(payload);
 
 parts = await DB.listParts();
-moves = await DB.listMoves(2000);
+await reloadMovesByPeriod();
 allLots = await DB.listAllLots(50000);
 
 buildAlmacenOptions();
@@ -5975,8 +6076,8 @@ alert('Movimiento registrado');
           saved = true;
 
           parts = await DB.listParts();
-          moves = await DB.listMoves(2000);
-          allLots = await DB.listAllLots(50000);
+await reloadMovesByPeriod();
+allLots = await DB.listAllLots(50000);
 
           buildAlmacenOptions();
           paintMoves();
