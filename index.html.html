@@ -684,18 +684,25 @@
         <div class="left"><h2>Inventario</h2><p class="muted">Piezas registradas, lotes y estado de stock.</p></div>
         <div class="right">
           <select id="filterAlmacen" class="input" title="Filtrar por almacén"></select>
-          <input id="searchParts" class="input" placeholder="Buscar por código, nombre o motor…" />
+          <div style="display:flex; flex-direction:column; gap:4px; min-width:0;">
+  <input
+    id="searchParts"
+    class="input"
+    placeholder="Buscar por código, nombre o motor…"
+  />
+
+  <p
+    id="inventoryResultsCount"
+    class="muted"
+    role="status"
+    aria-live="polite"
+    style="margin:0; font-size:14px; text-align:right;"
+  ></p>
+</div>
     
           <button id="addPartBtn" class="btn btn-primary">Añadir pieza</button>
         </div>
       </header>
-      <p
-  id="inventoryResultsCount"
-  class="muted"
-  role="status"
-  aria-live="polite"
-  style="margin:0; font-size:14px;"
-></p>
 
 <details id="partFormWrap" class="card">
         <summary id="partFormSummary">Nueva pieza</summary>
