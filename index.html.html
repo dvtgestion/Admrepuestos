@@ -547,8 +547,19 @@
           <canvas id="chartTop" height="150"></canvas>
         </div>
         <div class="card">
-          <h3 style="margin:0 0 8px">Ingresos por día</h3>
-          <canvas id="chartDia" height="150"></canvas>
+          <h3 style="margin:0 0 6px">Ventas brutas por día</h3>
+
+          <p class="muted xs" style="margin:0 0 12px;">
+            Cada barra representa las ventas de un día.
+            Toque una barra o pase el cursor para ver la fecha y el importe.
+          </p>
+
+          <div style="position:relative; height:260px; min-width:0;">
+            <canvas
+              id="chartDia"
+              style="max-height:none;"
+            ></canvas>
+          </div>
         </div>
       </div>
       <div class="card">
@@ -3907,9 +3918,21 @@ elSalesGrowthPeriod.textContent =
         const topLabels = topArr.map(x=>x[0]);
         const topData   = topArr.map(x=>x[1]);
 
-        // Ingresos por día (orden cronológico)
-        const days = Array.from(byDay.keys()).sort();
-        const revs = days.map(d=> byDay.get(d));
+        // Incluir todos los días del período seleccionado.
+        const days = [];
+        const chartDate = new Date(comparisonPeriod.from);
+
+        while(chartDate < comparisonPeriod.toExclusive){
+          const dayKey =
+            chartDate.getFullYear() + '-' +
+            String(chartDate.getMonth() + 1).padStart(2, '0') + '-' +
+            String(chartDate.getDate()).padStart(2, '0');
+
+          days.push(dayKey);
+          chartDate.setDate(chartDate.getDate() + 1);
+        }
+
+        const revs = days.map(day => byDay.get(day) || 0);
 
         if(chartTop) chartTop.destroy();
         if(chartDia) chartDia.destroy();
@@ -3922,11 +3945,98 @@ elSalesGrowthPeriod.textContent =
         });
 
         const ctxDia = document.getElementById('chartDia');
+
         chartDia = new Chart(ctxDia, {
-  type: 'line',
-  data: { labels: days, datasets: [{ label: 'Ingresos', data: revs }] },
-  options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ y:{ beginAtZero:true, grace:'10%' } } }
-});
+          type: 'bar',
+
+          data: {
+            labels: days,
+            datasets: [{
+              label: 'Ventas brutas',
+              data: revs,
+              backgroundColor: 'rgba(31, 111, 235, 0.75)',
+              borderRadius: 4,
+              maxBarThickness: 40
+            }]
+          },
+
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            interaction: {
+              mode: 'index',
+              intersect: false
+            },
+
+            plugins: {
+              legend: {
+                display: false
+              },
+
+              tooltip: {
+                displayColors: false,
+
+                callbacks: {
+                  title(items){
+                    if(!items.length) return '';
+
+                    const dateKey = days[items[0].dataIndex];
+                    return dateKey.split('-').reverse().join('/');
+                  },
+
+                  label(item){
+                    return 'Ventas brutas: ' + fmtMoney(item.parsed.y);
+                  }
+                }
+              }
+            },
+
+            scales: {
+              x: {
+                title: {
+                  display: true,
+                  text: 'Fecha'
+                },
+
+                grid: {
+                  display: false
+                },
+
+                ticks: {
+                  autoSkip: true,
+                  maxTicksLimit: 7,
+                  maxRotation: 0,
+                  minRotation: 0,
+
+                  callback(value){
+                    const dateKey = days[value];
+                    if(!dateKey) return '';
+
+                    const dateParts = dateKey.split('-');
+                    return dateParts[2] + '/' + dateParts[1];
+                  }
+                }
+              },
+
+              y: {
+                beginAtZero: true,
+                grace: '10%',
+
+                title: {
+                  display: true,
+                  text: 'Ventas brutas (Bs)'
+                },
+
+                ticks: {
+                  callback(value){
+                    return fmtMoney(value);
+                  }
+                }
+              }
+            }
+          }
+        });
 
 paintStockDetenido();
 
