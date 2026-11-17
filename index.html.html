@@ -543,8 +543,21 @@
 
       <div class="charts-compact" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px">
         <div class="card">
-          <h3 style="margin:0 0 8px">Top 10 vendidas (unid.)</h3>
-          <canvas id="chartTop" height="150"></canvas>
+          <h3 style="margin:0 0 6px;">
+            Top 10 repuestos por unidades vendidas
+          </h3>
+
+          <p class="muted xs" style="margin:0 0 12px;">
+            Ordenados de mayor a menor cantidad vendida en el período.
+            Toque una barra o pase el cursor para ver el detalle.
+          </p>
+
+          <div style="position:relative; height:360px; min-width:0;">
+            <canvas
+              id="chartTop"
+              style="max-height:none;"
+            ></canvas>
+          </div>
         </div>
         <div class="card">
           <h3 style="margin:0 0 6px">Ventas brutas por día</h3>
@@ -3912,11 +3925,43 @@ elSalesGrowthPeriod.textContent =
         const invVal = await DB.getInventoryValueByLots();
         elInv.textContent = fmtMoney(invVal);
 
-        // Top 10
+        // Top 10: conservar la clasificación por unidades vendidas.
         const topArr = Array.from(byCode.entries())
           .sort((a,b)=>b[1]-a[1]).slice(0,10);
-        const topLabels = topArr.map(x=>x[0]);
-        const topData   = topArr.map(x=>x[1]);
+
+        const topNamesByCode = new Map(
+          parts.map(part => [part.codigo, part.nombre])
+        );
+
+        for(const movement of moves){
+          if(movement.tipo !== 'salida') continue;
+
+          const part = pmap.get(movement.pieza_id);
+          const code = part?.codigo || movement.codigo || '—';
+
+          if(!topNamesByCode.get(code)){
+            topNamesByCode.set(
+              code,
+              movement.nombre || 'Sin nombre'
+            );
+          }
+        }
+
+        const topDetails = topArr.map(([code, quantity])=>({
+          code: String(code),
+          name: String(topNamesByCode.get(code) || 'Sin nombre'),
+          quantity
+        }));
+
+        const topLabels = topDetails.map(item=>{
+          const shortName = item.name.length > 22
+            ? item.name.slice(0, 21) + '…'
+            : item.name;
+
+          return item.code + ' · ' + shortName;
+        });
+
+        const topData = topDetails.map(item => item.quantity);
 
         // Incluir todos los días del período seleccionado.
         const days = [];
@@ -3938,10 +3983,124 @@ elSalesGrowthPeriod.textContent =
         if(chartDia) chartDia.destroy();
 
         const ctxTop = document.getElementById('chartTop');
+
         chartTop = new Chart(ctxTop, {
           type: 'bar',
-          data: { labels: topLabels, datasets: [{ label: 'Unidades', data: topData }] },
-          options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false }}, scales:{ x:{ ticks:{ maxRotation:0, minRotation:0 } }, y:{ beginAtZero:true, grace:'10%' } } }
+
+          data: {
+            labels: topLabels,
+            datasets: [{
+              label: 'Unidades vendidas',
+              data: topData,
+              backgroundColor: 'rgba(31, 111, 235, 0.75)',
+              borderRadius: 4,
+              maxBarThickness: 22
+            }]
+          },
+
+          plugins: [{
+            id: 'topUnitsLabels',
+
+            afterDatasetsDraw(chart){
+              const { ctx } = chart;
+              const bars = chart.getDatasetMeta(0).data;
+
+              ctx.save();
+              ctx.font = '12px sans-serif';
+              ctx.fillStyle = '#334155';
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'middle';
+
+              bars.forEach((bar, index)=>{
+                const text =
+                  Number(topData[index] || 0).toLocaleString('es-BO') +
+                  ' unid.';
+
+                const x = Math.min(
+                  bar.x + 6,
+                  chart.width - ctx.measureText(text).width - 8
+                );
+
+                ctx.fillText(text, x, bar.y);
+              });
+
+              ctx.restore();
+            }
+          }],
+
+          options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+
+            layout: {
+              padding: {
+                right: 65
+              }
+            },
+
+            interaction: {
+              mode: 'nearest',
+              axis: 'y',
+              intersect: false
+            },
+
+            plugins: {
+              legend: {
+                display: false
+              },
+
+              tooltip: {
+                displayColors: false,
+
+                callbacks: {
+                  title(items){
+                    if(!items.length) return '';
+
+                    const item = topDetails[items[0].dataIndex];
+
+                    return [
+                      item.code,
+                      ...(item.name.match(/.{1,32}/g) || [])
+                    ];
+                  },
+
+                  label(item){
+                    return 'Unidades vendidas: ' +
+                      Number(item.parsed.x).toLocaleString('es-BO');
+                  }
+                }
+              }
+            },
+
+            scales: {
+              x: {
+                beginAtZero: true,
+
+                title: {
+                  display: true,
+                  text: 'Unidades vendidas'
+                },
+
+                ticks: {
+                  precision: 0
+                }
+              },
+
+              y: {
+                grid: {
+                  display: false
+                },
+
+                ticks: {
+                  autoSkip: false,
+                  font: {
+                    size: 11
+                  }
+                }
+              }
+            }
+          }
         });
 
         const ctxDia = document.getElementById('chartDia');
