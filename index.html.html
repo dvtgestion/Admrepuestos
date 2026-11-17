@@ -4094,8 +4094,51 @@ elSalesGrowthPeriod.textContent =
 
                 ticks: {
                   autoSkip: false,
+
                   font: {
-                    size: 11
+                    size: 11,
+                    family: 'sans-serif'
+                  },
+
+                  callback(value){
+                    const item = topDetails[value];
+                    if(!item) return '';
+
+                    const ctx = this.chart.ctx;
+                    const maxWidth = Math.max(
+                      40,
+                      Math.min(180, this.chart.width * 0.42 - 20)
+                    );
+
+                    ctx.save();
+                    ctx.font = '11px sans-serif';
+
+                    const shorten = text=>{
+                      const original = String(text || '');
+
+                      if(ctx.measureText(original).width <= maxWidth){
+                        return original;
+                      }
+
+                      let shortened = original;
+
+                      while(
+                        shortened.length > 0 &&
+                        ctx.measureText(shortened + '…').width > maxWidth
+                      ){
+                        shortened = shortened.slice(0, -1);
+                      }
+
+                      return shortened + '…';
+                    };
+
+                    const lines = [
+                      shorten(item.code),
+                      shorten(item.name)
+                    ];
+
+                    ctx.restore();
+                    return lines;
                   }
                 }
               }
