@@ -511,6 +511,29 @@
         <div class="card"><h3>Unidades vendidas</h3><strong id="kpiUnits">—</strong></div>
       </div>
 
+      <div class="card">
+        <h3 style="margin:0 0 8px; font-size:14px; color:var(--muted);">
+          Crecimiento de ventas
+        </h3>
+
+        <strong
+          id="kpiSalesGrowth"
+          style="display:block; font-size:24px;"
+        >—</strong>
+
+        <p id="kpiSalesGrowthDifference" style="margin:8px 0;">
+          —
+        </p>
+
+        <p id="kpiSalesGrowthPrevious" class="muted" style="margin:4px 0;">
+          Ventas del período anterior: —
+        </p>
+
+        <p id="kpiSalesGrowthPeriod" class="muted xs" style="margin:4px 0;">
+          Comparación con el período anterior de igual duración.
+        </p>
+      </div>
+
       <div class="kpis">
         <div class="card"><h3>Valor del inventario (por lotes)</h3><strong id="kpiInvVal">—</strong></div>
         <div class="card"><h3>Días de seguridad</h3><strong id="kpiSafety">—</strong></div>
@@ -3464,6 +3487,11 @@ case 'sugerencias': await renderSugerencias(); break;
       const elSkus  = document.getElementById('kpiSkus');
       const elMovs  = document.getElementById('kpiMovs');
       
+      const elSalesGrowth = document.getElementById('kpiSalesGrowth');
+const elSalesGrowthDifference = document.getElementById('kpiSalesGrowthDifference');
+const elSalesGrowthPrevious = document.getElementById('kpiSalesGrowthPrevious');
+const elSalesGrowthPeriod = document.getElementById('kpiSalesGrowthPeriod');
+      
       // Elementos de Stock detenido
 const stDays = document.getElementById('stDays');
 const stAlmacen = document.getElementById('stAlmacen');
@@ -3674,7 +3702,64 @@ function paintStockDetenido(){
   });
 }
 
-      async function run(){
+function getSalesComparisonPeriod(){
+  const fromText = repDesde.value;
+  const untilText = repHasta.value;
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+  if(!datePattern.test(fromText) || !datePattern.test(untilText)){
+    throw new Error('Seleccione las fechas Desde y Hasta.');
+  }
+
+  const fromUtc = Date.parse(fromText + 'T00:00:00Z');
+  const untilUtc = Date.parse(untilText + 'T00:00:00Z');
+
+  if(
+    !Number.isFinite(fromUtc) ||
+    !Number.isFinite(untilUtc) ||
+    new Date(fromUtc).toISOString().slice(0,10) !== fromText ||
+    new Date(untilUtc).toISOString().slice(0,10) !== untilText ||
+    fromUtc > untilUtc
+  ){
+    throw new Error('Seleccione un período de fechas válido.');
+  }
+
+  const days = Math.round((untilUtc - fromUtc) / 86400000) + 1;
+
+  const from = new Date(fromText + 'T00:00:00');
+  const toExclusive = new Date(untilText + 'T00:00:00');
+  toExclusive.setDate(toExclusive.getDate() + 1);
+
+  const previousFrom = new Date(from);
+  previousFrom.setDate(previousFrom.getDate() - days);
+
+  const previousToExclusive = new Date(from);
+
+  return {
+    from,
+    toExclusive,
+    previousFrom,
+    previousToExclusive,
+    days
+  };
+}
+
+      let reportLoading = false;
+
+async function run(){
+  if(reportLoading) return;
+
+  reportLoading = true;
+
+  const applyButton = document.getElementById('repAplicar');
+  const originalLabel = applyButton.textContent;
+
+  applyButton.disabled = true;
+  applyButton.textContent = 'Cargando…';
+  repDesde.disabled = true;
+  repHasta.disabled = true;
+
+  try{
         const parts = await DB.listParts();
         const lots = await DB.listStockDetenidoLots();
 
@@ -3684,12 +3769,26 @@ function paintStockDetenido(){
 
         buildStockDetenidoAlmacenes(parts);
 
-        // Período
-        const dFrom = new Date(repDesde.value + 'T00:00:00');
-        const dTo   = new Date(repHasta.value + 'T23:59:59');
+        // Período seleccionado y período anterior de igual duración.
+        const comparisonPeriod = getSalesComparisonPeriod();
 
-        // Movimientos direto do banco no período
-        const moves = await DB.listMovesRange(dFrom, dTo);
+        const dFrom = comparisonPeriod.from;
+        const dTo = new Date(
+          comparisonPeriod.toExclusive.getTime() - 1
+        );
+
+        // Consultar únicamente las fechas de cada período,
+        // usando la lectura por páginas que ya existe.
+        const [moves, previousMoves] = await Promise.all([
+          DB.listMovesByPeriod(
+            comparisonPeriod.from,
+            comparisonPeriod.toExclusive
+          ),
+          DB.listMovesByPeriod(
+            comparisonPeriod.previousFrom,
+            comparisonPeriod.previousToExclusive
+          )
+        ]);
 
         // Mapa de piezas
         const pmap = new Map(parts.map(p=>[p.id, p]));
@@ -3723,6 +3822,72 @@ function paintStockDetenido(){
 
         // KPIs
         elBruto.textContent = fmtMoney(bruto);
+
+// Ventas del período anterior: misma regla que Ventas brutas.
+const previousGross = Number(
+  previousMoves.reduce((total, movement)=>{
+    if(movement.tipo !== 'salida') return total;
+
+    const part = pmap.get(movement.pieza_id);
+
+    const price = movement.precio_unit != null
+      ? Number(movement.precio_unit)
+      : Number(part?.precio || 0);
+
+    const quantity = Number(movement.cantidad || 0);
+
+    return total + price * quantity;
+  }, 0).toFixed(2)
+);
+
+const currentGross = Number(bruto.toFixed(2));
+const salesDifference = Number(
+  (currentGross - previousGross).toFixed(2)
+);
+
+if(previousGross > 0){
+  const percentage = (salesDifference / previousGross) * 100;
+
+  const formattedPercentage = Math.abs(percentage).toLocaleString(
+    'es-BO',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+  );
+
+  elSalesGrowth.textContent = salesDifference > 0
+    ? `↑ ${formattedPercentage}%`
+    : salesDifference < 0
+      ? `↓ ${formattedPercentage}%`
+      : '0,00% · Sin variación';
+}else{
+  elSalesGrowth.textContent = 'Sin base de comparación';
+}
+
+elSalesGrowthDifference.textContent = salesDifference > 0
+  ? `Diferencia: ${fmtMoney(salesDifference)} más`
+  : salesDifference < 0
+    ? `Diferencia: ${fmtMoney(Math.abs(salesDifference))} menos`
+    : 'Sin diferencia en ventas';
+
+elSalesGrowthPrevious.textContent =
+  `Ventas del período anterior: ${fmtMoney(previousGross)}`;
+
+const previousLastDay = new Date(
+  comparisonPeriod.previousToExclusive.getTime() - 1
+);
+
+const formatComparisonDate = date =>
+  date.toLocaleDateString('es-BO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  });
+
+elSalesGrowthPeriod.textContent =
+  `Comparado con: ` +
+  `${formatComparisonDate(comparisonPeriod.previousFrom)} — ` +
+  `${formatComparisonDate(previousLastDay)} ` +
+  `(${comparisonPeriod.days} ` +
+  `${comparisonPeriod.days === 1 ? 'día' : 'días'}).`;
         elCogs.textContent  = fmtMoney(cogs);
         // Ganancia neta ajustada por Finanzas:
         const liq = bruto - cogs - gasto + ingreso; // capital no entra en P&L
@@ -3764,9 +3929,33 @@ function paintStockDetenido(){
 });
 
 paintStockDetenido();
-      }
 
-      document.getElementById('repAplicar').addEventListener('click', run);
+  }catch(error){
+    if(repDesde.isConnected){
+      elSalesGrowth.textContent = 'No disponible';
+      elSalesGrowthDifference.textContent =
+        'No se pudo completar la actualización del reporte.';
+      elSalesGrowthPrevious.textContent =
+        'Ventas del período anterior: —';
+      elSalesGrowthPeriod.textContent =
+        'Revise las fechas e inténtelo nuevamente.';
+
+      alert(error.message || 'No se pudo actualizar el reporte.');
+    }
+  }finally{
+    reportLoading = false;
+
+    if(applyButton.isConnected){
+      applyButton.disabled = false;
+      applyButton.textContent = originalLabel;
+    }
+
+    if(repDesde.isConnected) repDesde.disabled = false;
+    if(repHasta.isConnected) repHasta.disabled = false;
+  }
+}
+
+document.getElementById('repAplicar').addEventListener('click', run);
 
 if(stDays) stDays.addEventListener('change', paintStockDetenido);
 if(stAlmacen) stAlmacen.addEventListener('change', paintStockDetenido);
