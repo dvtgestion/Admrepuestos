@@ -11105,12 +11105,20 @@ orgNewBtn.classList.add('hidden');
           const conteos = revision.conteos;
           const nombreEmpresa = empresa.nombre || empresaId;
 
+          const avisoConferencias =
+            revision.incluye_conferencias === true
+              ? 'Conferencias: ' + conteos.inventory_counts + '\n\n'
+              : 'Conferencias: 0\n' +
+                'Este backup es anterior al módulo de conferencias. ' +
+                'Al restaurarlo, la empresa quedará sin conferencias.\n\n';
+
           const respuesta = prompt(
             'Restaurar empresa: ' + nombreEmpresa + '\n\n' +
             'Fecha del backup: ' + fecha.toLocaleString('es-BO') + '\n' +
             'Piezas: ' + conteos.parts + '\n' +
             'Lotes: ' + conteos.part_lots + '\n' +
-            'Movimientos: ' + conteos.movements + '\n\n' +
+            'Movimientos: ' + conteos.movements + '\n' +
+            avisoConferencias +
             'Se reemplazarán los datos de esta empresa por los del archivo. ' +
             'Los cambios y registros posteriores al backup se eliminarán.\n\n' +
             'Se guardará una copia del estado actual en la auditoría de restauraciones.\n\n' +
@@ -11141,7 +11149,8 @@ orgNewBtn.classList.add('hidden');
             'Restauración completada en ' + nombreEmpresa + '.\n\n' +
             'Piezas: ' + resultado.conteos.parts + '\n' +
             'Lotes: ' + resultado.conteos.part_lots + '\n' +
-            'Movimientos: ' + resultado.conteos.movements + '\n\n' +
+            'Movimientos: ' + resultado.conteos.movements + '\n' +
+            'Conferencias: ' + (resultado.conteos.inventory_counts ?? 0) + '\n\n' +
             'La página se actualizará para cargar los datos recuperados.'
           );
 
