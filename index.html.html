@@ -5033,14 +5033,29 @@ el('confStartHelp').textContent =
     lot => !warehouse || String(lot.almacen || '').trim() === warehouse
   );
 
-  const groups = [
+  const emptyByWarehouse = new Map();
+
+for(const lot of available){
+  if(Number(lot.qty) !== 0) continue;
+
+  const warehouseName = String(lot.almacen || '').trim();
+
+  if(
+    !emptyByWarehouse.has(warehouseName) ||
+    String(lot.id) === String(keepLotId)
+  ){
+    emptyByWarehouse.set(warehouseName, lot);
+  }
+}
+
+const groups = [
     {
       label: 'Lotes con stock',
       rows: available.filter(lot => Number(lot.qty) > 0)
     },
     {
       label: 'Lotes agotados — para registrar sobrantes',
-      rows: available.filter(lot => Number(lot.qty) === 0)
+      rows: [...emptyByWarehouse.values()]
     }
   ];
 
