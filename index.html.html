@@ -433,6 +433,60 @@
   }
 }
 
+
+/* Conferencias de inventario */
+.conf-page{min-width:0}
+.conf-page [hidden],.conf-dialog [hidden]{display:none!important}
+.conf-page .card,.conf-dialog fieldset{min-width:0}
+.conf-tabs{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.conf-tabs [aria-selected="true"]{background:var(--primary);color:#fff;border-color:var(--primary)}
+.conf-page .btn,.conf-dialog .btn{height:auto;min-height:44px;white-space:normal}
+.conf-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.conf-wide{grid-column:1/-1}
+.conf-meta{display:flex;gap:8px 20px;flex-wrap:wrap;color:var(--muted);font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+.conf-quantities{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:18px 0}
+.conf-value{display:block;font-size:26px;font-weight:650;margin-top:6px;overflow-wrap:anywhere}
+.conf-actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.conf-page textarea,.conf-dialog textarea{width:100%;min-height:90px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px;resize:vertical}
+.conf-results{display:flex;flex-direction:column;gap:6px;max-height:300px;overflow:auto}
+.conf-result{width:100%;text-align:left;border:1px solid var(--border);border-radius:8px;padding:10px;background:#fff;color:var(--text);cursor:pointer;overflow-wrap:anywhere;font:inherit;min-height:44px}
+.conf-result:hover{border-color:var(--primary);background:#f8fafc}
+.conf-result span{display:block;margin-top:4px;color:var(--muted);font-size:13px}
+.conf-records{display:flex;flex-direction:column;gap:14px}
+.conf-record{border:1px solid var(--border);border-radius:10px;padding:16px;background:#fff;min-width:0}
+.conf-record h3{margin:0 0 8px;font-size:16px;line-height:1.5;overflow-wrap:anywhere}
+.conf-record p{white-space:pre-wrap;overflow-wrap:anywhere}
+.conf-record .conf-quantities{margin:12px 0}
+.conf-record .conf-value{font-size:22px}
+.conf-status{display:inline-block;width:fit-content;padding:7px 10px;border-radius:7px;font-size:13px;font-weight:600}
+.conf-status--pending{background:rgba(239,68,68,.12);color:#991b1b}
+.conf-status--ok{background:#ecfdf5;color:#166534}
+.conf-status--neutral{background:#f1f5f9;color:#475569}
+.conf-notice{padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e40af;line-height:1.5;overflow-wrap:anywhere}
+.conf-notice--error{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+.conf-notice--warning{background:#fffbeb;border-color:#fde68a;color:#92400e}
+.conf-notice--success{background:#ecfdf5;border-color:#a7f3d0;color:#166534}
+.conf-pager{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-top:16px}
+.conf-dialog{width:min(720px,calc(100vw - 24px));max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);padding:0;border:1px solid var(--border);border-radius:12px;color:var(--text);background:#fff;overflow:auto}
+.conf-dialog::backdrop{background:rgba(15,23,42,.45)}
+.conf-dialog-header{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:#fff;position:sticky;top:0;z-index:1}
+.conf-dialog-header h3{margin:0;overflow-wrap:anywhere}
+.conf-dialog-header .btn{flex-shrink:0}
+.conf-dialog-content{padding:20px}
+.conf-dialog fieldset{border:0;padding:0;margin:0;display:grid;gap:14px}
+.conf-check{display:flex;gap:10px;align-items:flex-start;line-height:1.5;font-size:14px}
+.conf-check input[type="checkbox"]{width:18px;height:18px;margin:3px 0 0;flex-shrink:0}
+.inventory-count-warning{display:block;margin-top:6px;padding:6px 8px;border-radius:6px;background:rgba(239,68,68,.12);color:#991b1b;font-size:12px;font-weight:600;overflow-wrap:anywhere}
+
+@media(max-width:600px){
+  .conf-grid{grid-template-columns:minmax(0,1fr)}
+  .conf-quantities{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .conf-quantities> :last-child{grid-column:1/-1}
+  .conf-tabs .btn{flex:1 1 auto}
+  .conf-actions .btn{flex:1 1 auto}
+  .conf-dialog-content{padding:16px}
+}
+
   </style>
 </head>
 <body>
@@ -722,6 +776,190 @@
           </table>
         </div>
       </div>
+    </section>
+  </template>
+
+
+<template id="tpl-conferencias">
+    <section id="confRoot" class="stack conf-page">
+      <header class="toolbar">
+        <div>
+          <h2>Conferencias de inventario</h2>
+          <p class="muted">Conteos físicos por lote y seguimiento de diferencias.</p>
+        </div>
+        <button id="confRefresh" type="button" class="btn" hidden>Actualizar</button>
+      </header>
+
+      <p id="confMessage" class="conf-notice" role="status" hidden></p>
+
+      <div class="conf-tabs" role="tablist" aria-label="Conferencias de inventario">
+        <button id="confTabNew" type="button" class="btn" role="tab"
+          data-conf-tab="new" aria-controls="confPanelNew" aria-selected="true">
+          Nueva conferencia
+        </button>
+        <button id="confTabPending" type="button" class="btn" role="tab"
+          data-conf-tab="pending" aria-controls="confPanelPending"
+          aria-selected="false" tabindex="-1">
+          Pendientes (<span id="confPendingTotal">—</span>)
+        </button>
+        <button id="confTabHistory" type="button" class="btn" role="tab"
+          data-conf-tab="history" aria-controls="confPanelHistory"
+          aria-selected="false" tabindex="-1">
+          Historial
+        </button>
+      </div>
+
+      <section id="confPanelNew" class="stack" role="tabpanel" aria-labelledby="confTabNew">
+        <div class="card stack">
+          <label class="field">
+            <span>Buscar pieza</span>
+            <input id="confSearch" class="input" autocomplete="off"
+              placeholder="Código, nombre, nombre alternativo o motor…" disabled />
+          </label>
+          <p id="confSearchStatus" class="muted xs" role="status">Cargando piezas…</p>
+          <div id="confSearchResults" class="conf-results"></div>
+          <button id="confReloadParts" type="button" class="btn" hidden>
+            Reintentar carga de piezas
+          </button>
+        </div>
+
+        <div id="confCountCard" class="card stack" hidden>
+          <h3 id="confSelectedName" style="margin:0;overflow-wrap:anywhere"></h3>
+          <p id="confSelectedMeta" class="conf-meta" style="margin:0"></p>
+
+          <div class="conf-grid">
+            <label class="field">
+              <span>Almacén</span>
+              <select id="confWarehouse" class="input" disabled></select>
+            </label>
+            <label class="field">
+              <span>Lote</span>
+              <select id="confLot" class="input" disabled></select>
+            </label>
+          </div>
+
+          <form id="confCountForm" class="stack">
+            <div class="conf-quantities">
+              <div>
+                <span id="confExpectedLabel" class="muted">Cantidad consultada</span>
+                <strong id="confExpected" class="conf-value">—</strong>
+              </div>
+              <label class="field">
+                <span>Cantidad contada</span>
+                <input id="confQty" class="input" type="number" min="0"
+                  step="any" required disabled />
+                <span class="muted xs">Unidades encontradas físicamente.</span>
+              </label>
+              <div>
+                <span class="muted">Diferencia</span>
+                <strong id="confDifference" class="conf-value">—</strong>
+              </div>
+            </div>
+
+            <p id="confLiveStatus" role="status" style="margin:0"></p>
+            <p id="confChanged" class="conf-notice conf-notice--warning" hidden></p>
+
+            <label class="field">
+              <span>Observaciones</span>
+              <textarea id="confNotes" maxlength="2000" disabled
+                placeholder="Ej.: Revisado el estante A3; falta una unidad."></textarea>
+            </label>
+
+            <div class="conf-meta">
+              <span id="confCountActor"></span>
+              <span id="confCountDate"></span>
+            </div>
+
+            <p class="muted xs" style="margin:0">
+              Inicie el conteo antes de revisar las unidades físicas.
+              Guardarlo no modifica el stock ni genera movimientos.
+            </p>
+
+            <div class="conf-actions">
+              <button id="confStart" type="button" class="btn btn-primary" disabled>
+                Iniciar conteo
+              </button>
+              <button id="confSave" type="submit" class="btn btn-primary" hidden>
+                Guardar conteo
+              </button>
+              <button id="confAgain" type="button" class="btn btn-primary" hidden>
+                Nuevo conteo
+              </button>
+              <button id="confClear" type="button" class="btn">Elegir otra pieza</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section id="confPanelPending" class="stack" role="tabpanel"
+        aria-labelledby="confTabPending" hidden>
+        <div class="card conf-grid">
+          <label class="field">
+            <span>Buscar pendiente</span>
+            <input id="confPendingSearch" class="input" placeholder="Código, nombre o lote…" />
+          </label>
+          <label class="field">
+            <span>Almacén</span>
+            <select id="confPendingWarehouse" class="input">
+              <option value="">Todos los almacenes</option>
+            </select>
+          </label>
+        </div>
+        <p id="confPendingStatus" class="muted" role="status">Cargando pendientes…</p>
+        <div id="confPendingList" class="conf-records"></div>
+        <div id="confPendingPager" class="conf-pager" hidden>
+          <button id="confPendingPrev" type="button" class="btn">Anterior</button>
+          <span id="confPendingPage" class="muted xs"></span>
+          <button id="confPendingNext" type="button" class="btn">Siguiente</button>
+        </div>
+      </section>
+
+      <section id="confPanelHistory" class="stack" role="tabpanel"
+        aria-labelledby="confTabHistory" hidden>
+        <form id="confHistoryForm" class="card stack">
+          <div class="conf-grid">
+            <label class="field">
+              <span>Desde</span>
+              <input id="confHistoryFrom" class="input" type="date" required />
+            </label>
+            <label class="field">
+              <span>Hasta</span>
+              <input id="confHistoryUntil" class="input" type="date" required />
+            </label>
+            <label class="field">
+              <span>Estado</span>
+              <select id="confHistoryState" class="input">
+                <option value="">Todos</option>
+                <option value="pendiente">Pendiente de revisión</option>
+                <option value="resuelta">Resuelta</option>
+                <option value="sin_diferencias">Conferido sin diferencias</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Almacén</span>
+              <select id="confHistoryWarehouse" class="input">
+                <option value="">Todos los almacenes</option>
+              </select>
+            </label>
+            <label class="field conf-wide">
+              <span>Buscar en el período</span>
+              <input id="confHistorySearch" class="input" placeholder="Código, nombre o lote…" />
+            </label>
+          </div>
+          <div class="conf-actions">
+            <button id="confHistoryApply" type="submit" class="btn btn-primary">
+              Consultar historial
+            </button>
+          </div>
+        </form>
+        <p id="confHistoryStatus" class="muted" role="status"></p>
+        <div id="confHistoryList" class="conf-records"></div>
+        <div id="confHistoryPager" class="conf-pager" hidden>
+          <button id="confHistoryPrev" type="button" class="btn">Anterior</button>
+          <span id="confHistoryPage" class="muted xs"></span>
+          <button id="confHistoryNext" type="button" class="btn">Siguiente</button>
+        </div>
+      </section>
     </section>
   </template>
 
@@ -4663,6 +4901,483 @@ await run();
         }
       });
     }
+
+
+async function renderConferencias(){
+      const template = document.getElementById('tpl-conferencias');
+      view.replaceChildren(template.content.cloneNode(true));
+      const root = view.querySelector('#confRoot');
+      const el = id => root.querySelector('#' + id);
+      const empresaId = Org.get()?.id;
+      const usuarioId = Auth.currentUser()?.id;
+      const isCurrent = () => root.isConnected &&
+        Org.get()?.id === empresaId && Auth.currentUser()?.id === usuarioId;
+      const esc = value => escapeHtml(value ?? '');
+      const normalize = value => String(value ?? '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+      const quantity = value => Number.isFinite(Number(value))
+        ? Number(value).toLocaleString('es-BO', { maximumFractionDigits: 6 }) : '—';
+      const dateTime = value => {
+        const date = new Date(value);
+        return value && Number.isFinite(date.getTime()) ? date.toLocaleString('es-BO') : '—';
+      };
+      const localDate = date => date.getFullYear() + '-' +
+        String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+      const reasons = {
+        repuesto_localizado: 'Repuesto localizado',
+        error_de_conteo: 'Error de conteo',
+        venta_no_registrada: 'Venta no registrada identificada',
+        diferencia_confirmada: 'Diferencia confirmada'
+      };
+      let parts = [], lots = [], selectedPart = null;
+      let activeCount = null, savedCount = null, startRequest = null;
+      let countBusy = false, partsLoading = false, lotRequest = 0;
+      let selectedTab = 'new';
+      let pending = [], history = [], pendingPage = 1, historyPage = 1;
+      let pendingLoading = false, historyLoading = false;
+      let pendingLoaded = false, historyLoaded = false, historyNeedsReload = false;
+      let pendingRequest = 0, historyRequest = 0, mutationVersion = 0;
+      const pageSize = 50;
+
+      function message(text, kind = ''){
+        el('confMessage').textContent = text;
+        el('confMessage').className = 'conf-notice' + (kind ? ' conf-notice--' + kind : '');
+        el('confMessage').setAttribute('role', kind === 'error' ? 'alert' : 'status');
+        el('confMessage').hidden = !text;
+      }
+      function listStatus(id, text, error = false){
+        el(id).textContent = text;
+        el(id).className = error ? 'conf-notice conf-notice--error' : 'muted';
+      }
+      function badge(record){
+        const state = record.status;
+        const text = state === 'pendiente' ? 'Diferencia pendiente de revisión' :
+          state === 'resuelta' ? 'Resuelta' :
+          state === 'sin_diferencias' ? 'Conferido sin diferencias' : 'Conteo iniciado';
+        const kind = state === 'pendiente' ? 'pending' : state === 'en_conteo' ? 'neutral' : 'ok';
+        return '<span class="conf-status conf-status--' + kind + '">' + text + '</span>';
+      }
+      function changedNotice(record){
+        return record.stock_changed ?
+          '<p class="conf-notice conf-notice--warning">El lote fue modificado o dejó de estar disponible durante el conteo. Se conservó la cantidad registrada al iniciar. Revise la situación actual antes de resolver.</p>' : '';
+      }
+      function warehouseOptions(select, rows){
+        const previous = select.value;
+        const names = [...new Set(rows.map(row => String(row.almacen || '').trim()).filter(Boolean))]
+          .sort((a,b) => a.localeCompare(b, 'es'));
+        select.replaceChildren(new Option('Todos los almacenes', ''), ...names.map(name => new Option(name, name)));
+        if(names.includes(previous)) select.value = previous;
+      }
+      const selectedLot = () => lots.find(lot => String(lot.id) === el('confLot').value);
+      const enteredQuantity = () => el('confQty').value.trim() === '' ? NaN : parseLocaleNumber(el('confQty').value);
+
+      function paintCount(){
+        const record = activeCount || savedCount;
+        el('confWarehouse').disabled = countBusy || !!record || !lots.length;
+        el('confLot').disabled = countBusy || !!record || !lots.length;
+        el('confQty').disabled = countBusy || !activeCount;
+        el('confNotes').disabled = countBusy || !activeCount;
+        el('confStart').hidden = !!record;
+        el('confStart').disabled = countBusy || !selectedLot();
+        el('confStart').textContent = countBusy && !record ? 'Iniciando…' : 'Iniciar conteo';
+        el('confSave').hidden = !activeCount;
+        el('confSave').disabled = countBusy;
+        el('confSave').textContent = countBusy && activeCount ? 'Guardando…' : 'Guardar conteo';
+        el('confAgain').hidden = !savedCount;
+        el('confAgain').disabled = countBusy;
+        el('confClear').disabled = countBusy;
+        el('confExpectedLabel').textContent = record ? 'Cantidad esperada al iniciar' : 'Cantidad consultada';
+        el('confExpected').textContent = record ? quantity(record.system_qty) : selectedLot() ? quantity(selectedLot().qty) : '—';
+        el('confCountActor').textContent = record ? 'Responsable: ' + record.started_email : '';
+        el('confCountDate').textContent = record ? 'Inicio: ' + dateTime(record.started_at) +
+          (record.counted_at ? ' · Guardado: ' + dateTime(record.counted_at) : '') : '';
+        el('confChanged').hidden = !record?.stock_changed;
+        el('confChanged').textContent = 'El lote fue modificado durante el conteo. Se conservó la cantidad inicial para la revisión.';
+        const counted = savedCount ? Number(savedCount.counted_qty) : enteredQuantity();
+        const difference = record && Number.isFinite(counted) ? counted - Number(record.system_qty) : NaN;
+        el('confDifference').textContent = Number.isFinite(difference) ?
+          (difference > 0 ? '+' : '') + quantity(difference) : '—';
+        if(savedCount){
+          el('confLiveStatus').innerHTML = badge(savedCount);
+        }else if(activeCount && Number.isFinite(counted) && counted >= 0){
+          el('confLiveStatus').innerHTML = difference === 0 ?
+            '<span class="conf-status conf-status--ok">Sin diferencias al guardar</span>' :
+            '<span class="conf-status conf-status--pending">Diferencia pendiente de revisión al guardar</span>';
+        }else{
+          el('confLiveStatus').textContent = activeCount ? 'Escriba la cantidad encontrada físicamente.' :
+            'Seleccione el lote e inicie el conteo antes de contar las unidades.';
+        }
+      }
+
+      function paintLots(keepLotId = ''){
+        const warehouse = el('confWarehouse').value;
+        const available = lots.filter(lot => !warehouse || String(lot.almacen || '').trim() === warehouse);
+        el('confLot').replaceChildren(new Option(available.length ? 'Seleccione un lote' : 'No hay lotes en este almacén', ''),
+          ...available.map(lot => new Option('Lote ' + String(lot.id).slice(0,8) + ' · ' + quantity(lot.qty) +
+            ' unid. · ' + (lot.almacen || 'Sin almacén'), String(lot.id))));
+        if(available.some(lot => String(lot.id) === String(keepLotId))) el('confLot').value = String(keepLotId);
+        startRequest = null;
+        paintCount();
+      }
+
+      async function choosePart(part, keepLotId = ''){
+        const request = ++lotRequest;
+        selectedPart = part; lots = []; activeCount = null; savedCount = null; startRequest = null;
+        el('confSearch').value = part.codigo + ' · ' + part.nombre;
+        el('confSearch').disabled = true;
+        el('confSearchResults').replaceChildren();
+        el('confSearchStatus').textContent = 'Pieza seleccionada. Elija el lote que va a contar.';
+        el('confCountCard').hidden = false;
+        el('confSelectedName').textContent = part.codigo + ' · ' + part.nombre;
+        el('confSelectedMeta').textContent = [part.ubicacion ? 'Ubicación: ' + part.ubicacion : '', part.categoria || ''].filter(Boolean).join(' · ');
+        el('confQty').value = ''; el('confNotes').value = '';
+        el('confWarehouse').replaceChildren(new Option('Cargando…', ''));
+        el('confLot').replaceChildren(new Option('Cargando lotes…', ''));
+        message(''); paintCount();
+        try{
+          const rows = await DB.listInventoryCountLots(part.id);
+          if(!isCurrent() || request !== lotRequest) return;
+          lots = rows;
+          warehouseOptions(el('confWarehouse'), lots);
+          paintLots(keepLotId);
+          if(!lots.length) message('Esta pieza no tiene lotes registrados.');
+        }catch(error){
+          if(!isCurrent() || request !== lotRequest) return;
+          el('confLot').replaceChildren(new Option('No se pudieron cargar los lotes', ''));
+          message(error.message || 'No se pudieron cargar los lotes.', 'error');
+          paintCount();
+        }
+      }
+
+      function searchParts(){
+        const query = normalize(el('confSearch').value);
+        el('confSearchResults').replaceChildren();
+        if(!query){
+          el('confSearchStatus').textContent = parts.length ? 'Escriba para buscar y seleccione una pieza.' : 'No hay piezas registradas.';
+          return;
+        }
+        const tokens = query.split(/\s+/);
+        const matches = parts.filter(part => {
+          const text = normalize([part.codigo, part.nombre, part.nombresAlternativos, part.descripcion, part.categoria].join(' '));
+          return tokens.every(token => text.includes(token));
+        });
+        el('confSearchStatus').textContent = matches.length + (matches.length === 1 ? ' pieza encontrada.' : ' piezas encontradas.') +
+          (matches.length > 25 ? ' Se muestran las primeras 25. Precise la búsqueda.' : '');
+        el('confSearchResults').innerHTML = matches.slice(0,25).map(part =>
+          '<button type="button" class="conf-result" data-conf-part="' + esc(part.id) + '"><strong>' +
+          esc(part.codigo) + ' · ' + esc(part.nombre) + '</strong><span>' + esc(part.categoria || part.descripcion || 'Seleccionar pieza') + '</span></button>'
+        ).join('');
+      }
+
+      async function loadParts(){
+        if(partsLoading) return;
+        partsLoading = true; el('confSearch').disabled = true; el('confReloadParts').hidden = true;
+        el('confSearchStatus').textContent = 'Cargando piezas…';
+        try{
+          const rows = await DB.listParts();
+          if(!isCurrent()) return;
+          parts = rows; el('confSearch').disabled = !!selectedPart;
+          searchParts();
+        }catch(error){
+          if(!isCurrent()) return;
+          el('confSearchStatus').textContent = error.message || 'No se pudieron cargar las piezas.';
+          el('confReloadParts').hidden = false;
+        }finally{ partsLoading = false; }
+      }
+
+      function recordCard(record){
+        const difference = Number(record.counted_qty) - Number(record.system_qty);
+        const review = record.status === 'pendiente' && Org.isAdmin();
+        return '<article class="conf-record"><h3>' + esc(record.codigo) + ' · ' + esc(record.nombre) + '</h3>' + badge(record) +
+          '<p class="conf-meta"><span>Almacén: ' + esc(record.almacen || 'Sin almacén') + '</span><span title="' + esc(record.lot_id) +
+          '">Lote: ' + esc(String(record.lot_id).slice(0,8)) + '</span><span>Conteo: ' + esc(dateTime(record.counted_at)) + '</span></p>' +
+          '<div class="conf-quantities"><div><span class="muted xs">Sistema al iniciar</span><strong class="conf-value">' + quantity(record.system_qty) +
+          '</strong></div><div><span class="muted xs">Cantidad contada</span><strong class="conf-value">' + quantity(record.counted_qty) +
+          '</strong></div><div><span class="muted xs">Diferencia</span><strong class="conf-value">' + (difference > 0 ? '+' : '') + quantity(difference) +
+          '</strong></div></div><p class="muted xs">Responsable: ' + esc(record.started_email) + '</p>' +
+          (record.notes ? '<p>' + esc(record.notes) + '</p>' : '') + changedNotice(record) +
+          '<div class="conf-actions"><button type="button" class="btn' + (review ? ' btn-primary' : '') + '" data-conf-record="' + esc(record.id) + '">' +
+          (review ? 'Revisar' : 'Ver detalle') + '</button></div></article>';
+      }
+
+      function filteredRecords(kind){
+        const prefix = kind === 'pending' ? 'confPending' : 'confHistory';
+        const query = normalize(el(prefix + 'Search').value);
+        const warehouse = el(prefix + 'Warehouse').value;
+        return (kind === 'pending' ? pending : history).filter(record =>
+          (!warehouse || String(record.almacen || '').trim() === warehouse) &&
+          (!query || query.split(/\s+/).every(token => normalize([record.codigo,record.nombre,record.lot_id,record.almacen,record.started_email].join(' ')).includes(token)))
+        );
+      }
+      function paintRecords(kind){
+        const prefix = kind === 'pending' ? 'confPending' : 'confHistory';
+        const records = filteredRecords(kind);
+        const maxPage = Math.max(1, Math.ceil(records.length / pageSize));
+        const page = Math.min(kind === 'pending' ? pendingPage : historyPage, maxPage);
+        if(kind === 'pending') pendingPage = page; else historyPage = page;
+        el(prefix + 'List').innerHTML = records.slice((page-1)*pageSize,page*pageSize).map(recordCard).join('');
+        listStatus(prefix + 'Status', kind === 'pending' ? records.length + (records.length === 1 ? ' diferencia pendiente.' : ' diferencias pendientes.') :
+          records.length + (records.length === 1 ? ' conferencia encontrada en el período.' : ' conferencias encontradas en el período.'));
+        el(prefix + 'Pager').hidden = records.length <= pageSize;
+        el(prefix + 'Page').textContent = 'Página ' + page + ' de ' + maxPage + ' · ' + records.length + ' registros';
+        el(prefix + 'Prev').disabled = page <= 1;
+        el(prefix + 'Next').disabled = page >= maxPage;
+      }
+      function refreshButton(){
+        el('confRefresh').hidden = selectedTab === 'new';
+        el('confRefresh').disabled = selectedTab === 'pending' ? pendingLoading : historyLoading;
+      }
+
+      async function loadPending(){
+        const request = ++pendingRequest;
+        pendingLoading = true; refreshButton();
+        listStatus('confPendingStatus', 'Cargando diferencias pendientes…');
+        el('confPendingList').replaceChildren(); el('confPendingPager').hidden = true;
+        el('confPendingTotal').textContent = '…';
+        try{
+          const rows = await DB.listInventoryCounts({status:'pendiente'});
+          if(!isCurrent() || request !== pendingRequest) return;
+          pending = rows.sort((a,b) => new Date(a.counted_at)-new Date(b.counted_at) || String(a.id).localeCompare(String(b.id)));
+          pendingLoaded = true;
+          el('confPendingTotal').textContent = pending.length;
+          warehouseOptions(el('confPendingWarehouse'), pending);
+          paintRecords('pending');
+        }catch(error){
+          if(!isCurrent() || request !== pendingRequest) return;
+          pending = []; pendingLoaded = false; el('confPendingTotal').textContent = '?';
+          listStatus('confPendingStatus', error.message || 'No se pudieron consultar los pendientes.', true);
+        }finally{
+          if(isCurrent() && request === pendingRequest){ pendingLoading = false; refreshButton(); }
+        }
+      }
+
+      function historyPeriod(){
+        const parse = text => {
+          if(!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw new Error('Seleccione un período de fechas válido.');
+          const date = new Date(text + 'T00:00:00');
+          if(!Number.isFinite(date.getTime()) || localDate(date) !== text) throw new Error('Seleccione un período de fechas válido.');
+          return date;
+        };
+        const from = parse(el('confHistoryFrom').value);
+        const until = parse(el('confHistoryUntil').value);
+        if(from > until) throw new Error('La fecha inicial no puede ser posterior a la final.');
+        until.setDate(until.getDate()+1);
+        return {from, toExclusive:until};
+      }
+      async function loadHistory(){
+        const request = ++historyRequest;
+        const version = mutationVersion;
+        const controls = ['confHistoryFrom','confHistoryUntil','confHistoryState','confHistoryApply'];
+        let period;
+        try{ period = historyPeriod(); }
+        catch(error){
+          historyLoading = false;
+          controls.forEach(id => el(id).disabled = false);
+          refreshButton();
+          listStatus('confHistoryStatus', error.message, true);
+          el('confHistoryList').replaceChildren(); el('confHistoryPager').hidden = true;
+          return;
+        }
+        historyLoading = true; refreshButton();
+        const status = el('confHistoryState').value;
+        controls.forEach(id => el(id).disabled = true);
+        listStatus('confHistoryStatus', 'Consultando el período seleccionado…');
+        el('confHistoryList').replaceChildren(); el('confHistoryPager').hidden = true;
+        try{
+          const rows = await DB.listInventoryCounts({...period,status});
+          if(!isCurrent() || request !== historyRequest) return;
+          history = rows.sort((a,b) => new Date(b.counted_at)-new Date(a.counted_at) || String(b.id).localeCompare(String(a.id)));
+          historyLoaded = true; historyNeedsReload = mutationVersion !== version; historyPage = 1;
+          warehouseOptions(el('confHistoryWarehouse'), history);
+          paintRecords('history');
+        }catch(error){
+          if(!isCurrent() || request !== historyRequest) return;
+          history = []; historyLoaded = false;
+          listStatus('confHistoryStatus', error.message || 'No se pudo consultar el historial.', true);
+        }finally{
+          if(isCurrent() && request === historyRequest){
+            historyLoading = false; controls.forEach(id => el(id).disabled = false); refreshButton();
+          }
+        }
+      }
+
+      function setTab(name){
+        selectedTab = name;
+        root.querySelectorAll('[data-conf-tab]').forEach(button => {
+          const active = button.dataset.confTab === name;
+          button.setAttribute('aria-selected', String(active)); button.tabIndex = active ? 0 : -1;
+          root.querySelector('#' + button.getAttribute('aria-controls')).hidden = !active;
+        });
+        refreshButton();
+        if(name === 'pending' && !pendingLoaded && !pendingLoading) void loadPending();
+        if(name === 'history' && (!historyLoaded || historyNeedsReload) && !historyLoading) void loadHistory();
+      }
+
+      function openRecord(record){
+        if(!isCurrent()) return;
+        const canResolve = record.status === 'pendiente' && Org.isAdmin();
+        const dialog = document.createElement('dialog');
+        dialog.className = 'conf-dialog';
+        dialog.setAttribute('aria-label', 'Detalle de conferencia');
+        const difference = Number(record.counted_qty)-Number(record.system_qty);
+        dialog.innerHTML = '<header class="conf-dialog-header"><h3>Detalle de conferencia</h3><button type="button" class="btn" data-conf-close>Cerrar</button></header>' +
+          '<div class="conf-dialog-content stack"><h3 style="margin:0;overflow-wrap:anywhere">' + esc(record.codigo) + ' · ' + esc(record.nombre) + '</h3>' + badge(record) +
+          '<div class="conf-meta"><span>Almacén: ' + esc(record.almacen || 'Sin almacén') + '</span><span>Ubicación: ' + esc(record.ubicacion || '—') + '</span></div>' +
+          '<p class="muted xs" style="overflow-wrap:anywhere">Lote: ' + esc(record.lot_id) + '</p>' +
+          '<div class="conf-quantities"><div><span class="muted xs">Sistema al iniciar</span><strong class="conf-value">' + quantity(record.system_qty) +
+          '</strong></div><div><span class="muted xs">Cantidad contada</span><strong class="conf-value">' + quantity(record.counted_qty) +
+          '</strong></div><div><span class="muted xs">Diferencia</span><strong class="conf-value">' + (difference>0?'+':'') + quantity(difference) + '</strong></div></div>' +
+          '<div class="conf-meta"><span>Responsable: ' + esc(record.started_email) + '</span><span>Inicio: ' + esc(dateTime(record.started_at)) +
+          '</span><span>Guardado: ' + esc(dateTime(record.counted_at)) + '</span></div><p style="white-space:pre-wrap;overflow-wrap:anywhere">Observaciones: ' + esc(record.notes || 'Sin observaciones') + '</p>' + changedNotice(record) +
+          (record.status === 'resuelta' ? '<div class="conf-notice conf-notice--success"><strong>' + esc(reasons[record.resolution_reason] || record.resolution_reason) +
+            '</strong><p style="white-space:pre-wrap;overflow-wrap:anywhere">' + esc(record.resolution_note) + '</p><span>Resuelta por: ' + esc(record.resolved_email) + ' · ' + esc(dateTime(record.resolved_at)) + '</span></div>' : '') +
+          (canResolve ? '<form data-conf-resolution><fieldset><label class="field"><span>Motivo de resolución</span><select name="reason" class="input" required>' +
+            '<option value="">Seleccione un motivo</option>' + Object.entries(reasons).map(([value,label]) => '<option value="' + value + '">' + label + '</option>').join('') +
+            '</select></label><label class="field"><span>Justificación</span><textarea name="justification" minlength="3" maxlength="2000" required placeholder="Explique qué se verificó y cómo se resolvió la diferencia."></textarea></label>' +
+            '<label class="conf-check" data-conf-manual hidden><input name="manual" type="checkbox"><span data-conf-manual-text></span></label>' +
+            '<p class="muted xs">Resolver cierra esta revisión. Las salidas y los ajustes se registran manualmente en sus secciones habituales.</p>' +
+            '<p class="conf-notice conf-notice--error" role="alert" data-conf-error hidden></p><button type="submit" class="btn btn-primary">Resolver diferencia</button></fieldset></form>' : '') + '</div>';
+        let resolving = false;
+        const closeButton = dialog.querySelector('[data-conf-close]');
+        closeButton.onclick = () => { if(!resolving) dialog.close(); };
+        dialog.addEventListener('cancel', event => { if(resolving) event.preventDefault(); });
+        const observer = new MutationObserver(() => { if(!isCurrent() && dialog.open) dialog.close(); });
+        observer.observe(view, {childList:true});
+        dialog.addEventListener('close', () => { observer.disconnect(); dialog.remove(); }, {once:true});
+        const form = dialog.querySelector('[data-conf-resolution]');
+        if(form){
+          const reason = form.elements.namedItem('reason');
+          const manual = form.elements.namedItem('manual');
+          reason.onchange = () => {
+            const needed = ['venta_no_registrada','diferencia_confirmada'].includes(reason.value);
+            dialog.querySelector('[data-conf-manual]').hidden = !needed;
+            manual.required = needed; manual.checked = false;
+            dialog.querySelector('[data-conf-manual-text]').textContent = reason.value === 'venta_no_registrada' ?
+              'Confirmo que ya registré la salida correspondiente en Movimientos.' :
+              'Confirmo que ya realicé el ajuste correspondiente en el inventario.';
+          };
+          form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if(resolving || !isCurrent()) return;
+            const errorBox = dialog.querySelector('[data-conf-error]');
+            const justification = form.elements.namedItem('justification').value.trim();
+            const needsManual = ['venta_no_registrada','diferencia_confirmada'].includes(reason.value);
+            if(!Org.isAdmin() || !reasons[reason.value] || justification.length<3 || justification.length>2000 || (needsManual&&!manual.checked)){
+              errorBox.textContent = 'Revise el motivo, la justificación y la confirmación requerida.'; errorBox.hidden = false; return;
+            }
+            resolving = true; form.querySelector('fieldset').disabled = true; closeButton.disabled = true; errorBox.hidden = true;
+            try{
+              const data = await DB.resolveInventoryCount({countId:record.id,reason:reason.value,justification,manualConfirmed:needsManual&&manual.checked});
+              if(!isCurrent()) return;
+              if(data.status !== 'resuelta') throw new Error('No se pudo confirmar la resolución. Actualice los pendientes antes de repetirla.');
+              mutationVersion++; historyNeedsReload = true;
+              dialog.close(); message('Diferencia resuelta. Se conserva el registro del conteo original.', 'success');
+              void loadPending();
+              if(historyLoaded && selectedTab === 'history') void loadHistory();
+            }catch(error){
+              if(!isCurrent() || !dialog.isConnected) return;
+              errorBox.textContent = error.message || 'No se pudo resolver la diferencia.'; errorBox.hidden = false;
+            }finally{
+              resolving = false;
+              if(dialog.isConnected){ form.querySelector('fieldset').disabled = false; closeButton.disabled = false; }
+            }
+          });
+        }
+        document.body.appendChild(dialog); dialog.showModal();
+      }
+
+      el('confSearch').addEventListener('input', searchParts);
+      el('confReloadParts').addEventListener('click', () => { void loadParts(); });
+      el('confSearchResults').addEventListener('click', event => {
+        const button = event.target.closest('[data-conf-part]');
+        const part = button && parts.find(item => String(item.id) === button.dataset.confPart);
+        if(part && !countBusy) void choosePart(part);
+      });
+      el('confWarehouse').addEventListener('change', () => paintLots(el('confLot').value));
+      el('confLot').addEventListener('change', () => { startRequest = null; paintCount(); });
+      el('confQty').addEventListener('input', paintCount);
+      el('confClear').addEventListener('click', () => {
+        if(countBusy) return;
+        if(activeCount && (el('confQty').value || el('confNotes').value) && !confirm('¿Salir de este conteo sin guardar la cantidad contada?')) return;
+        lotRequest++; selectedPart = null; lots = []; activeCount = null; savedCount = null; startRequest = null;
+        el('confCountCard').hidden = true; el('confSearch').value = ''; el('confSearch').disabled = partsLoading;
+        message(''); searchParts(); el('confSearch').focus();
+      });
+      el('confAgain').addEventListener('click', () => { if(selectedPart && !countBusy) void choosePart(selectedPart, el('confLot').value); });
+      el('confStart').addEventListener('click', async () => {
+        const lot = selectedLot();
+        if(!lot || countBusy || activeCount || savedCount || !isCurrent()) return;
+        if(!startRequest || startRequest.lotId !== String(lot.id)) startRequest = {lotId:String(lot.id),id:crypto.randomUUID()};
+        countBusy = true; message(''); paintCount();
+        try{
+          const data = await DB.startInventoryCount(lot.id, startRequest.id);
+          if(!isCurrent()) return;
+          if(data.status !== 'en_conteo') throw new Error('Este conteo ya fue guardado. Consulte el historial o elija otra pieza.');
+          activeCount = data; el('confQty').value = ''; el('confNotes').value = '';
+          el('confSelectedName').textContent = data.codigo + ' · ' + data.nombre;
+          el('confSelectedMeta').textContent = 'Almacén: ' + (data.almacen || 'Sin almacén') + ' · Ubicación: ' + (data.ubicacion || '—');
+        }catch(error){ if(isCurrent()) message(error.message || 'No se pudo iniciar el conteo.', 'error'); }
+        finally{ countBusy = false; if(isCurrent()){ paintCount(); if(activeCount) el('confQty').focus(); } }
+      });
+      el('confCountForm').addEventListener('submit', async event => {
+        event.preventDefault();
+        if(countBusy || !activeCount || !isCurrent()) return;
+        const qty = enteredQuantity();
+        if(!Number.isFinite(qty) || qty<0){ message('Escriba una cantidad válida, igual o mayor que cero.', 'error'); return; }
+        const notes = el('confNotes').value.trim();
+        if(notes.length>2000){ message('La observación no puede superar 2000 caracteres.', 'error'); return; }
+        countBusy = true; message(''); paintCount();
+        try{
+          const data = await DB.saveInventoryCount({countId:activeCount.id,qty,notes});
+          if(!isCurrent()) return;
+          if(!['pendiente','sin_diferencias','resuelta'].includes(data.status)) throw new Error('No se pudo confirmar el conteo. Revise el historial antes de repetirlo.');
+          savedCount = data; activeCount = null; el('confQty').value = data.counted_qty; el('confNotes').value = data.notes;
+          mutationVersion++; historyNeedsReload = true;
+          message(data.status === 'pendiente' ? 'Conteo guardado. La diferencia quedó pendiente de revisión por un administrador.' : 'Conteo guardado correctamente.', 'success');
+          void loadPending();
+        }catch(error){ if(isCurrent()) message(error.message || 'No se pudo guardar el conteo.', 'error'); }
+        finally{ countBusy = false; if(isCurrent()) paintCount(); }
+      });
+      root.querySelectorAll('[data-conf-tab]').forEach(button => button.addEventListener('click', () => setTab(button.dataset.confTab)));
+      root.querySelector('.conf-tabs').addEventListener('keydown', event => {
+        const buttons = [...root.querySelectorAll('[data-conf-tab]')];
+        const index = buttons.indexOf(event.target.closest('[data-conf-tab]'));
+        if(index<0 || !['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+        event.preventDefault();
+        const next = event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowRight'?1:buttons.length-1))%buttons.length;
+        buttons[next].focus(); setTab(buttons[next].dataset.confTab);
+      });
+      for(const kind of ['pending','history']){
+        const prefix = kind === 'pending' ? 'confPending' : 'confHistory';
+        for(const [suffix,event] of [['Search','input'],['Warehouse','change']]){
+          el(prefix+suffix).addEventListener(event, () => {
+            if(kind==='pending'){ pendingPage=1; if(pendingLoaded&&!pendingLoading) paintRecords(kind); }
+            else{ historyPage=1; if(historyLoaded&&!historyLoading&&!historyNeedsReload) paintRecords(kind); }
+          });
+        }
+        for(const [suffix,delta] of [['Prev',-1],['Next',1]]) el(prefix+suffix).addEventListener('click', () => {
+          if(kind==='pending') pendingPage=Math.max(1,pendingPage+delta); else historyPage=Math.max(1,historyPage+delta);
+          paintRecords(kind);
+        });
+        el(prefix+'List').addEventListener('click', event => {
+          const button = event.target.closest('[data-conf-record]');
+          const record = button && (kind==='pending'?pending:history).find(item => String(item.id)===button.dataset.confRecord);
+          if(record) openRecord(record);
+        });
+      }
+      el('confRefresh').addEventListener('click', () => { if(selectedTab==='pending') void loadPending(); else if(selectedTab==='history') void loadHistory(); });
+      el('confHistoryForm').addEventListener('submit', event => { event.preventDefault(); void loadHistory(); });
+      for(const id of ['confHistoryFrom','confHistoryUntil','confHistoryState']) el(id).addEventListener('change', () => {
+        historyNeedsReload = true;
+        el('confHistoryList').replaceChildren(); el('confHistoryPager').hidden = true;
+        listStatus('confHistoryStatus', 'Filtros modificados. Pulse Consultar historial para aplicarlos.');
+      });
+      const today = new Date(); const first = new Date(today); first.setDate(first.getDate()-29);
+      el('confHistoryFrom').value = localDate(first); el('confHistoryUntil').value = localDate(today);
+      if(!empresaId || !usuarioId){ message('Seleccione una empresa e inicie sesión.', 'error'); return; }
+      await Promise.allSettled([loadParts(),loadPending()]);
+    }
+
 
     // ---- Inventario (inclui visor/imagem, seletores, etc.) ----
     async function renderInventario(){
