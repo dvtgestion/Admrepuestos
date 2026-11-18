@@ -5407,6 +5407,33 @@ async function renderConferencias(){
       let parts = await DB.listParts();
       let allLots = await DB.listAllLots(50000);
 
+      let pendingInventoryCounts = new Map();
+      const reviewCompanyId = Org.get()?.id;
+      const reviewUserId = Auth.currentUser()?.id;
+
+      const isReviewContextCurrent = () =>
+        tbody.isConnected &&
+        Org.get()?.id === reviewCompanyId &&
+        Auth.currentUser()?.id === reviewUserId;
+
+      try{
+        pendingInventoryCounts =
+          await DB.getPendingInventoryCountsByPart();
+      }catch(error){
+        if(!isReviewContextCurrent()) return;
+
+        const reviewNotice = document.createElement('p');
+        reviewNotice.className = 'conf-notice conf-notice--warning';
+        reviewNotice.setAttribute('role', 'status');
+        reviewNotice.textContent =
+          'No se pudieron verificar las conferencias pendientes. ' +
+          'Vuelva a abrir Inventario para actualizar los avisos.';
+
+        formWrap.before(reviewNotice);
+      }
+
+      if(!isReviewContextCurrent()) return;
+
 function lotsByPartId(partId){
   return allLots.filter(l =>
     String(l.part_id) === String(partId) &&
@@ -5559,7 +5586,12 @@ function partHasAlmacen(p, almacen){
       function partNameCellHTML(p, low){
         const badge = low ? '<span class="badge low">Bajo stock</span>' : '';
         const img = p.imageUrl ? `<img class="thumb" src="${escapeHtml(p.imageUrl)}" alt="">` : '';
-        return `${img}${escapeHtml(p.nombre)} ${badge}`;
+
+        const review = pendingInventoryCounts.has(String(p.id))
+          ? '<span class="inventory-count-warning">Pendiente de revisión</span>'
+          : '';
+
+        return `${img}${escapeHtml(p.nombre)} ${badge}${review}`;
       }
 
       async function paint(){
