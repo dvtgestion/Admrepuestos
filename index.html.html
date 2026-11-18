@@ -839,7 +839,18 @@
             </label>
           </div>
 
-          <form id="confCountForm" class="stack">
+          <div class="conf-actions">
+            <button id="confStart" type="button" class="btn btn-primary" disabled>
+              Iniciar conteo
+            </button>
+            <button id="confClear" type="button" class="btn">Elegir otra pieza</button>
+          </div>
+
+          <p id="confStartHelp" class="conf-notice" hidden>
+            Pulse Iniciar conteo para habilitar Cantidad contada y Observaciones.
+          </p>
+
+          <form id="confCountForm" class="stack" hidden>
             <div class="conf-quantities">
               <div>
                 <span id="confExpectedLabel" class="muted">Cantidad consultada</span>
@@ -877,16 +888,12 @@
             </p>
 
             <div class="conf-actions">
-              <button id="confStart" type="button" class="btn btn-primary" disabled>
-                Iniciar conteo
-              </button>
               <button id="confSave" type="submit" class="btn btn-primary" hidden>
                 Guardar conteo
               </button>
               <button id="confAgain" type="button" class="btn btn-primary" hidden>
                 Nuevo conteo
               </button>
-              <button id="confClear" type="button" class="btn">Elegir otra pieza</button>
             </div>
           </form>
         </div>
@@ -3386,10 +3393,15 @@ async function readConferencePages(tabela, colunas, configurar){
 async function listInventoryCountLots(partId){
   if(!partId) return [];
 
+  async function listInventoryCountLots(partId){
+  if(!partId) return [];
+
   return readConferencePages(
     'part_lots',
     'id, part_id, qty, almacen, created_at',
-    consulta => consulta.eq('part_id', partId)
+    consulta => consulta
+      .eq('part_id', partId)
+      .gt('qty', 0)
   );
 }
 
@@ -4975,6 +4987,8 @@ async function renderConferencias(){
 
       function paintCount(){
         const record = activeCount || savedCount;
+        el('confCountForm').hidden = !record;
+        el('confStartHelp').hidden = !!record || !selectedLot() || countBusy;
         el('confWarehouse').disabled = countBusy || !!record || !lots.length;
         el('confLot').disabled = countBusy || !!record || !lots.length;
         el('confQty').disabled = countBusy || !activeCount;
@@ -5042,7 +5056,7 @@ async function renderConferencias(){
           lots = rows;
           warehouseOptions(el('confWarehouse'), lots);
           paintLots(keepLotId);
-          if(!lots.length) message('Esta pieza no tiene lotes registrados.');
+          if(!lots.length) message('Esta pieza no tiene stock disponible para conferir.');
         }catch(error){
           if(!isCurrent() || request !== lotRequest) return;
           el('confLot').replaceChildren(new Option('No se pudieron cargar los lotes', ''));
