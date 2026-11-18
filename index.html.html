@@ -3088,6 +3088,161 @@ async function resolveInventoryCount({
   });
 }
 
+async function readConferencePages(tabela, colunas, configurar){
+  const empresaId = orgId();
+  const usuarioId = Auth.currentUser()?.id;
+  const registros = [];
+  let ultimoId = null;
+
+  if(!empresaId || !usuarioId){
+    throw new Error('Seleccione una empresa e inicie sesión.');
+  }
+
+  while(true){
+    let consulta = sb.from(tabela)
+      .select(colunas)
+      .eq('org_id', empresaId)
+      .order('id', { ascending: true })
+      .limit(500);
+
+    consulta = configurar(consulta);
+
+    if(ultimoId !== null){
+      consulta = consulta.gt('id', ultimoId);
+    }
+
+    const { data, error } = await consulta;
+
+    if(
+      String(orgId()) !== String(empresaId) ||
+      Auth.currentUser()?.id !== usuarioId
+    ){
+      throw new Error(
+        'La empresa o la cuenta cambió. Vuelva a abrir Conferencias.'
+      );
+    }
+
+    if(error){
+      throw new Error(
+        error.message || 'No se pudieron consultar las conferencias.'
+      );
+    }
+
+    const pagina = data || [];
+    if(pagina.length === 0) break;
+
+    const siguienteId = pagina[pagina.length - 1].id;
+
+    if(!siguienteId || siguienteId === ultimoId){
+      throw new Error('No se pudo completar la consulta.');
+    }
+
+    registros.push(...pagina);
+    ultimoId = siguienteId;
+  }
+
+  return registros;
+}
+
+async function listInventoryCountLots(partId){
+  if(!partId) return [];
+
+  return readConferencePages(
+    'part_lots',
+    'id, part_id, qty, almacen, created_at',
+    consulta => consulta.eq('part_id', partId)
+  );
+}
+
+
+async function listInventoryCounts({
+  status = '',
+  from = null,
+  toExclusive = null
+} = {}){
+  const estado = String(status ?? '').trim();
+  const estadosValidos = [
+    'pendiente',
+    'resuelta',
+    'sin_diferencias'
+  ];
+
+  if(estado && !estadosValidos.includes(estado)){
+    throw new Error('El estado de la conferencia no es válido.');
+  }
+
+  const tieneInicio = from !== null && from !== undefined;
+  const tieneFin = toExclusive !== null && toExclusive !== undefined;
+  let inicioISO = null;
+  let finISO = null;
+
+  if(tieneInicio !== tieneFin){
+    throw new Error('Seleccione las dos fechas del período.');
+  }
+
+  if(tieneInicio){
+    const inicio = new Date(from);
+    const fin = new Date(toExclusive);
+
+    if(
+      !Number.isFinite(inicio.getTime()) ||
+      !Number.isFinite(fin.getTime()) ||
+      inicio.getTime() >= fin.getTime()
+    ){
+      throw new Error('El período de consulta no es válido.');
+    }
+
+    inicioISO = inicio.toISOString();
+    finISO = fin.toISOString();
+  }else if(estado !== 'pendiente'){
+    throw new Error('Seleccione un período para consultar el historial.');
+  }
+
+  return readConferencePages(
+    'inventory_counts',
+    '*',
+    consulta => {
+      if(estado){
+        consulta = consulta.eq('status', estado);
+      }else{
+        consulta = consulta.neq('status', 'en_conteo');
+      }
+
+      if(inicioISO){
+        consulta = consulta
+          .gte('counted_at', inicioISO)
+          .lt('counted_at', finISO);
+      }
+
+      return consulta;
+    }
+  );
+}
+
+async function getPendingInventoryCountsByPart(){
+  const registros = await readConferencePages(
+    'inventory_counts',
+    'id, part_id',
+    consulta => consulta.eq('status', 'pendiente')
+  );
+
+  const pendientes = new Map();
+
+  for(const registro of registros){
+    if(!registro.part_id) continue;
+
+    const piezaId = String(registro.part_id);
+    pendientes.set(
+      piezaId,
+      (pendientes.get(piezaId) || 0) + 1
+    );
+  }
+
+  return pendientes;
+}
+
+
+
   // ---- Clientes en espera ----
 async function listClientesEspera(){
   const registros = [];
@@ -3336,7 +3491,8 @@ async function setEstadoClienteEspera({
 
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
-  startInventoryCount, saveInventoryCount, resolveInventoryCount,
+startInventoryCount, saveInventoryCount, resolveInventoryCount,
+  listInventoryCountLots, listInventoryCounts, getPendingInventoryCountsByPart,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
 listMoves, listMovesByPeriod, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
