@@ -3398,7 +3398,7 @@ async function listInventoryCountLots(partId){
     'id, part_id, qty, almacen, created_at',
     consulta => consulta
       .eq('part_id', partId)
-      .gt('qty', 0)
+      .gte('qty', 0)
   );
 }
 
@@ -4986,6 +4986,11 @@ async function renderConferencias(){
         const record = activeCount || savedCount;
         el('confCountForm').hidden = !record;
         el('confStartHelp').hidden = !!record || !selectedLot() || countBusy;
+
+el('confStartHelp').textContent =
+  selectedLot() && Number(selectedLot().qty) === 0
+    ? 'Este lote figura con 0 unidades. Pulse Iniciar conteo para registrar la cantidad encontrada físicamente. La diferencia quedará pendiente de revisión si no coincide con la cantidad al iniciar.'
+    : 'Pulse Iniciar conteo para habilitar Cantidad contada y Observaciones.';
         el('confWarehouse').disabled = countBusy || !!record || !lots.length;
         el('confLot').disabled = countBusy || !!record || !lots.length;
         el('confQty').disabled = countBusy || !activeCount;
@@ -5023,15 +5028,59 @@ async function renderConferencias(){
       }
 
       function paintLots(keepLotId = ''){
-        const warehouse = el('confWarehouse').value;
-        const available = lots.filter(lot => !warehouse || String(lot.almacen || '').trim() === warehouse);
-        el('confLot').replaceChildren(new Option(available.length ? 'Seleccione un lote' : 'No hay lotes en este almacén', ''),
-          ...available.map(lot => new Option('Lote ' + String(lot.id).slice(0,8) + ' · ' + quantity(lot.qty) +
-            ' unid. · ' + (lot.almacen || 'Sin almacén'), String(lot.id))));
-        if(available.some(lot => String(lot.id) === String(keepLotId))) el('confLot').value = String(keepLotId);
-        startRequest = null;
-        paintCount();
-      }
+  const warehouse = el('confWarehouse').value;
+  const available = lots.filter(
+    lot => !warehouse || String(lot.almacen || '').trim() === warehouse
+  );
+
+  const groups = [
+    {
+      label: 'Lotes con stock',
+      rows: available.filter(lot => Number(lot.qty) > 0)
+    },
+    {
+      label: 'Lotes agotados — para registrar sobrantes',
+      rows: available.filter(lot => Number(lot.qty) === 0)
+    }
+  ];
+
+  el('confLot').replaceChildren(
+    new Option(
+      available.length
+        ? 'Seleccione un lote'
+        : 'No hay lotes registrados en este almacén',
+      ''
+    )
+  );
+
+  for(const group of groups){
+    if(!group.rows.length) continue;
+
+    const optgroup = document.createElement('optgroup');
+    optgroup.label = group.label;
+
+    for(const lot of group.rows){
+      const exhausted = Number(lot.qty) === 0;
+
+      optgroup.appendChild(new Option(
+        (exhausted ? 'Agotado · ' : '') +
+        'Lote ' + String(lot.id).slice(0,8) + ' · ' +
+        quantity(lot.qty) + ' unid. · ' +
+        (lot.almacen || 'Sin almacén'),
+        String(lot.id)
+      ));
+    }
+
+    el('confLot').appendChild(optgroup);
+  }
+
+  if(available.some(lot => String(lot.id) === String(keepLotId))){
+    el('confLot').value = String(keepLotId);
+  }
+
+  startRequest = null;
+  paintCount();
+}
 
       async function choosePart(part, keepLotId = ''){
         const request = ++lotRequest;
@@ -5053,7 +5102,11 @@ async function renderConferencias(){
           lots = rows;
           warehouseOptions(el('confWarehouse'), lots);
           paintLots(keepLotId);
-          if(!lots.length) message('Esta pieza no tiene stock disponible para conferir.');
+          if(!lots.length){
+  message('Esta pieza no tiene lotes registrados para iniciar una conferencia.');
+}else if(!lots.some(lot => Number(lot.qty) > 0)){
+  message('Esta pieza no tiene stock disponible. Los lotes mostrados están agotados; puede seleccionarlos para registrar un sobrante físico.');
+}
         }catch(error){
           if(!isCurrent() || request !== lotRequest) return;
           el('confLot').replaceChildren(new Option('No se pudieron cargar los lotes', ''));
