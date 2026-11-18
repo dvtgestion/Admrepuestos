@@ -3393,9 +3393,6 @@ async function readConferencePages(tabela, colunas, configurar){
 async function listInventoryCountLots(partId){
   if(!partId) return [];
 
-  async function listInventoryCountLots(partId){
-  if(!partId) return [];
-
   return readConferencePages(
     'part_lots',
     'id, part_id, qty, almacen, created_at',
