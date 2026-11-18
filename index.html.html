@@ -2998,6 +2998,96 @@ async function updatePartDescription(id, descripcion){
   if(error) throw error;
 }
 
+
+// ---- Conferencias de inventario ----
+async function inventoryCountRpc(nombre, parametros){
+  const empresaId = orgId();
+  const usuarioId = Auth.currentUser()?.id;
+
+  if(!empresaId || !usuarioId){
+    throw new Error('Seleccione una empresa e inicie sesión.');
+  }
+
+  const { data, error } = await sb.rpc(nombre, {
+    ...parametros,
+    p_org_id: empresaId
+  });
+
+  if(
+    String(orgId()) !== String(empresaId) ||
+    Auth.currentUser()?.id !== usuarioId
+  ){
+    throw new Error(
+      'La empresa o la cuenta cambió. Vuelva a abrir Conferencias.'
+    );
+  }
+
+  if(error){
+    throw new Error(
+      error.message || 'No se pudo completar la conferencia.'
+    );
+  }
+
+  if(
+    !data ||
+    typeof data.id !== 'string' ||
+    String(data.org_id) !== String(empresaId)
+  ){
+    throw new Error(
+      'No se pudo confirmar la respuesta de la conferencia.'
+    );
+  }
+
+  return data;
+}
+
+async function startInventoryCount(lotId, requestId){
+  if(!lotId || !requestId){
+    throw new Error('Seleccione un lote para iniciar el conteo.');
+  }
+
+  return inventoryCountRpc('iniciar_conferencia_inventario', {
+    p_lote_id: lotId,
+    p_solicitud_id: requestId
+  });
+}
+
+async function saveInventoryCount({
+  countId,
+  qty,
+  notes = ''
+}){
+  if(!Number.isFinite(qty) || qty < 0){
+    throw new Error('La cantidad contada no es válida.');
+  }
+
+  return inventoryCountRpc('guardar_conferencia_inventario', {
+    p_conferencia_id: countId,
+    p_cantidad: qty,
+    p_observaciones: String(notes ?? '')
+  });
+}
+
+async function resolveInventoryCount({
+  countId,
+  reason,
+  justification,
+  manualConfirmed = false
+}){
+  if(!Org.isAdmin()){
+    throw new Error(
+      'Solo los administradores pueden resolver diferencias.'
+    );
+  }
+
+  return inventoryCountRpc('resolver_conferencia_inventario', {
+    p_conferencia_id: countId,
+    p_motivo: String(reason ?? ''),
+    p_justificacion: String(justification ?? ''),
+    p_confirmacion_manual: manualConfirmed === true
+  });
+}
+
   // ---- Clientes en espera ----
 async function listClientesEspera(){
   const registros = [];
@@ -3246,6 +3336,7 @@ async function setEstadoClienteEspera({
 
       return {
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
+  startInventoryCount, saveInventoryCount, resolveInventoryCount,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
 listMoves, listMovesByPeriod, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
