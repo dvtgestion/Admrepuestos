@@ -5907,62 +5907,216 @@ overlay.addEventListener('click', (e)=>{ if(e.target === overlay) close(); });
 
 function showPartImage(url){
   const viewer = document.createElement('dialog');
-
+  viewer.className = 'part-image-viewer';
   viewer.setAttribute('aria-label', 'Imagen de ' + part.nombre);
 
-  viewer.style.cssText =
-    'width:calc(100vw - 24px);max-width:1100px;' +
-    'height:calc(100vh - 24px);height:calc(100dvh - 24px);' +
-    'max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);' +
-    'padding:0;border:0;border-radius:12px;' +
-    'box-sizing:border-box;overflow:hidden;background:#fff;';
-
   viewer.innerHTML = `
-    <div style="
-      display:grid;
-      grid-template-rows:auto minmax(0,1fr);
-      height:100%;
-      min-height:0;
-    ">
-      <header style="
-        display:flex;
-        align-items:center;
-        justify-content:space-between;
-        gap:12px;
-        padding:12px;
-        border-bottom:1px solid #ddd;
-      ">
-        <strong>${escapeHtml(part.nombre)}</strong>
-        <button type="button" class="btn" data-close-viewer>
-          Cerrar
-        </button>
+    <style>
+      .part-image-viewer{
+        width:calc(100vw - 24px); max-width:1100px;
+        height:calc(100vh - 24px); height:calc(100dvh - 24px);
+        max-height:calc(100vh - 24px); max-height:calc(100dvh - 24px);
+        padding:0; border:0; border-radius:12px;
+        box-sizing:border-box; overflow:hidden; background:#fff;
+      }
+      .part-image-viewer::backdrop{background:rgba(0,0,0,.55)}
+      .part-image-viewer .part-image-shell{
+        display:grid; grid-template-rows:auto minmax(0,1fr) auto;
+        height:100%; min-height:0; min-width:0;
+      }
+      .part-image-viewer .part-image-header{
+        display:flex; flex-wrap:wrap; align-items:center; gap:10px;
+        padding:10px 12px; border-bottom:1px solid #ddd;
+      }
+      .part-image-viewer .part-image-title{
+        flex:1 1 220px; min-width:0; overflow-wrap:anywhere;
+      }
+      .part-image-viewer .part-image-controls{
+        display:flex; flex-wrap:wrap; align-items:center; gap:6px;
+      }
+      .part-image-viewer .part-image-controls .btn{min-height:36px}
+      .part-image-viewer [data-zoom-level]{
+        min-width:3.5em; text-align:center; font-variant-numeric:tabular-nums;
+      }
+      .part-image-viewer [data-zoom-viewport]{
+        min-width:0; min-height:0; overflow:auto;
+        position:relative; background:#f4f5f7; touch-action:auto;
+      }
+      .part-image-viewer [data-zoom-stage]{
+        position:relative; display:grid; place-items:center;
+        min-width:100%; min-height:100%; width:0; height:0;
+      }
+      .part-image-viewer [data-zoom-image]{
+        display:block; max-width:none; max-height:none;
+        user-select:none; -webkit-user-select:none;
+      }
+      .part-image-viewer [data-zoom-image][hidden]{display:none}
+      .part-image-viewer [data-image-help]{
+        margin:0; padding:8px 12px; border-top:1px solid #ddd;
+        font-size:12px; color:#536071; overflow-wrap:anywhere;
+      }
+    </style>
+    <div class="part-image-shell">
+      <header class="part-image-header">
+        <strong class="part-image-title">${escapeHtml(part.nombre)}</strong>
+        <div class="part-image-controls">
+          <button type="button" class="btn" data-zoom-out
+            aria-label="Reducir imagen" title="Reducir imagen" disabled>−</button>
+          <output data-zoom-level aria-live="polite"
+            title="Zoom respecto a la imagen ajustada a la pantalla">100%</output>
+          <button type="button" class="btn" data-zoom-in
+            aria-label="Ampliar imagen" title="Ampliar imagen" disabled>+</button>
+          <button type="button" class="btn" data-zoom-fit disabled>Ajustar a pantalla</button>
+          <button type="button" class="btn" data-close-viewer>Cerrar</button>
+        </div>
       </header>
-
-      <div style="min-height:0; overflow:hidden; padding:8px;">
-        <img
-          src="${escapeHtml(url)}"
-          alt="${escapeHtml(part.nombre)}"
-          style="
-            display:block;
-            width:100%;
-            height:100%;
-            object-fit:contain;
-          "
-        />
+      <div data-zoom-viewport tabindex="0" aria-label="Imagen ampliable. Use los botones de zoom y arrastre con el ratón para desplazarse.">
+        <div data-zoom-stage>
+          <img data-zoom-image alt="" draggable="false" hidden>
+        </div>
       </div>
+      <p data-image-help role="status">Cargando imagen…</p>
     </div>
   `;
 
-  viewer.querySelector('[data-close-viewer]').onclick = ()=>{
-    viewer.close();
-  };
+  const viewport = viewer.querySelector('[data-zoom-viewport]');
+  const stage = viewer.querySelector('[data-zoom-stage]');
+  const image = viewer.querySelector('[data-zoom-image]');
+  const zoomIn = viewer.querySelector('[data-zoom-in]');
+  const zoomOut = viewer.querySelector('[data-zoom-out]');
+  const fitButton = viewer.querySelector('[data-zoom-fit]');
+  const zoomLevel = viewer.querySelector('[data-zoom-level]');
+  const help = viewer.querySelector('[data-image-help]');
+  let scale = 1;
+  let loaded = false;
+  let drag = null;
+  let resizeFrame = 0;
+  let resizeObserver = null;
 
-  viewer.addEventListener('close', ()=>{
+  function endDrag(){
+    const pointerId = drag?.id;
+    drag = null;
+    if(pointerId !== undefined && viewport.hasPointerCapture(pointerId)){
+      viewport.releasePointerCapture(pointerId);
+    }
+    viewport.style.cursor = scale > 1 ? 'grab' : 'default';
+  }
+
+  function draw(nextScale = scale, center = false){
+    if(!loaded || !viewer.open) return;
+
+    const anchorX = center || !image.offsetWidth ? 0.5 :
+      (viewport.scrollLeft + viewport.clientWidth / 2 - image.offsetLeft) / image.offsetWidth;
+    const anchorY = center || !image.offsetHeight ? 0.5 :
+      (viewport.scrollTop + viewport.clientHeight / 2 - image.offsetTop) / image.offsetHeight;
+    const fit = Math.min(
+      viewport.clientWidth / image.naturalWidth,
+      viewport.clientHeight / image.naturalHeight
+    );
+    if(!(fit > 0)) return;
+
+    scale = Math.max(1, Math.min(8, nextScale));
+    const width = image.naturalWidth * fit * scale;
+    const height = image.naturalHeight * fit * scale;
+    image.style.width = width + 'px';
+    image.style.height = height + 'px';
+    stage.style.width = width + 'px';
+    stage.style.height = height + 'px';
+
+    viewport.scrollLeft = image.offsetLeft + Math.max(0, Math.min(1, anchorX)) * width -
+      viewport.clientWidth / 2;
+    viewport.scrollTop = image.offsetTop + Math.max(0, Math.min(1, anchorY)) * height -
+      viewport.clientHeight / 2;
+    zoomLevel.textContent = Math.round(scale * 100) + '%';
+    zoomOut.disabled = scale <= 1;
+    zoomIn.disabled = scale >= 8;
+    fitButton.disabled = false;
+    viewport.style.cursor = drag ? 'grabbing' : scale > 1 ? 'grab' : 'default';
+    help.textContent = scale > 1
+      ? 'Arrastre con el ratón o deslice con el dedo para ver otras partes de la imagen.'
+      : 'Use + para ampliar. En móvil y tablet puede seguir usando el zoom de la pantalla.';
+  }
+
+  function scheduleResize(){
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => draw(scale));
+  }
+
+  zoomIn.onclick = () => { endDrag(); draw(scale * 1.25); };
+  zoomOut.onclick = () => { endDrag(); draw(scale / 1.25); };
+  fitButton.onclick = () => { endDrag(); draw(1, true); };
+  viewer.querySelector('[data-close-viewer]').onclick = () => viewer.close();
+
+  viewer.addEventListener('keydown', event => {
+    if(event.ctrlKey || event.metaKey || event.altKey || !loaded) return;
+    if(event.key === '+' || event.key === '='){
+      event.preventDefault(); endDrag(); draw(scale * 1.25);
+    }else if(event.key === '-'){
+      event.preventDefault(); endDrag(); draw(scale / 1.25);
+    }else if(event.key === '0'){
+      event.preventDefault(); endDrag(); draw(1, true);
+    }
+  });
+
+  viewport.addEventListener('pointerdown', event => {
+    if(event.pointerType !== 'mouse' || event.button !== 0 || scale <= 1) return;
+    if(event.target !== image && event.target !== stage) return;
+    event.preventDefault();
+    viewport.focus({preventScroll:true});
+    drag = {
+      id:event.pointerId, x:event.clientX, y:event.clientY,
+      left:viewport.scrollLeft, top:viewport.scrollTop
+    };
+    viewport.setPointerCapture(event.pointerId);
+    viewport.style.cursor = 'grabbing';
+  });
+
+  viewport.addEventListener('pointermove', event => {
+    if(!drag || drag.id !== event.pointerId) return;
+    event.preventDefault();
+    viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+    viewport.scrollTop = drag.top - (event.clientY - drag.y);
+  });
+
+  viewport.addEventListener('pointerup', endDrag);
+  viewport.addEventListener('pointercancel', endDrag);
+  viewport.addEventListener('lostpointercapture', endDrag);
+
+  image.addEventListener('load', () => {
+    loaded = image.naturalWidth > 0 && image.naturalHeight > 0;
+    if(!loaded || !viewer.open) return;
+    image.hidden = false;
+    draw(1, true);
+  });
+
+  image.addEventListener('error', () => {
+    loaded = false;
+    image.hidden = true;
+    zoomIn.disabled = true;
+    zoomOut.disabled = true;
+    fitButton.disabled = true;
+    help.textContent = 'No se pudo cargar la imagen. Cierre el visor e inténtelo de nuevo.';
+  });
+
+  viewer.addEventListener('close', () => {
+    endDrag();
+    cancelAnimationFrame(resizeFrame);
+    resizeObserver?.disconnect();
+    window.removeEventListener('resize', scheduleResize);
     viewer.remove();
-  }, { once: true });
+  }, {once:true});
 
+  image.alt = part.nombre;
   document.body.appendChild(viewer);
   viewer.showModal();
+  window.addEventListener('resize', scheduleResize);
+
+  if(typeof ResizeObserver !== 'undefined'){
+    resizeObserver = new ResizeObserver(scheduleResize);
+    resizeObserver.observe(viewport);
+  }
+
+  image.src = url;
 }
 
 overlay.addEventListener('click', (e)=>{
