@@ -4093,12 +4093,16 @@ case 'sugerencias': await renderSugerencias(); break;
   }
 
   function csvCell(value){
-    let text = String(value ?? '');
-    if(typeof value !== 'number' && /^[\s\uFEFF]*[=+\-@]/.test(text)){
-      text = "'" + text;
-    }
-    return '"' + text.replace(/"/g, '""') + '"';
+  let text = typeof value === 'number'
+    ? String(value).replace('.', ',')
+    : String(value ?? '');
+
+  if(typeof value !== 'number' && /^[\s\uFEFF]*[=+\-@]/.test(text)){
+    text = "'" + text;
   }
+
+  return '"' + text.replace(/"/g, '""') + '"';
+}
 
   function money(value){
     return Number(value.toFixed(2));
@@ -4135,10 +4139,22 @@ case 'sugerencias': await renderSugerencias(); break;
         money(data.gasto), money(data.ingreso), money(data.liq),
         data.units, data.movs
       ];
-      const csv = '\uFEFF' +
-        head.map(csvCell).join(',') + '\r\n' +
-        row.map(csvCell).join(',') + '\r\n';
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const csv = '\uFEFFsep=;\r\n' +
+  head.map(csvCell).join(';') + '\r\n' +
+  row.map(csvCell).join(';') + '\r\n';
+
+const csvBytes = new Uint8Array(csv.length * 2);
+
+for(let i = 0; i < csv.length; i++){
+  const code = csv.charCodeAt(i);
+  csvBytes[i * 2] = code & 255;
+  csvBytes[i * 2 + 1] = code >>> 8;
+}
+
+const blob = new Blob(
+  [csvBytes],
+  {type:'text/csv;charset=utf-16le;'}
+);
       const url = URL.createObjectURL(blob);
 
       try{
