@@ -561,15 +561,6 @@
         Aplicar
       </button>
 
-      <button
-        id="repExportCsv"
-        type="button"
-        class="btn"
-        title="Aplique las fechas y espere a que termine de cargar el reporte."
-        disabled
-      >
-        Exportar CSV
-      </button>
 
       <button
         id="repExportPdf"
@@ -4011,8 +4002,7 @@ case 'sugerencias': await renderSugerencias(); break;
 
     // ---- Reportes (ajustado com Finanzas) ----
     let chartTop = null, chartDia = null;
-    function setupReportExports({csvButton, pdfButton, desde, hasta, isLoading}){
-  const button = csvButton;
+    function setupReportExports({pdfButton, desde, hasta, isLoading}){
   const companyId = String(Org.get()?.id || '');
   const userId = String(Auth.currentUser()?.id || '');
   let snapshot = null;
@@ -4025,7 +4015,7 @@ case 'sugerencias': await renderSugerencias(); break;
   }
 
   function current(){
-    return button.isConnected && pdfButton.isConnected && sameSession();
+    return pdfButton.isConnected && sameSession();
   }
 
   function ready(){
@@ -4034,13 +4024,11 @@ case 'sugerencias': await renderSugerencias(); break;
   }
 
   function refresh(){
-    button.classList.toggle('hidden', !Org.isAdmin());
     pdfButton.classList.toggle('hidden', !Org.isAdmin());
     pdfButton.disabled = !ready() || preparingPdf;
-    button.disabled = !ready();
-    button.title = button.disabled
+    pdfButton.title = pdfButton.disabled
       ? 'Aplique las fechas y espere a que termine de cargar el reporte.'
-      : 'Descargar el resumen financiero del período aplicado.';
+      : 'Imprimir o guardar el reporte con gráficos como PDF.';
   }
 
   function invalidate(){
@@ -4092,21 +4080,8 @@ case 'sugerencias': await renderSugerencias(); break;
     refresh();
   }
 
-  function csvCell(value){
-  let text = typeof value === 'number'
-    ? String(value).replace('.', ',')
-    : String(value ?? '');
 
-  if(typeof value !== 'number' && /^[\s\uFEFF]*[=+\-@]/.test(text)){
-    text = "'" + text;
-  }
-
-  return '"' + text.replace(/"/g, '""') + '"';
-}
-
-  function money(value){
-    return Number(value.toFixed(2));
-  }
+  
 
   function fileNamePart(value){
     return String(value).normalize('NFD')
@@ -4115,63 +4090,6 @@ case 'sugerencias': await renderSugerencias(); break;
       .slice(0, 60) || 'empresa';
   }
 
-  button.addEventListener('click', () => {
-    if(!ready()){
-      refresh();
-      alert('Aplique las fechas y espere a que termine de cargar el reporte.');
-      return;
-    }
-
-    try{
-      const data = snapshot;
-      const head = [
-        'Empresa', 'Desde', 'Hasta',
-        'Ventas brutas (Bs)',
-        'Costo de ventas (COGS, Bs)',
-        'Gastos de Finanzas (Bs)',
-        'Otros ingresos de Finanzas (Bs)',
-        'Ganancia neta (Bs)',
-        'Unidades vendidas', 'Movimientos del período'
-      ];
-      const row = [
-        data.company, data.from, data.to,
-        money(data.bruto), money(data.cogs),
-        money(data.gasto), money(data.ingreso), money(data.liq),
-        data.units, data.movs
-      ];
-      const csv = '\uFEFFsep=;\r\n' +
-  head.map(csvCell).join(';') + '\r\n' +
-  row.map(csvCell).join(';') + '\r\n';
-
-const csvBytes = new Uint8Array(csv.length * 2);
-
-for(let i = 0; i < csv.length; i++){
-  const code = csv.charCodeAt(i);
-  csvBytes[i * 2] = code & 255;
-  csvBytes[i * 2 + 1] = code >>> 8;
-}
-
-const blob = new Blob(
-  [csvBytes],
-  {type:'text/csv;charset=utf-16le;'}
-);
-      const url = URL.createObjectURL(blob);
-
-      try{
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = 'reporte_' + fileNamePart(data.company) + '_' +
-          data.from + '_al_' + data.to + '.csv';
-        document.body.appendChild(link);
-        try{ link.click(); }
-        finally{ link.remove(); }
-      }finally{
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-      }
-    }catch(error){
-      alert(error.message || 'No se pudo exportar el reporte.');
-    }
-  });
 
 
   function copyChartValue(value, seen = new WeakMap()){
@@ -4684,7 +4602,6 @@ function getSalesComparisonPeriod(){
       let reportLoading = false;
 
 const reportExport = setupReportExports({
-  csvButton: document.getElementById('repExportCsv'),
   pdfButton: document.getElementById('repExportPdf'),
   desde: repDesde,
   hasta: repHasta,
