@@ -540,24 +540,49 @@
   <template id="tpl-reportes">
     <section class="stack">
       <header class="toolbar">
-        <div class="left">
-          <h2>Reportes</h2>
-          <p class="muted">Ventas, inventario y período filtrable.</p>
-        </div>
-        <div class="right">
-          <div class="filter-group">
-            <label class="field" style="min-width:160px">
-              <span class="xs muted">Desde</span>
-              <input type="date" id="repDesde" class="input" />
-            </label>
-            <label class="field" style="min-width:160px">
-              <span class="xs muted">Hasta</span>
-              <input type="date" id="repHasta" class="input" />
-            </label>
-            <button id="repAplicar" class="btn btn-primary">Aplicar</button>
-          </div>
-        </div>
-      </header>
+  <div class="left">
+    <h2>Reportes</h2>
+    <p class="muted">Ventas, inventario y período filtrable.</p>
+  </div>
+
+  <div class="right">
+    <div class="filter-group">
+      <label class="field" style="min-width:160px">
+        <span class="xs muted">Desde</span>
+        <input type="date" id="repDesde" class="input" />
+      </label>
+
+      <label class="field" style="min-width:160px">
+        <span class="xs muted">Hasta</span>
+        <input type="date" id="repHasta" class="input" />
+      </label>
+
+      <button id="repAplicar" class="btn btn-primary">
+        Aplicar
+      </button>
+
+      <button
+        id="repExportCsv"
+        type="button"
+        class="btn"
+        title="Aplique las fechas y espere a que termine de cargar el reporte."
+        disabled
+      >
+        Exportar CSV
+      </button>
+
+      <button
+        id="repExportPdf"
+        type="button"
+        class="btn"
+        title="Imprimir o guardar el reporte con gráficos como PDF."
+        disabled
+      >
+        Imprimir / Guardar PDF
+      </button>
+    </div>
+  </div>
+</header>
 
       <div class="kpis">
         <div class="card"><h3>Ventas brutas</h3><strong id="kpiBruto">—</strong></div>
@@ -3986,6 +4011,382 @@ case 'sugerencias': await renderSugerencias(); break;
 
     // ---- Reportes (ajustado com Finanzas) ----
     let chartTop = null, chartDia = null;
+    function setupReportExports({csvButton, pdfButton, desde, hasta, isLoading}){
+  const button = csvButton;
+  const companyId = String(Org.get()?.id || '');
+  const userId = String(Auth.currentUser()?.id || '');
+  let snapshot = null;
+  let preparingPdf = false;
+
+  function sameSession(){
+    return companyId !== '' && userId !== '' &&
+      String(Org.get()?.id || '') === companyId &&
+      String(Auth.currentUser()?.id || '') === userId && Org.isAdmin();
+  }
+
+  function current(){
+    return button.isConnected && pdfButton.isConnected && sameSession();
+  }
+
+  function ready(){
+    return current() && !isLoading() && snapshot !== null &&
+      desde.value === snapshot.from && hasta.value === snapshot.to;
+  }
+
+  function refresh(){
+    button.classList.toggle('hidden', !Org.isAdmin());
+    pdfButton.classList.toggle('hidden', !Org.isAdmin());
+    pdfButton.disabled = !ready() || preparingPdf;
+    button.disabled = !ready();
+    button.title = button.disabled
+      ? 'Aplique las fechas y espere a que termine de cargar el reporte.'
+      : 'Descargar el resumen financiero del período aplicado.';
+  }
+
+  function invalidate(){
+    snapshot = null;
+    refresh();
+  }
+
+  function dateText(date){
+    return date.getFullYear() + '-' +
+      String(date.getMonth() + 1).padStart(2, '0') + '-' +
+      String(date.getDate()).padStart(2, '0');
+  }
+
+  function capture(values){
+    const numbers = [
+      values.bruto, values.cogs, values.gasto, values.ingreso,
+      values.liq, values.units, values.movs
+    ];
+
+    if(!current() || !numbers.every(Number.isFinite)){
+      invalidate();
+      return;
+    }
+
+    const from = dateText(values.from);
+    const to = dateText(values.to);
+
+    if(from !== desde.value || to !== hasta.value){
+      invalidate();
+      return;
+    }
+
+    snapshot = Object.freeze({
+      company: String(Org.get()?.nombre || 'Empresa'),
+      from, to,
+      capturedAt: new Date().toISOString(),
+      growth: Object.freeze({
+        headline: String(values.growth?.headline || ''),
+        difference: String(values.growth?.difference || ''),
+        previous: String(values.growth?.previous || ''),
+        period: String(values.growth?.period || '')
+      }),
+      topConfig: chartConfig(values.topChart),
+      dayConfig: chartConfig(values.dayChart),
+      bruto: values.bruto, cogs: values.cogs,
+      gasto: values.gasto, ingreso: values.ingreso,
+      liq: values.liq, units: values.units, movs: values.movs
+    });
+    refresh();
+  }
+
+  function csvCell(value){
+    let text = String(value ?? '');
+    if(typeof value !== 'number' && /^[\s\uFEFF]*[=+\-@]/.test(text)){
+      text = "'" + text;
+    }
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+
+  function money(value){
+    return Number(value.toFixed(2));
+  }
+
+  function fileNamePart(value){
+    return String(value).normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '_')
+      .slice(0, 60) || 'empresa';
+  }
+
+  button.addEventListener('click', () => {
+    if(!ready()){
+      refresh();
+      alert('Aplique las fechas y espere a que termine de cargar el reporte.');
+      return;
+    }
+
+    try{
+      const data = snapshot;
+      const head = [
+        'Empresa', 'Desde', 'Hasta',
+        'Ventas brutas (Bs)',
+        'Costo de ventas (COGS, Bs)',
+        'Gastos de Finanzas (Bs)',
+        'Otros ingresos de Finanzas (Bs)',
+        'Ganancia neta (Bs)',
+        'Unidades vendidas', 'Movimientos del período'
+      ];
+      const row = [
+        data.company, data.from, data.to,
+        money(data.bruto), money(data.cogs),
+        money(data.gasto), money(data.ingreso), money(data.liq),
+        data.units, data.movs
+      ];
+      const csv = '\uFEFF' +
+        head.map(csvCell).join(',') + '\r\n' +
+        row.map(csvCell).join(',') + '\r\n';
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+
+      try{
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'reporte_' + fileNamePart(data.company) + '_' +
+          data.from + '_al_' + data.to + '.csv';
+        document.body.appendChild(link);
+        try{ link.click(); }
+        finally{ link.remove(); }
+      }finally{
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }
+    }catch(error){
+      alert(error.message || 'No se pudo exportar el reporte.');
+    }
+  });
+
+
+  function copyChartValue(value, seen = new WeakMap()){
+    if(value === null || typeof value !== 'object') return value;
+    if(!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype) return value;
+    if(seen.has(value)) return seen.get(value);
+    const result = Array.isArray(value) ? [] : {};
+    seen.set(value, result);
+    for(const key of Object.keys(value)) result[key] = copyChartValue(value[key], seen);
+    return result;
+  }
+
+  function chartConfig(chart){
+    if(!chart) return null;
+    return copyChartValue({
+      type: chart.config.type,
+      data: chart.data,
+      options: chart.config.options,
+      plugins: chart.config.plugins || []
+    });
+  }
+
+  function chartImage(config, height){
+    if(!config) throw new Error('Actualice el reporte antes de exportar los gráficos.');
+    const canvas = document.createElement('canvas');
+    canvas.width = 1100;
+    canvas.height = height;
+    const exportConfig = copyChartValue(config);
+    exportConfig.options = {
+      ...exportConfig.options,
+      responsive: false,
+      maintainAspectRatio: false,
+      animation: false,
+      devicePixelRatio: 2
+    };
+    let chart;
+    try{
+      chart = new Chart(canvas, exportConfig);
+      const image = chart.toBase64Image('image/png', 1);
+      if(!image.startsWith('data:image/png;base64,')){
+        throw new Error('No se pudo preparar uno de los gráficos.');
+      }
+      return image;
+    }finally{
+      chart?.destroy();
+    }
+  }
+
+  function reportHtml(data, topImage, dayImage){
+    const esc = value => escapeHtml(value ?? '');
+    const amount = value => Number(value).toLocaleString(
+      'es-BO', {style:'currency', currency:'BOB'}
+    );
+    const date = value => value.split('-').reverse().join('/');
+    const rows = [
+      ['Ventas brutas', amount(data.bruto)],
+      ['Costo de ventas (COGS)', amount(data.cogs)],
+      ['Gastos de Finanzas', amount(data.gasto)],
+      ['Otros ingresos de Finanzas', amount(data.ingreso)],
+      ['Ganancia neta', amount(data.liq)],
+      ['Unidades vendidas', data.units],
+      ['Movimientos del período', data.movs]
+    ];
+    const title = 'reporte_' + fileNamePart(data.company) + '_' +
+      data.from + '_al_' + data.to;
+    const consulted = new Date(data.capturedAt).toLocaleString(
+      'es-BO', {timeZone:'America/La_Paz'}
+    );
+
+    return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#eef1f5;color:#172033;font:14px Arial,sans-serif}
+  .screen-tools{max-width:940px;margin:16px auto;padding:0 20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .screen-tools button{padding:10px 16px;border:1px solid #b8c2d1;border-radius:8px;background:white;font:inherit;cursor:pointer}
+  .screen-tools button:first-child{background:#1f6feb;color:white;border-color:#1f6feb}
+  .screen-tools button:disabled{opacity:.55;cursor:wait}
+  .screen-tools p{flex-basis:100%;margin:0;font-size:13px;color:#536071}
+  .paper{max-width:900px;margin:16px auto;padding:30px;background:white}
+  h1{font-size:24px;margin:0 0 8px}
+  h2{font-size:18px;margin:22px 0 12px}
+  .company{font-size:18px;margin:0 0 12px;overflow-wrap:anywhere}
+  .muted{font-size:12px;color:#536071}
+  table{width:100%;border-collapse:collapse;margin:20px 0}
+  th,td{border-bottom:1px solid #dce2e9;padding:10px;text-align:left}
+  th{background:#f1f5f9}
+  td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+  .growth{border:1px solid #dce2e9;border-radius:8px;padding:16px}
+  .growth h2{margin:0 0 10px}
+  .growth strong{font-size:22px}
+  .growth p{margin:8px 0}
+  .chart-block{break-inside:avoid;page-break-inside:avoid}
+  .chart-block img{display:block;width:100%;height:auto;background:white}
+  @media print{
+    @page{size:A4;margin:14mm}
+    body{background:white;font-size:11px}
+    .screen-tools{display:none!important}
+    .paper{max-width:none;margin:0;padding:0}
+    .charts-page{break-before:page;page-break-before:always}
+    h1{font-size:20px}
+    h2{font-size:15px}
+    th,td{padding:8px}
+  }
+</style>
+</head>
+<body>
+<div class="screen-tools">
+  <button type="button" id="printReport" disabled>Imprimir / Guardar PDF</button>
+  <button type="button" id="closeReport">Cerrar</button>
+  <p id="printReportStatus">Preparando gráficos…</p>
+</div>
+<main class="paper">
+  <h1>Reporte de ventas</h1>
+  <p class="company">${esc(data.company)}</p>
+  <p>Período: <strong>${esc(date(data.from))} — ${esc(date(data.to))}</strong></p>
+  <p class="muted">Consulta del reporte: ${esc(consulted)} · Bolivia. Importes en bolivianos (Bs).</p>
+  <table>
+    <thead><tr><th>Concepto</th><th style="text-align:right">Resultado</th></tr></thead>
+    <tbody>${rows.map(row => '<tr><td>' + esc(row[0]) + '</td><td>' + esc(row[1]) + '</td></tr>').join('')}</tbody>
+  </table>
+  <section class="growth">
+    <h2>Crecimiento de ventas</h2>
+    <strong>${esc(data.growth.headline)}</strong>
+    <p>${esc(data.growth.difference)}</p>
+    <p>${esc(data.growth.previous)}</p>
+    <p class="muted">${esc(data.growth.period)}</p>
+  </section>
+  <section class="charts-page">
+    <div class="chart-block">
+      <h2>Top 10 repuestos por unidades vendidas</h2>
+      <img src="${topImage}" width="1100" height="600" alt="Top 10 repuestos por unidades vendidas">
+    </div>
+    <div class="chart-block">
+      <h2>Ventas brutas por día</h2>
+      <img src="${dayImage}" width="1100" height="420" alt="Ventas brutas por día">
+    </div>
+  </section>
+</main>
+</body>
+</html>`;
+  }
+
+  function waitForReportImages(doc){
+    return Promise.all(Array.from(doc.images, image => new Promise((resolve, reject) => {
+      if(image.complete){
+        if(image.naturalWidth > 0) resolve();
+        else reject(new Error('No se pudo cargar uno de los gráficos.'));
+        return;
+      }
+
+      const timer = setTimeout(() => finish(false), 10000);
+      function finish(ok){
+        clearTimeout(timer);
+        image.onload = null;
+        image.onerror = null;
+        if(ok) resolve();
+        else reject(new Error('No se pudo cargar uno de los gráficos.'));
+      }
+      image.onload = () => finish(true);
+      image.onerror = () => finish(false);
+    })));
+  }
+
+  pdfButton.addEventListener('click', async () => {
+    if(!ready() || preparingPdf){
+      refresh();
+      alert('Aplique las fechas y espere a que termine de cargar el reporte.');
+      return;
+    }
+
+    const data = snapshot;
+    let popup = null;
+    preparingPdf = true;
+    refresh();
+
+    try{
+      popup = window.open('', '_blank');
+      if(!popup) throw new Error('Permita las ventanas emergentes para abrir el reporte PDF.');
+      popup.opener = null;
+
+      const topImage = chartImage(data.topConfig, 600);
+      const dayImage = chartImage(data.dayConfig, 420);
+      const doc = popup.document;
+      doc.open();
+      doc.write(reportHtml(data, topImage, dayImage));
+      doc.close();
+
+      const printButton = doc.getElementById('printReport');
+      doc.getElementById('closeReport').onclick = () => popup.close();
+      printButton.onclick = () => {
+        if(!sameSession()){
+          popup.close();
+          alert('La empresa, la cuenta o los permisos cambiaron. Abra un reporte nuevo.');
+          return;
+        }
+        popup.focus();
+        popup.print();
+      };
+
+      await waitForReportImages(doc);
+      if(popup.closed) return;
+      if(!sameSession()){
+        popup.close();
+        throw new Error('La empresa, la cuenta o los permisos cambiaron. Abra un reporte nuevo.');
+      }
+
+      printButton.disabled = false;
+      doc.getElementById('printReportStatus').textContent =
+        'Pulse Imprimir / Guardar PDF. En la ventana de impresión, elija Guardar como PDF o su impresora.';
+    }catch(error){
+      if(popup?.closed) return;
+      if(popup) popup.close();
+      alert(error.message || 'No se pudo preparar el reporte PDF.');
+    }finally{
+      preparingPdf = false;
+      refresh();
+    }
+  });
+
+  desde.addEventListener('input', invalidate);
+  desde.addEventListener('change', invalidate);
+  hasta.addEventListener('input', invalidate);
+  hasta.addEventListener('change', invalidate);
+  refresh();
+  return {invalidate, capture, refresh};
+}
     async function renderReportes(){
       const tpl = document.getElementById('tpl-reportes').content.cloneNode(true);
       view.innerHTML = ''; view.appendChild(tpl);
@@ -4266,12 +4667,21 @@ function getSalesComparisonPeriod(){
 
       let reportLoading = false;
 
+const reportExport = setupReportExports({
+  csvButton: document.getElementById('repExportCsv'),
+  pdfButton: document.getElementById('repExportPdf'),
+  desde: repDesde,
+  hasta: repHasta,
+  isLoading: () => reportLoading
+});
+
 async function run(){
   if(reportLoading) return;
 
   reportLoading = true;
+reportExport.invalidate();
 
-  const applyButton = document.getElementById('repAplicar');
+const applyButton = document.getElementById('repAplicar');
   const originalLabel = applyButton.textContent;
 
   applyButton.disabled = true;
@@ -4738,6 +5148,26 @@ elSalesGrowthPeriod.textContent =
 
 paintStockDetenido();
 
+reportExport.capture({
+  from: dFrom,
+  to: dTo,
+  bruto,
+  cogs,
+  gasto,
+  ingreso,
+  liq,
+  units,
+  movs,
+  growth: {
+    headline: elSalesGrowth.textContent,
+    difference: elSalesGrowthDifference.textContent,
+    previous: elSalesGrowthPrevious.textContent,
+    period: elSalesGrowthPeriod.textContent
+  },
+  topChart: chartTop,
+  dayChart: chartDia
+});
+
   }catch(error){
     if(repDesde.isConnected){
       elSalesGrowth.textContent = 'No disponible';
@@ -4760,6 +5190,7 @@ paintStockDetenido();
 
     if(repDesde.isConnected) repDesde.disabled = false;
     if(repHasta.isConnected) repHasta.disabled = false;
+reportExport.refresh();
   }
 }
 
