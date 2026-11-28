@@ -3586,6 +3586,47 @@ async function listClientesEspera(){
   return registros;
 }        
 
+async function listAutoresClientesEspera(pedidoIds = []){
+  const companyId = orgId();
+
+  if(!Array.isArray(pedidoIds)){
+    throw new Error('La lista de pedidos no es válida.');
+  }
+
+  const ids = [
+    ...new Set(pedidoIds.map(id => String(id ?? '').trim()))
+  ];
+
+  if(ids.some(id => !/^[1-9]\d*$/.test(id))){
+    throw new Error('Uno de los pedidos tiene un identificador inválido.');
+  }
+
+  const autores = [];
+
+  for(let i = 0; i < ids.length; i += 200){
+    const { data, error } = await sb.rpc(
+      'consultar_autores_clientes_espera',
+      {
+        p_org_id: companyId,
+        p_pedido_ids: ids.slice(i, i + 200)
+      }
+    );
+
+    if(error) throw error;
+
+    if(!Array.isArray(data)){
+      throw new Error('No se pudieron consultar los autores de los pedidos.');
+    }
+
+    autores.push(...data);
+  }
+
+  return {
+    companyId,
+    autores
+  };
+}
+
 async function getClienteEspera(id){
   if(id == null || String(id).trim() === ''){
     throw new Error('Pedido inválido.');
@@ -3795,7 +3836,7 @@ async function setEstadoClienteEspera({
   listParts, getPartById, upsertPart, deletePart, updatePartDescription,
 startInventoryCount, saveInventoryCount, resolveInventoryCount,
   listInventoryCountLots, listInventoryCounts, getPendingInventoryCountsByPart,
-  listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
+  listClientesEspera, listAutoresClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
 listMoves, listMovesByPeriod, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
 listRecibos, buscarRecibosRegistrados, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
@@ -11500,6 +11541,31 @@ async function renderClientesEspera(){
   let cargado = false;
   let cambios = false;
   let formaAnterior = 'sin_pago';
+  
+  const autoresPedidos = new Map();
+
+function autorDelPedido(pedido){
+  const id = String(pedido.id);
+
+  if(autoresPedidos.has(id)){
+    return autoresPedidos.get(id) ||
+      (pedido.created_by ? 'Cuenta no disponible' : 'No registrado');
+  }
+
+  const usuarioActual = Auth.currentUser();
+
+  if(
+    pedido.created_by &&
+    String(pedido.created_by) === String(usuarioActual?.id) &&
+    usuarioActual?.email
+  ){
+    return usuarioActual.email;
+  }
+
+  return pedido.created_by
+    ? 'Autor no disponible. Actualice la lista.'
+    : 'No registrado';
+}
 
   function vigente(){
     return (
@@ -12264,9 +12330,16 @@ function buildClienteEsperaHtml(pedido){
             </div>
           </td>
           <td>
-            ${escapeHtml(p.cliente)}
-            <div class="muted xs">${escapeHtml(p.telefono)}</div>
-          </td>
+  ${escapeHtml(p.cliente)}
+  <div class="muted xs">${escapeHtml(p.telefono)}</div>
+
+  <div
+    class="muted xs"
+    style="margin-top:6px; max-width:240px; white-space:normal; overflow-wrap:anywhere"
+  >
+    Registrado por: ${escapeHtml(autorDelPedido(p))}
+  </div>
+</td>
                     <td style="min-width:240px">
             ${
               Array.isArray(p.items) && p.items.length
@@ -12418,12 +12491,42 @@ function buildClienteEsperaHtml(pedido){
       const registros = await DB.listClientesEspera();
       if(!vigente()) return;
 
+      let avisoAutores = '';
+      autoresPedidos.clear();
+
+      try{
+        const resultado = await DB.listAutoresClientesEspera(
+          registros.map(pedido => pedido.id)
+        );
+
+        if(!vigente()) return;
+
+        if(String(resultado.companyId) !== empresaInicial){
+          throw new Error('La empresa cambió durante la consulta.');
+        }
+
+        for(const autor of resultado.autores){
+          autoresPedidos.set(
+            String(autor.pedido_id),
+            String(autor.usuario || '')
+          );
+        }
+      }catch(error){
+        if(!vigente()) return;
+
+        autoresPedidos.clear();
+        avisoAutores =
+          ' No se pudieron consultar los autores. ' +
+          'Pulse «Actualizar lista» para volver a intentar.';
+      }
+
       pedidos = registros;
       cargado = true;
       pintar();
 
       estadoCarga.textContent =
-        `${pedidos.length} pedidos registrados. Lista actualizada.`;
+        `${pedidos.length} pedidos registrados. Lista actualizada.` +
+        avisoAutores;
 
     }catch(err){
       if(!vigente()) return;
