@@ -2680,6 +2680,44 @@ async function listMovementUndoAudit({
   };
 }
 
+async function buscarRecibosRegistrados({
+  busqueda = '',
+  antesFecha = null,
+  antesId = null
+} = {}){
+  const companyId = orgId();
+
+  if(!companyId){
+    throw new Error('Seleccione una empresa antes de buscar recibos.');
+  }
+
+  const { data, error } = await sb.rpc(
+    'buscar_recibos_registrados',
+    {
+      p_org_id: companyId,
+      p_busqueda: String(busqueda ?? '').trim(),
+      p_antes_fecha: antesFecha,
+      p_antes_id: antesId
+    }
+  );
+
+  if(error) throw error;
+
+  if(
+    !data ||
+    !Array.isArray(data.recibos) ||
+    typeof data.hay_mas !== 'boolean'
+  ){
+    throw new Error('No se pudo confirmar la consulta de recibos.');
+  }
+
+  return {
+    companyId,
+    recibos: data.recibos,
+    hayMas: data.hay_mas
+  };
+}
+
       // ---- Recibos ----
       async function listRecibos(limit=500){
         const { data, error } = await sb
@@ -3760,7 +3798,7 @@ startInventoryCount, saveInventoryCount, resolveInventoryCount,
   listClientesEspera, getClienteEspera, saveClienteEspera, setEstadoClienteEspera,
 listMoves, listMovesByPeriod, listMovesRange, applyMovement, undoMovementById, listMovementUndoAudit,
 correctMovementById,
-listRecibos, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
+listRecibos, buscarRecibosRegistrados, listReciboMovimientoIds, listReciboItems, getReciboDetalle, crearReciboVenta, anularReciboVenta,
 listProformasActivas, listProformaItems, getProformaDetalle, crearProforma, eliminarProforma, limpiarProformasVencidas,
   listLots, listAllLots, listStockDetenidoLots, getInventoryExportData, getInventoryValueByLots, removeLotWithAudit, editLotWithAudit,
   syncPartStockAndBaseFromLots,
@@ -8929,13 +8967,83 @@ function chooseInventoryExportOptions(almacenes){
 
                     <div class="card" style="order:2">
             <header class="toolbar">
-              <div class="left">
-                <h3 style="margin:0 0 6px">Recibos registrados</h3>
-                <p class="muted xs" style="margin:0">
-                  Desde aquí podrá imprimir los recibos emitidos o anular los creados por error.
-                </p>
-              </div>
-            </header>
+  <div class="left">
+    <h3 style="margin:0 0 6px">Recibos registrados</h3>
+    <p class="muted xs" style="margin:0">
+      Busque por número de recibo, cliente o correo del usuario.
+    </p>
+  </div>
+</header>
+
+<form
+  id="recRegisteredSearchForm"
+  style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; margin:12px 0"
+>
+  <label class="field" style="flex:1 1 260px; min-width:0; margin:0">
+    <span>Buscar recibos</span>
+    <input
+      id="recRegisteredSearch"
+      class="input"
+      type="search"
+      maxlength="200"
+      autocomplete="off"
+      placeholder="N.º de recibo, cliente o correo..."
+      style="width:100%"
+    />
+  </label>
+
+  <button
+    id="recRegisteredSearchBtn"
+    class="btn"
+    type="submit"
+    disabled
+  >
+    Buscar
+  </button>
+
+  <button
+    id="recRegisteredClearBtn"
+    class="btn btn-ghost"
+    type="button"
+    disabled
+  >
+    Limpiar
+  </button>
+</form>
+
+<div
+  style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px"
+>
+  <button
+    id="recRegisteredPrevBtn"
+    class="btn btn-ghost"
+    type="button"
+    disabled
+  >
+    Anterior
+  </button>
+
+  <span id="recRegisteredPageInfo" class="muted xs">
+    Página 1
+  </span>
+
+  <button
+    id="recRegisteredNextBtn"
+    class="btn btn-ghost"
+    type="button"
+    disabled
+  >
+    Siguiente
+  </button>
+</div>
+
+<p
+  id="recRegisteredStatus"
+  class="muted xs"
+  role="status"
+  aria-live="polite"
+  style="margin:0 0 12px"
+></p>
 
             <div class="table-wrap">
               <table class="table compact">
@@ -8966,6 +9074,29 @@ function chooseInventoryExportOptions(almacenes){
       const recSearch = document.getElementById('recSearch');
       const recAvailableTbody = document.getElementById('recAvailableTbody');
       const recibosTbody = document.getElementById('recibosTbody');
+      const recRegisteredSearchForm =
+  document.getElementById('recRegisteredSearchForm');
+
+const recRegisteredSearch =
+  document.getElementById('recRegisteredSearch');
+
+const recRegisteredSearchBtn =
+  document.getElementById('recRegisteredSearchBtn');
+
+const recRegisteredClearBtn =
+  document.getElementById('recRegisteredClearBtn');
+
+const recRegisteredPrevBtn =
+  document.getElementById('recRegisteredPrevBtn');
+
+const recRegisteredNextBtn =
+  document.getElementById('recRegisteredNextBtn');
+
+const recRegisteredPageInfo =
+  document.getElementById('recRegisteredPageInfo');
+
+const recRegisteredStatus =
+  document.getElementById('recRegisteredStatus');
 
       const recSelectedInfo = document.getElementById('recSelectedInfo');
       const recTotal = document.getElementById('recTotal');
@@ -9339,10 +9470,184 @@ function chooseInventoryExportOptions(almacenes){
         `;
       }
 
+      const registeredRoot = recibosTbody.closest('section');
+      const registeredCompanyId = String(Org.get()?.id || '');
+      const registeredUserId = String(Auth.currentUser()?.id || '');
+
+      let registeredQuery = '';
+      let registeredCursors = [null];
+      let registeredPage = 0;
+      let registeredHasMore = false;
+      let registeredBusy = false;
+      let registeredLoaded = false;
+      let registeredRequest = 0;
+      let registeredRefresh = 0;
+      let registeredStatusText = '';
+
+      function registeredIsCurrent(){
+        return registeredRoot.isConnected &&
+          registeredCompanyId !== '' &&
+          registeredUserId !== '' &&
+          String(Org.get()?.id || '') === registeredCompanyId &&
+          String(Auth.currentUser()?.id || '') === registeredUserId;
+      }
+
+      function updateRegisteredControls(){
+        if(!registeredIsCurrent()) return;
+
+        const dirty = recRegisteredSearch.value.trim() !== registeredQuery;
+
+        recRegisteredSearch.disabled = registeredBusy;
+        recRegisteredSearchBtn.disabled = registeredBusy;
+        recRegisteredClearBtn.disabled = registeredBusy || (
+          !recRegisteredSearch.value && !registeredQuery && registeredPage === 0
+        );
+        recRegisteredPrevBtn.disabled = registeredBusy ||
+          !registeredLoaded || dirty || registeredPage === 0;
+        recRegisteredNextBtn.disabled = registeredBusy ||
+          !registeredLoaded || dirty || !registeredHasMore;
+
+        recRegisteredPageInfo.textContent = 'Página ' + (registeredPage + 1);
+        recRegisteredSearchForm.setAttribute('aria-busy', String(registeredBusy));
+
+        recRegisteredStatus.textContent = registeredBusy
+          ? 'Buscando recibos...'
+          : dirty
+            ? 'Pulse Buscar para aplicar el texto escrito.'
+            : registeredStatusText;
+      }
+
+      function showRegisteredMessage(message){
+        recibosTbody.innerHTML = '';
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 8;
+        cell.className = 'muted';
+        cell.style.cssText = 'text-align:center; padding:18px';
+        cell.textContent = message;
+        row.appendChild(cell);
+        recibosTbody.appendChild(row);
+      }
+
+      async function loadRegisteredRecibos({
+        query = registeredQuery,
+        page = 0,
+        cursors = [null]
+      } = {}){
+        if(!registeredIsCurrent()) return;
+
+        const request = ++registeredRequest;
+        const cursor = cursors[page];
+        registeredBusy = true;
+        registeredLoaded = false;
+        registeredHasMore = false;
+        recibos = [];
+        showRegisteredMessage('Cargando recibos...');
+        updateRegisteredControls();
+
+        try{
+          const result = await DB.buscarRecibosRegistrados({
+            busqueda: query,
+            antesFecha: cursor?.fecha || null,
+            antesId: cursor?.id || null
+          });
+
+          if(request !== registeredRequest || !registeredIsCurrent()) return;
+
+          if(String(result.companyId) !== registeredCompanyId){
+            throw new Error('La empresa cambió. Vuelva a abrir Recibos.');
+          }
+
+          if(result.hayMas && !result.recibos.length){
+            throw new Error('La página recibida no es válida. Repita la búsqueda.');
+          }
+
+          recibos = result.recibos;
+          registeredQuery = query;
+          registeredCursors = cursors;
+          registeredPage = page;
+          registeredHasMore = result.hayMas;
+          registeredLoaded = true;
+          paintRecibos();
+
+          if(!recibos.length){
+            showRegisteredMessage(query
+              ? 'No se encontraron recibos para esta búsqueda.'
+              : 'Aún no existen recibos registrados.');
+          }
+
+          registeredStatusText = recibos.length +
+            (recibos.length === 1
+              ? ' recibo en esta página.'
+              : ' recibos en esta página.') +
+            (registeredHasMore ? ' Hay más resultados en Siguiente.' : '');
+        }catch(error){
+          if(request !== registeredRequest || !registeredIsCurrent()) return;
+          recibos = [];
+          registeredLoaded = false;
+          registeredHasMore = false;
+          registeredStatusText = error.message || 'No se pudieron buscar los recibos.';
+          showRegisteredMessage(
+            'No se pudieron cargar los recibos. Pulse Buscar para intentar nuevamente.'
+          );
+        }finally{
+          if(request === registeredRequest && registeredIsCurrent()){
+            registeredBusy = false;
+            updateRegisteredControls();
+            if(!registeredLoaded){
+              recRegisteredStatus.textContent = registeredStatusText;
+            }
+          }
+        }
+      }
+
+      recRegisteredSearchForm.addEventListener('submit', event => {
+        event.preventDefault();
+        if(registeredBusy) return;
+        loadRegisteredRecibos({query:recRegisteredSearch.value.trim()});
+      });
+
+      recRegisteredSearch.addEventListener('input', updateRegisteredControls);
+
+      recRegisteredClearBtn.addEventListener('click', () => {
+        if(registeredBusy) return;
+        recRegisteredSearch.value = '';
+        loadRegisteredRecibos({query:''});
+      });
+
+      recRegisteredPrevBtn.addEventListener('click', () => {
+        if(recRegisteredPrevBtn.disabled) return;
+        loadRegisteredRecibos({
+          page: registeredPage - 1,
+          cursors: registeredCursors.slice(0, registeredPage)
+        });
+      });
+
+      recRegisteredNextBtn.addEventListener('click', () => {
+        if(recRegisteredNextBtn.disabled) return;
+        const last = recibos[recibos.length - 1];
+        if(!last?.fecha || !last?.id) return;
+        loadRegisteredRecibos({
+          page: registeredPage + 1,
+          cursors: [
+            ...registeredCursors.slice(0, registeredPage + 1),
+            {fecha:last.fecha, id:last.id}
+          ]
+        });
+      });
+
+      updateRegisteredControls();
+
       async function refreshRecibos(){
-        moves = await DB.listMoves(50000);
-        recibos = await DB.listRecibos(1000);
-        usedMovementIds = await DB.listReciboMovimientoIds();
+        const refresh = ++registeredRefresh;
+        const refreshedMoves = await DB.listMoves(50000);
+        if(refresh !== registeredRefresh || !registeredIsCurrent()) return;
+
+        const refreshedUsedIds = await DB.listReciboMovimientoIds();
+        if(refresh !== registeredRefresh || !registeredIsCurrent()) return;
+
+        moves = refreshedMoves;
+        usedMovementIds = refreshedUsedIds;
 
         selectedMovementIds = new Set(
           Array.from(selectedMovementIds)
@@ -9350,8 +9655,8 @@ function chooseInventoryExportOptions(almacenes){
         );
 
         paintAvailableMoves();
-        paintRecibos();
         updateSelectionSummary();
+        await loadRegisteredRecibos();
       }
 
       recSearch.addEventListener('input', paintAvailableMoves);
