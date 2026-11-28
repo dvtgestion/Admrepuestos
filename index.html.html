@@ -6109,7 +6109,7 @@ function partHasAlmacen(p, almacen){
 
       function partNameCellHTML(p, low){
         const badge = low ? '<span class="badge low">Bajo stock</span>' : '';
-        const img = p.imageUrl ? `<img class="thumb" src="${escapeHtml(p.imageUrl)}" alt="">` : '';
+        const img = p.imageUrl ? `<img class="thumb" loading="lazy" width="32" height="32" src="${escapeHtml(p.imageUrl)}" alt="">` : '';
 
         const review = pendingInventoryCounts.has(String(p.id))
           ? '<span class="inventory-count-warning">Pendiente de revisión</span>'
